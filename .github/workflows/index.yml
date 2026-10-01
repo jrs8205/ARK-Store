@@ -7,6 +7,9 @@ on:
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
+  # A release of the store itself is listed right away rather than at the next scheduled run.
+  release:
+    types: [published, edited, deleted]
   push:
     branches: [main]
     paths:
@@ -25,7 +28,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # A release runs this workflow at its tag, which may be on another branch. The index is
+      # always built with the script on main.
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Test the index builder
         run: python3 -m unittest discover -s tools
