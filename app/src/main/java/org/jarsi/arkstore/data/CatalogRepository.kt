@@ -25,9 +25,10 @@ import org.json.JSONObject
 
 /**
  * Builds the catalogue from GitHub. Developers publish an app by adding the store topic to its
- * repository, which makes it show up for everyone; the sources configured on this device add
- * further accounts and repositories. Every public, open-source repository found either way
- * whose latest release has an APK attached becomes an app.
+ * repository, which makes it show up for everyone: those apps are read from the store index, a
+ * single file rebuilt on a schedule. The sources configured on this device add further accounts
+ * and repositories, which are looked up through the API. Every public, open-source repository
+ * found either way whose latest release has an APK attached becomes an app.
  *
  * Anonymous GitHub API calls are limited to 60 an hour, so a repository's releases are looked
  * up again only when the repository has been pushed to since, or the stored answer has grown
@@ -87,27 +88,43 @@ class CatalogRepository private constructor(context: Context) {
             val repos = LinkedHashMap<String, JSONObject>()
             val discovered = HashSet<String>()
 
-            try {
-                for (repo in discoverRepositories()) {
-                    val fullName = repo.getString("full_name")
-                    repos[fullName] = repo
-                    discovered += fullName
+            // Published apps normally come ready-made from the store index. Only when that is
+            // missing or stale are they looked up one by one through the API.
+            val indexed = loadIndex(now)
+            if (indexed != null) {
+                discovered += indexed.keys
+            } else {
+                try {
+                    for (repo in discoverRepositories()) {
+                        val fullName = repo.getString("full_name")
+                        repos[fullName] = repo
+                        discovered += fullName
+                    }
+                } catch (e: IOException) {
+                    Log.w(TAG, "Discovery unavailable", e)
+                    record(e)
+                    updated += entries.filterValues { it.discovered }
                 }
-            } catch (e: IOException) {
-                Log.w(TAG, "Discovery unavailable", e)
-                record(e)
-                updated += entries.filterValues { it.discovered }
             }
             for (source in sources.list()) {
                 try {
                     for (repo in listRepositories(source)) {
-                        repos.putIfAbsent(repo.getString("full_name"), repo)
+                        val fullName = repo.getString("full_name")
+                        // The index is rebuilt about hourly. A repository pushed to since then
+                        // is asked about directly, so a release just made shows up at once.
+                        val known = indexed?.get(fullName)
+                        if (known != null && known.stamp >= repo.optString("pushed_at")) continue
+                        repos.putIfAbsent(fullName, repo)
                     }
                 } catch (e: IOException) {
                     Log.w(TAG, "Source $source unavailable", e)
                     record(e)
                     updated += entries.filterKeys { belongsTo(it, source) }
                 }
+            }
+
+            indexed?.forEach { (fullName, entry) ->
+                if (fullName !in repos) updated[fullName] = entry
             }
 
             // The more apps there are, the longer each stored answer has to last, or the
@@ -229,6 +246,65 @@ class CatalogRepository private constructor(context: Context) {
         } catch (e: JSONException) {
             Log.w(TAG, "Store download count unreadable", e)
         }
+    }
+
+    /**
+     * Reads the store index: every published app, described in one file that is rebuilt on a
+     * schedule in the store's own repository. Returns null when the file cannot be had or has
+     * not been rebuilt for so long that it cannot be trusted.
+     */
+    private fun loadIndex(now: Long): Map<String, Entry>? = try {
+        val root = JSONObject(Http.getText(BuildConfig.INDEX_URL))
+        if (now - root.getLong("generatedAt") > INDEX_MAX_AGE_MS) {
+            Log.w(TAG, "Store index is stale")
+            null
+        } else {
+            val apps = root.getJSONArray("apps")
+            (0 until apps.length()).map { apps.getJSONObject(it) }.associate { app ->
+                app.getString("fullName") to
+                    Entry(app.optString("pushedAt"), now, indexedApp(app), discovered = true)
+            }
+        }
+    } catch (e: IOException) {
+        Log.w(TAG, "Store index unavailable", e)
+        null
+    } catch (e: JSONException) {
+        Log.w(TAG, "Store index unreadable", e)
+        null
+    }
+
+    /** Builds an app from its index entry, or null when none of its APKs suits this device. */
+    private fun indexedApp(json: JSONObject): StoreApp? {
+        val apks = json.getJSONArray("apks").let { array ->
+            (0 until array.length()).map { array.getJSONObject(it) }
+        }
+        val apk = ApkPicker.pick(apks.map { it.getString("name") }, deviceAbis)
+            ?.let { apks[it] }
+            ?: return null
+        val topics = json.optJSONArray("topics")
+            ?.let { array -> List(array.length()) { array.getString(it) } }
+            .orEmpty()
+        return StoreApp(
+            fullName = json.getString("fullName"),
+            description = json.optStringOrEmpty("description"),
+            stars = json.optInt("stars"),
+            category = Categories.of(topics),
+            license = json.optStringOrEmpty("license"),
+            downloads = json.optLong("downloads"),
+            repoUrl = json.getString("repoUrl"),
+            tag = json.getString("tag"),
+            releaseName = json.optStringOrEmpty("releaseName"),
+            releaseNotes = json.optStringOrEmpty("releaseNotes"),
+            releaseUrl = json.optStringOrEmpty("releaseUrl"),
+            publishedAt = json.optStringOrEmpty("publishedAt"),
+            apkName = apk.getString("name"),
+            apkUrl = apk.getString("url"),
+            apkSize = apk.getLong("size"),
+            assetId = apk.getLong("id"),
+            packageName = apk.getString("packageName"),
+            versionCode = apk.getLong("versionCode"),
+            versionName = if (apk.isNull("versionName")) null else apk.getString("versionName")
+        )
     }
 
     /** Repositories whose developers have tagged them with the store topic. */
@@ -439,6 +515,7 @@ class CatalogRepository private constructor(context: Context) {
         private const val MAX_REPO_PAGES = 10
         private const val MAX_DISCOVERY_PAGES = 5
         private const val AGE_PER_APP_MS = 90 * 1000L
+        private const val INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000L
         private const val MAX_AGE_FOREGROUND_MS = 20 * 60 * 1000L
         private const val MAX_AGE_BACKGROUND_MS = 6 * 60 * 60 * 1000L
 

@@ -1,0 +1,1 @@
+Julkaistujen sovellusten lista tulee nyt yhdestä tunnin välein päivittyvästä tiedostosta, joten kauppa latautuu heti sovellusten määrästä riippumatta.

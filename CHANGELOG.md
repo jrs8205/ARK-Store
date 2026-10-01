@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- Published apps are read from a store index, one file rebuilt every hour, so the store loads
+  at once and stays clear of GitHub's request limit however many apps it holds
+- Direct lookups remain for sources added by hand and as a fallback
+
 ## 1.1.0
 
 - Developers publish an app to the store by adding the topic `arkstore` to its repository;

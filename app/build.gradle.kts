@@ -20,13 +20,19 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
         // The GitHub topic with which developers publish a repository to the store.
         buildConfigField("String", "STORE_TOPIC", "\"arkstore\"")
+        // Where the list of published apps, rebuilt by the index workflow, is downloaded from.
+        buildConfigField(
+            "String",
+            "INDEX_URL",
+            "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/index.json\""
+        )
         // The store's own repository, whose download count is shown in the app.
         buildConfigField("String", "STORE_REPO", "\"jrs8205/ARK-Store\"")
     }

@@ -27,8 +27,8 @@ no review queue, no fees and no metadata files to maintain.
 4. **Add the topic `arkstore`** to the repository (the gear next to *About* on the
    repository's front page).
 
-That is all. The app shows up in ARK-Store for every user the next time the store refreshes,
-and new versions follow by themselves whenever you publish a release. To take the app out of
+That is all. The app shows up in ARK-Store for every user within about an hour, and new
+versions follow by themselves whenever you publish a release. To take the app out of
 the store, remove the topic.
 
 The first two points are requirements: a repository that is private or has no recognised
@@ -36,20 +36,19 @@ license is never listed, with or without the topic.
 
 ### How quickly it shows up
 
-- **A newly tagged app**: usually within a few minutes. GitHub first has to add the topic to
-  its search index, which is normally quick but can occasionally take longer. After that the
-  app appears the next time a user opens the store or pulls down to refresh.
-- **A new release of a listed app**: on the next refresh after the release is published.
-  Users who do not open the store are told about the update by the background check, which
-  runs about every twelve hours.
-- **Stars and download counts**: stars on every refresh, download counts within about
-  20 minutes, or more slowly in a large store.
-- **A repository added by hand under Sources**: immediately.
+- **A newly tagged app**: within about an hour. The list of published apps is rebuilt once an
+  hour, and the app appears the next time a user opens the store after that.
+- **A new release of a listed app**: likewise within about an hour. Users who do not open
+  the store are told about the update by the background check, which runs about every twelve
+  hours.
+- **Stars and download counts**: updated with the same hourly rebuild.
+- **A repository added by hand under Sources**: immediately, and its new releases show up on
+  the next refresh.
 
 The store refreshes when it is opened, at most once every five minutes; pulling down or the
-refresh button checks right away. If an app is still missing after an hour, check that the
-repository is public, has a license GitHub recognises, and that its latest full release has
-an `.apk` file attached.
+refresh button checks right away. If an app is still missing after a couple of hours, check
+that the repository is public, has a license GitHub recognises, and that its latest full
+release has an `.apk` file attached.
 
 ### Adding a repository by hand
 
@@ -113,21 +112,25 @@ its source is one tap away; install apps from developers you trust.
 
 ## How it works
 
-1. The app asks GitHub for every repository carrying the `arkstore` topic, and for the
-   repositories of the accounts and single repositories added under Sources. Forks, archived
-   repositories and repositories without a recognised license are dropped.
+1. Once an hour a workflow in this repository (`.github/workflows/index.yml`) asks GitHub for
+   every repository carrying the `arkstore` topic. Forks, archived repositories and
+   repositories without a recognised license are dropped.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
-3. The package name and version are read from the APK's own manifest. Only the zip directory
+3. The package name and version are read from each APK's own manifest. Only the zip directory
    and the manifest are fetched, a few kilobytes instead of the whole file.
-4. The result is compared with what is installed on the device.
+4. The result is written to one file, `index.json` on the `index` branch.
+5. The app downloads that file and compares it with what is installed on the device.
 
-GitHub allows 60 anonymous requests an hour per network. The app spaces its requests to stay
-below that: the repository lists are fetched at most every five minutes, and the releases of
-a listed app when its repository has been pushed to or when the stored answer has grown old.
-That age starts at 20 minutes and stretches as the store grows, so that the quota covers
-every app. If the limit is reached anyway, for instance on the first start of a large store,
-the app keeps showing what it has, says so, and fills in the rest on later refreshes.
+Because the app reads a single file instead of asking GitHub about every repository, the
+number of apps in the store does not affect how fast it loads, and GitHub's request limit
+does not come into it. The limit of this design is GitHub's search, which returns at most a
+thousand repositories for the topic.
+
+Accounts and repositories added by hand under Sources are not in that file. The app asks
+GitHub about them directly, within the 60 anonymous requests an hour that GitHub allows per
+network. The same direct lookup is the fallback for published apps if the index is missing
+or more than a day old.
 
 ## Building
 
@@ -137,9 +140,10 @@ the app keeps showing what it has, says so, and fills in the rest on later refre
 
 The debug build installs as `org.jarsi.arkstore.debug` next to a release build.
 
-The store topic, the account that is a source on every new installation and the store's own
-repository are the `STORE_TOPIC`, `GITHUB_OWNER` and `STORE_REPO` build config fields in
-`app/build.gradle.kts`.
+The store topic, the index location, the account that is a source on every new installation
+and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER` and
+`STORE_REPO` build config fields in `app/build.gradle.kts`. The index is built with
+`python3 tools/build_index.py --output index.json`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:

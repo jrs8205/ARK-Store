@@ -45,6 +45,18 @@ object Http {
         }
     }
 
+    /** Fetches a plain text document that is not served by the GitHub API. */
+    @Throws(IOException::class)
+    fun getText(url: String): String {
+        val connection = open(url)
+        try {
+            if (connection.responseCode != 200) throw HttpStatusException(connection.responseCode)
+            return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     /** Reads [length] bytes starting at [start] with a range request. */
     @Throws(IOException::class)
     fun readRange(url: String, start: Long, length: Int): ByteArray {
