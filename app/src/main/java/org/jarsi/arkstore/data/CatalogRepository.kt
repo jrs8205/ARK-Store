@@ -63,6 +63,12 @@ class CatalogRepository private constructor(context: Context) {
     /** Whether prereleases are offered as the version to install. */
     val includeBeta: StateFlow<Boolean> = _includeBeta.asStateFlow()
 
+    private val _includeAuto = MutableStateFlow(preferences.getBoolean(PREF_AUTO, false))
+    /** Whether apps found by searching GitHub, which nobody published here, are shown. */
+    val includeAuto: StateFlow<Boolean> = _includeAuto.asStateFlow()
+
+    private val indexCache = File(context.filesDir, "index.json")
+
     private val file = File(context.filesDir, "catalog.json")
     private val mutex = Mutex()
     private var entries: Map<String, Entry> = emptyMap()
@@ -105,7 +111,7 @@ class CatalogRepository private constructor(context: Context) {
 
             // Published apps normally come ready-made from the store index. Only when that is
             // missing or stale are they looked up one by one through the API.
-            val indexed = loadIndex(now)
+            val indexed = loadIndex(now)?.toMutableMap()
             if (indexed != null) {
                 discovered += indexed.keys
             } else {
@@ -128,7 +134,12 @@ class CatalogRepository private constructor(context: Context) {
                         // The index is rebuilt about hourly. A repository pushed to since then
                         // is asked about directly, so a release just made shows up at once.
                         val known = indexed?.get(fullName)
-                        if (known != null && known.stamp >= repo.optString("pushed_at")) continue
+                        if (known != null && known.stamp >= repo.optString("pushed_at")) {
+                            // An app the user asked for through a source is theirs to see,
+                            // whatever the index says about how it was found.
+                            indexed[fullName] = known.mapApps { it.copy(auto = false) }
+                            continue
+                        }
                         repos.putIfAbsent(fullName, repo)
                     }
                 } catch (e: IOException) {
@@ -275,7 +286,7 @@ class CatalogRepository private constructor(context: Context) {
      * not been rebuilt for so long that it cannot be trusted.
      */
     private fun loadIndex(now: Long): Map<String, Entry>? = try {
-        val root = JSONObject(Http.getText(BuildConfig.INDEX_URL))
+        val root = JSONObject(indexText())
         if (now - root.getLong("generatedAt") > INDEX_MAX_AGE_MS) {
             Log.w(TAG, "Store index is stale")
             null
@@ -290,7 +301,7 @@ class CatalogRepository private constructor(context: Context) {
                 app.getString("fullName") to Entry(
                     stamp = app.optString("pushedAt"),
                     fetchedAt = now,
-                    app = indexedApp(app, app, prerelease = false),
+                    app = indexedApp(app, app),
                     beta = app.optJSONObject("beta")?.let { indexedApp(app, it, prerelease = true) },
                     discovered = true
                 )
@@ -304,7 +315,17 @@ class CatalogRepository private constructor(context: Context) {
                     discovered = true
                 )
             }
-            betaOnly + stable
+            // Found by searching GitHub, not published by their developers.
+            val auto = objects("autoApps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = indexedApp(app, app, auto = true),
+                    beta = null,
+                    discovered = true
+                )
+            }
+            auto + betaOnly + stable
         }
     } catch (e: IOException) {
         Log.w(TAG, "Store index unavailable", e)
@@ -315,10 +336,34 @@ class CatalogRepository private constructor(context: Context) {
     }
 
     /**
+     * The text of the store index. It is rebuilt only once an hour, so the copy kept from the
+     * last download is used for as long as the server says nothing has changed.
+     */
+    private fun indexText(): String {
+        val etag = preferences.getString(PREF_INDEX_ETAG, null).takeIf { indexCache.exists() }
+        val (text, newEtag) = Http.getTextIfChanged(BuildConfig.INDEX_URL, etag)
+        if (text == null) return indexCache.readText()
+        try {
+            indexCache.writeText(text)
+            preferences.edit { putString(PREF_INDEX_ETAG, newEtag) }
+        } catch (e: IOException) {
+            // The copy only saves a download next time.
+            Log.w(TAG, "Could not keep a copy of the store index", e)
+            preferences.edit { remove(PREF_INDEX_ETAG) }
+        }
+        return text
+    }
+
+    /**
      * Builds an app from its index entry [json] and one of the releases described there, or
      * returns null when none of that release's APKs suits this device.
      */
-    private fun indexedApp(json: JSONObject, release: JSONObject, prerelease: Boolean): StoreApp? {
+    private fun indexedApp(
+        json: JSONObject,
+        release: JSONObject,
+        prerelease: Boolean = false,
+        auto: Boolean = false
+    ): StoreApp? {
         val apks = release.getJSONArray("apks").let { array ->
             (0 until array.length()).map { array.getJSONObject(it) }
         }
@@ -337,6 +382,7 @@ class CatalogRepository private constructor(context: Context) {
             downloads = json.optLong("downloads"),
             repoUrl = json.getString("repoUrl"),
             prerelease = prerelease,
+            auto = auto,
             tag = release.getString("tag"),
             releaseName = release.optStringOrEmpty("releaseName"),
             releaseNotes = release.optStringOrEmpty("releaseNotes"),
@@ -518,6 +564,13 @@ class CatalogRepository private constructor(context: Context) {
         withContext(Dispatchers.IO) { save(checkedAt) }
     }
 
+    /** Shows or hides automatically found apps and republishes the catalogue accordingly. */
+    suspend fun setIncludeAuto(include: Boolean) = mutex.withLock {
+        preferences.edit { putBoolean(PREF_AUTO, include) }
+        _includeAuto.value = include
+        _catalog.value = _catalog.value.copy(apps = sorted(entries.values))
+    }
+
     /** Turns beta versions on or off and republishes the catalogue accordingly. */
     suspend fun setIncludeBeta(include: Boolean) = mutex.withLock {
         preferences.edit { putBoolean(PREF_BETA, include) }
@@ -528,7 +581,9 @@ class CatalogRepository private constructor(context: Context) {
     /** The apps to show: the prerelease where there is one and beta versions are wanted. */
     private fun sorted(entries: Collection<Entry>): List<StoreApp> {
         val includeBeta = _includeBeta.value
+        val includeAuto = _includeAuto.value
         return entries.mapNotNull { if (includeBeta) it.beta ?: it.app else it.app }
+            .filter { includeAuto || !it.auto }
             .sortedBy { it.repo.lowercase() }
     }
 
@@ -587,6 +642,8 @@ class CatalogRepository private constructor(context: Context) {
     companion object {
         private const val TAG = "CatalogRepository"
         private const val PREF_BETA = "include_beta"
+        private const val PREF_AUTO = "include_auto"
+        private const val PREF_INDEX_ETAG = "index_etag"
         private const val API = "https://api.github.com"
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100

@@ -3,8 +3,10 @@ package org.jarsi.arkstore.ui
 import android.content.Context
 import android.icu.text.CompactDecimalFormat
 import android.content.Intent
+import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -93,6 +95,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import java.time.ZoneId
@@ -109,6 +112,7 @@ import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
+import org.jarsi.arkstore.work.UpdateCheckWorker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -480,6 +484,9 @@ private fun AppCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
+        // The fill alone is too close to the background to show where a card ends in bright
+        // light, so the edge is drawn as well.
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .clip(CardDefaults.shape)
@@ -491,7 +498,8 @@ private fun AppCard(
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.repo, style = MaterialTheme.typography.titleMedium)
-                    if (app.prerelease) BetaBadge()
+                    if (app.prerelease) Badge(stringResource(R.string.badge_beta))
+                    if (app.auto) Badge(stringResource(R.string.badge_auto))
                     Text(
                         text = stringResource(R.string.card_byline, app.owner, versionLine(row)),
                         style = MaterialTheme.typography.bodyMedium,
@@ -730,6 +738,14 @@ private fun DetailsSheet(row: AppRow) {
         }
 
         Spacer(Modifier.height(16.dp))
+        if (app.auto) {
+            Text(
+                text = stringResource(R.string.auto_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         DetailLine(stringResource(R.string.detail_developer), app.owner)
         DetailLine(stringResource(R.string.detail_category), stringResource(categoryLabel(app.category)))
         if (app.license.isNotBlank()) {
@@ -876,11 +892,11 @@ private fun versionLine(row: AppRow): String {
     }
 }
 
-/** Marks an app whose offered version is a prerelease. */
+/** A short label on a card: a prerelease, or an app nobody published to the store. */
 @Composable
-private fun BetaBadge() {
+private fun Badge(text: String) {
     Text(
-        text = stringResource(R.string.badge_beta),
+        text = text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onTertiaryContainer,
         modifier = Modifier
@@ -911,6 +927,8 @@ private fun SettingsSheet(viewModel: StoreViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
         )
+        AutoSwitch(viewModel)
+        NotificationSetting()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
@@ -920,12 +938,87 @@ private fun SettingsSheet(viewModel: StoreViewModel) {
     }
 }
 
+/**
+ * Shows whether update notifications can reach the user and leads to the system page where they
+ * are turned on. The system decides this (permission, app and channel switches), so the app
+ * reports the state instead of keeping a switch of its own that could disagree with it.
+ */
+@Composable
+private fun NotificationSetting() {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    var enabled by remember { mutableStateOf(UpdateCheckWorker.notificationsEnabled(context)) }
+    // The user may come back from the system settings with a different answer.
+    LifecycleResumeEffect(Unit) {
+        enabled = UpdateCheckWorker.notificationsEnabled(context)
+        onPauseOrDispose {}
+    }
+
+    Text(
+        text = stringResource(R.string.notifications_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(
+            if (enabled) R.string.notifications_on else R.string.notifications_off
+        ),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    OutlinedButton(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                )
+            }
+        },
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        Text(stringResource(R.string.action_notification_settings))
+    }
+}
+
 @Composable
 private fun BetaSwitch(viewModel: StoreViewModel) {
     val includeBeta by viewModel.includeBeta.collectAsStateWithLifecycle()
+    SettingSwitch(
+        heading = stringResource(R.string.beta_title),
+        label = stringResource(R.string.beta_switch),
+        description = stringResource(R.string.beta_description),
+        checked = includeBeta,
+        onCheckedChange = viewModel::setIncludeBeta
+    )
+}
+
+@Composable
+private fun AutoSwitch(viewModel: StoreViewModel) {
+    val includeAuto by viewModel.includeAuto.collectAsStateWithLifecycle()
+    SettingSwitch(
+        heading = stringResource(R.string.auto_title),
+        label = stringResource(R.string.auto_switch),
+        description = stringResource(R.string.auto_description),
+        checked = includeAuto,
+        onCheckedChange = viewModel::setIncludeAuto
+    )
+}
+
+@Composable
+private fun SettingSwitch(
+    heading: String,
+    label: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
     val haptics = LocalHapticFeedback.current
     Text(
-        text = stringResource(R.string.beta_title),
+        text = heading,
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier
             .padding(top = 16.dp)
@@ -937,30 +1030,27 @@ private fun BetaSwitch(viewModel: StoreViewModel) {
         modifier = Modifier
             .fillMaxWidth()
             .toggleable(
-                value = includeBeta,
+                value = checked,
                 role = Role.Switch,
                 onValueChange = {
                     haptics.performHapticFeedback(
                         if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
                     )
-                    viewModel.setIncludeBeta(it)
+                    onCheckedChange(it)
                 }
             )
             .padding(vertical = 8.dp)
     ) {
         Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = stringResource(R.string.beta_switch),
-                style = MaterialTheme.typography.bodyLarge
-            )
-            Text(
-                text = stringResource(R.string.beta_description),
+                text = description,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = includeBeta, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

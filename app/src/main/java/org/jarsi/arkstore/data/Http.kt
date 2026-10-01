@@ -45,6 +45,26 @@ object Http {
         }
     }
 
+    /**
+     * Fetches a plain text document that is not served by the GitHub API, unless it still has
+     * the given [etag]. Returns the text, or null when it has not changed, with its ETag.
+     */
+    @Throws(IOException::class)
+    fun getTextIfChanged(url: String, etag: String?): Pair<String?, String?> {
+        val connection = open(url)
+        if (etag != null) connection.setRequestProperty("If-None-Match", etag)
+        try {
+            return when (connection.responseCode) {
+                200 -> connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) } to
+                    connection.getHeaderField("ETag")
+                304 -> null to etag
+                else -> throw HttpStatusException(connection.responseCode)
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
     /** Fetches a plain text document that is not served by the GitHub API. */
     @Throws(IOException::class)
     fun getText(url: String): String {

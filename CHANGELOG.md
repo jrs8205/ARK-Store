@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.3.0-beta.3
+
+- Colours reworked so that every text keeps a contrast of at least 7:1 (WCAG AAA) in both the
+  light and the dark theme; cards have a visible edge
+- The settings show whether update notifications are allowed and lead to the system settings
+- The notification check also covers a switched-off channel
+- Optional: a switch in the settings lists open-source Android apps found by searching GitHub,
+  marked as such; only actively developed repositories with a recent release qualify
+- The store index is downloaded again only when it has changed
+- Downloads continue in a foreground service, with a progress notification, when the user
+  leaves the app
+
 ## 1.3.0-beta.2
 
 - Settings have their own page behind a gear icon, and the beta switch lives there

@@ -88,6 +88,7 @@ None of these are required, but they make your app look better in the store.
 
 - **One list for everything**: updates available, installed apps and apps you could install.
 - **One tap** to install or update, and **Update all** when several updates are waiting.
+  Downloads carry on in the background if you leave the app.
 - **Search** with a clear button, **categories** to narrow the list down, and **sorting** by
   name, downloads, stars or release date.
 - **Numbers from GitHub**: stars and download counts for every app, the number of apps in the
@@ -101,6 +102,22 @@ None of these are required, but they make your app look better in the store.
 - **Accessible**: screen reader labels, text that scales, contrast that meets WCAG AA, and
   haptic feedback that follows the system setting.
 - **English and Finnish.**
+
+## Automatically found apps
+
+Besides the apps developers publish with the topic, the index workflow searches GitHub for
+other open-source Android apps. They are shown only to users who turn on **Show automatically
+found apps** in the settings, and each carries a label saying that its developer did not
+publish it to the store. To keep the list fresh, a repository qualifies only when it
+
+- is public and has a recognised open-source license, like every app in the store,
+- has been pushed to within the last 30 days,
+- has at least 20 stars, and
+- has a full release, at most 180 days old, with an APK attached.
+
+These limits are constants at the top of `tools/build_index.py`. A developer who would
+rather not be listed this way can remove the `android` topics the search looks for; one who
+wants to be listed for everyone adds the `arkstore` topic.
 
 ## Why only public and licensed apps
 

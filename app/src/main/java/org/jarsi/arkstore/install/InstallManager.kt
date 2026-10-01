@@ -47,6 +47,10 @@ object InstallManager {
 
     internal val confirmations = InstallConfirmationQueue<Intent>()
 
+    private val _activeJobs = MutableStateFlow(0)
+    /** How many downloads and installs are being worked on right now. */
+    val activeJobs: StateFlow<Int> = _activeJobs.asStateFlow()
+
     private val _installedChanged = MutableStateFlow(0)
     /** Ticks whenever an install finishes, so observers re-read the installed versions. */
     val installedChanged: StateFlow<Int> = _installedChanged.asStateFlow()
@@ -59,6 +63,9 @@ object InstallManager {
         val appContext = context.applicationContext
         if (isBusy(app.fullName)) return
         setState(app.fullName, InstallState.Downloading(0f))
+        _activeJobs.update { it + 1 }
+        // Lets the download carry on if the user leaves the app before it is done.
+        InstallService.start(appContext)
 
         scope.launch {
             val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_')}.apk")
@@ -73,6 +80,7 @@ object InstallManager {
             } finally {
                 // Once committed, the session holds its own copy of the file.
                 target.delete()
+                _activeJobs.update { it - 1 }
             }
         }
     }

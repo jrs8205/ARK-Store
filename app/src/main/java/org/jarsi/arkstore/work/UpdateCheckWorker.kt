@@ -1,15 +1,12 @@
 package org.jarsi.arkstore.work
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -81,17 +78,27 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                 CHANNEL_ID,
                 context.getString(R.string.channel_updates),
                 NotificationManager.IMPORTANCE_DEFAULT
-            )
+            ).apply {
+                description = context.getString(R.string.channel_updates_description)
+            }
             context.getSystemService(NotificationManager::class.java)
                 .createNotificationChannel(channel)
         }
 
+        /**
+         * Whether an update notification would actually be shown. This covers the runtime
+         * permission of Android 13 and later, the app-wide switch of earlier versions and
+         * the switch of the update channel itself.
+         */
+        fun notificationsEnabled(context: Context): Boolean {
+            val manager = NotificationManagerCompat.from(context)
+            if (!manager.areNotificationsEnabled()) return false
+            val channel = manager.getNotificationChannel(CHANNEL_ID) ?: return true
+            return channel.importance != NotificationManager.IMPORTANCE_NONE
+        }
+
         private fun notify(context: Context, names: List<String>) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
+            if (!notificationsEnabled(context)) return
             val open = PendingIntent.getActivity(
                 context,
                 0,
@@ -108,11 +115,19 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                     )
                 )
                 .setContentText(names.joinToString(", "))
+                .setStyle(NotificationCompat.BigTextStyle().bigText(names.joinToString(", ")))
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(open)
                 .setAutoCancel(true)
                 .setOnlyAlertOnce(true)
                 .build()
-            NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            try {
+                NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
+            } catch (_: SecurityException) {
+                // The permission was withdrawn between the check and the call.
+            }
         }
     }
 }

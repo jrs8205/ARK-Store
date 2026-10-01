@@ -129,4 +129,22 @@
     <string name="action_return_to_stable">Uninstall the beta</string>
     <string name="stable_confirm_title">Uninstall the beta?</string>
     <string name="stable_confirm_message">The app and its data are removed. After that, install the stable version from the list.</string>
+    <string name="channel_updates_description">Tells you when installed apps have a newer version</string>
+    <string name="notifications_title">Update notifications</string>
+    <string name="notifications_on">On. ARK-Store checks for updates in the background and notifies you about them.</string>
+    <string name="notifications_off">Off. Android is not letting ARK-Store show notifications, so updates are only shown when you open the app.</string>
+    <string name="action_notification_settings">Notification settings</string>
+    <string name="channel_downloads">Downloads</string>
+    <string name="channel_downloads_description">Shows the progress of app downloads</string>
+    <string name="download_notification_one">Downloading %1$s</string>
+    <plurals name="download_notification_many">
+        <item quantity="one">Downloading %d app</item>
+        <item quantity="other">Downloading %d apps</item>
+    </plurals>
+    <string name="download_notification_installing">Installing</string>
+    <string name="badge_auto">Found automatically</string>
+    <string name="auto_title">More apps</string>
+    <string name="auto_switch">Show automatically found apps</string>
+    <string name="auto_description">Also list open-source Android apps found by searching GitHub. Their developers have not published them to ARK-Store, and nobody has checked them. Only actively developed apps with a recent release are included.</string>
+    <string name="auto_detail">This app was found by searching GitHub. Its developer has not published it to ARK-Store.</string>
 </resources>

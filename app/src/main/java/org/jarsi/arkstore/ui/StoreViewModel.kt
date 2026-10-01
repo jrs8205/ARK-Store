@@ -80,6 +80,11 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, StoreUiState(refreshing = true))
 
     val includeBeta: StateFlow<Boolean> = repository.includeBeta
+    val includeAuto: StateFlow<Boolean> = repository.includeAuto
+
+    fun setIncludeAuto(include: Boolean) {
+        viewModelScope.launch { repository.setIncludeAuto(include) }
+    }
 
     fun setIncludeBeta(include: Boolean) {
         viewModelScope.launch { repository.setIncludeBeta(include) }

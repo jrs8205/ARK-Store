@@ -17,6 +17,11 @@ data class StoreApp(
     val repoUrl: String,
     /** True when this is a prerelease, offered because beta versions are wanted. */
     val prerelease: Boolean = false,
+    /**
+     * True when the app was found by searching GitHub rather than published to the store by
+     * its developer or added as a source on this device.
+     */
+    val auto: Boolean = false,
     val tag: String,
     val releaseName: String,
     val releaseNotes: String,
@@ -50,6 +55,7 @@ data class StoreApp(
         .put("downloads", downloads)
         .put("repoUrl", repoUrl)
         .put("prerelease", prerelease)
+        .put("auto", auto)
         .put("tag", tag)
         .put("releaseName", releaseName)
         .put("releaseNotes", releaseNotes)
@@ -73,6 +79,7 @@ data class StoreApp(
             downloads = json.optLong("downloads"),
             repoUrl = json.getString("repoUrl"),
             prerelease = json.optBoolean("prerelease"),
+            auto = json.optBoolean("auto"),
             tag = json.getString("tag"),
             releaseName = json.optString("releaseName"),
             releaseNotes = json.optString("releaseNotes"),

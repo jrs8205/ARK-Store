@@ -123,4 +123,22 @@
     <string name="action_return_to_stable">Poista beta</string>
     <string name="stable_confirm_title">Poistetaanko beta?</string>
     <string name="stable_confirm_message">Sovellus ja sen tiedot poistetaan. Asenna sen jälkeen vakaa versio listalta.</string>
+    <string name="channel_updates_description">Kertoo, kun asennetuista sovelluksista on uudempi versio</string>
+    <string name="notifications_title">Päivitysilmoitukset</string>
+    <string name="notifications_on">Päällä. ARK-Store tarkistaa päivitykset taustalla ja ilmoittaa niistä.</string>
+    <string name="notifications_off">Pois päältä. Android ei anna ARK-Storen näyttää ilmoituksia, joten päivitykset näkyvät vain, kun avaat sovelluksen.</string>
+    <string name="action_notification_settings">Ilmoitusasetukset</string>
+    <string name="channel_downloads">Lataukset</string>
+    <string name="channel_downloads_description">Näyttää sovelluslatausten etenemisen</string>
+    <string name="download_notification_one">Ladataan: %1$s</string>
+    <plurals name="download_notification_many">
+        <item quantity="one">Ladataan %d sovellus</item>
+        <item quantity="other">Ladataan %d sovellusta</item>
+    </plurals>
+    <string name="download_notification_installing">Asennetaan</string>
+    <string name="badge_auto">Löydetty automaattisesti</string>
+    <string name="auto_title">Lisää sovelluksia</string>
+    <string name="auto_switch">Näytä automaattisesti löydetyt sovellukset</string>
+    <string name="auto_description">Listaa myös GitHubista haulla löydetyt avoimen lähdekoodin Android-sovellukset. Niiden kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä. Mukana ovat vain aktiivisesti kehitetyt sovellukset, joilla on tuore julkaisu.</string>
+    <string name="auto_detail">Tämä sovellus löytyi GitHubista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
 </resources>
