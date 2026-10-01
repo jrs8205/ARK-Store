@@ -115,6 +115,77 @@ class PrereleaseTest(unittest.TestCase):
         self.assertTrue(app["betaOnly"])
 
 
+class NotBeforeTest(unittest.TestCase):
+    def test_old_release_is_given_up_on_before_reading_its_apks(self):
+        releases = [{"tag_name": "v1", "published_at": "2020-01-01T00:00:00Z", "assets": [asset("a.apk", 1)]}]
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest") as read_manifest:
+            self.assertIsNone(build_index.build_app(REPO, {}, not_before=1700000000))
+        read_manifest.assert_not_called()
+
+    def test_recent_release_is_examined(self):
+        releases = [{"tag_name": "v1", "published_at": "2026-09-01T00:00:00Z", "assets": [asset("a.apk", 1)]}]
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 1, "1")):
+            self.assertEqual(build_index.build_app(REPO, {}, not_before=1700000000)["tag"], "v1")
+
+
+class AutoAppsTest(unittest.TestCase):
+    NOW = 1790000000
+
+    def candidate(self, name="other/app", pushed="2026-09-20T00:00:00Z", topics=("android",)):
+        return dict(REPO, full_name=name, html_url="https://github.com/" + name,
+                    pushed_at=pushed, topics=list(topics), stargazers_count=50)
+
+    def entry(self, name="other/app", published="2026-09-01T00:00:00Z"):
+        return {"fullName": name, "tag": "v1", "publishedAt": published, "releaseNotes": "n" * 5000,
+                "apks": [{"id": 1}], "stars": 1, "topics": []}
+
+    def run_auto(self, candidates, built, previous=None, state=None, published=()):
+        with mock.patch.object(build_index, "discover_candidates", return_value=candidates), \
+                mock.patch.object(build_index, "build_app", side_effect=built) as build_app:
+            apps, new_state = build_index.build_auto_apps(
+                set(published), previous or {}, state or {}, self.NOW)
+        return apps, new_state, build_app
+
+    def test_recent_release_is_listed_with_short_notes(self):
+        apps, state, _ = self.run_auto([self.candidate()], [self.entry()])
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(len(apps[0]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
+        self.assertEqual(state, {"other/app": "2026-09-20T00:00:00Z"})
+
+    def test_old_release_is_left_out_but_remembered(self):
+        apps, state, _ = self.run_auto([self.candidate()], [self.entry(published="2025-01-01T00:00:00Z")])
+        self.assertEqual(apps, [])
+        self.assertIn("other/app", state)
+
+    def test_unchanged_repository_is_not_asked_about_again(self):
+        previous = {"other/app": self.entry()}
+        apps, _, build_app = self.run_auto(
+            [self.candidate()], [], previous=previous,
+            state={"other/app": "2026-09-20T00:00:00Z"})
+        build_app.assert_not_called()
+        self.assertEqual(apps[0]["stars"], 50)
+
+    def test_published_and_tagged_repositories_are_skipped(self):
+        candidates = [self.candidate("a/published"), self.candidate("b/tagged", topics=("arkstore",))]
+        apps, _, build_app = self.run_auto(candidates, [], published=["a/published"])
+        build_app.assert_not_called()
+        self.assertEqual(apps, [])
+
+    def test_unlicensed_repository_is_skipped(self):
+        candidate = dict(self.candidate(), license=None)
+        apps, _, build_app = self.run_auto([candidate], [])
+        build_app.assert_not_called()
+
+    def test_lookups_are_capped_per_run(self):
+        candidates = [self.candidate("o/app%d" % i) for i in range(build_index.AUTO_MAX_LOOKUPS + 5)]
+        built = [self.entry("o/app%d" % i) for i in range(build_index.AUTO_MAX_LOOKUPS)]
+        apps, state, build_app = self.run_auto(candidates, built)
+        self.assertEqual(build_app.call_count, build_index.AUTO_MAX_LOOKUPS)
+        self.assertEqual(len(state), build_index.AUTO_MAX_LOOKUPS)
+
+
 class MainTest(unittest.TestCase):
     def test_network_failure_keeps_the_previously_listed_app(self):
         known = {"fullName": "owner/app", "tag": "v1", "apks": [{"id": 7}]}
@@ -124,6 +195,7 @@ class MainTest(unittest.TestCase):
             with open(previous, "w", encoding="utf-8") as file:
                 json.dump({"apps": [known]}, file)
             with mock.patch.object(build_index, "discover", return_value=[REPO]), \
+                    mock.patch.object(build_index, "discover_candidates", return_value=[]), \
                     mock.patch.object(build_index, "api", return_value=release(asset_id=8)), \
                     mock.patch.object(build_index, "read_manifest",
                                       side_effect=OSError("range request not honoured")), \

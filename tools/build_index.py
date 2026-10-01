@@ -10,6 +10,7 @@ Only the standard library is used. Set GITHUB_TOKEN to raise the API request lim
 """
 
 import argparse
+import calendar
 import json
 import os
 import struct
@@ -29,6 +30,26 @@ MAX_NOTES = 4000
 MAX_DIRECTORY = 8 * 1024 * 1024
 MAX_MANIFEST = 4 * 1024 * 1024
 USER_AGENT = "ARK-Store-index"
+
+# Apps nobody published to the store, found by searching GitHub. They are offered only to
+# users who ask for them. To keep that list fresh and reasonably trustworthy, a repository
+# must have been pushed to within AUTO_PUSHED_DAYS, have at least AUTO_MIN_STARS stars, and
+# its newest full release must be at most AUTO_RELEASE_DAYS old.
+AUTO_QUERIES = (
+    "topic:android language:Kotlin",
+    "topic:android language:Java",
+    "topic:android language:Dart",
+    "topic:android-app",
+)
+AUTO_PUSHED_DAYS = 30
+AUTO_RELEASE_DAYS = 180
+AUTO_MIN_STARS = 20
+AUTO_SEARCH_PAGES = 3
+# Each repository costs one API request, and a workflow run has a limited number of them, so
+# only this many are examined per run. Repositories that have not changed since they were
+# last examined cost nothing, so the list fills up over a few runs and then stays current.
+AUTO_MAX_LOOKUPS = 150
+AUTO_MAX_NOTES = 800
 
 
 def api(path):
@@ -241,6 +262,80 @@ def discover():
     return repos
 
 
+def discover_candidates(today):
+    """Repositories that might be Android apps worth offering, most starred first."""
+    since = time.strftime("%Y-%m-%d", time.gmtime(today - AUTO_PUSHED_DAYS * 86400))
+    found = {}
+    for base in AUTO_QUERIES:
+        query = urllib.parse.quote(
+            "%s pushed:>=%s stars:>=%d archived:false" % (base, since, AUTO_MIN_STARS)
+        )
+        for page in range(1, AUTO_SEARCH_PAGES + 1):
+            result = api("/search/repositories?q=%s&sort=stars&order=desc&per_page=%d&page=%d"
+                         % (query, PAGE_SIZE, page))
+            items = result.get("items", [])
+            for repo in items:
+                found.setdefault(repo["full_name"], repo)
+            time.sleep(2)
+            if len(items) < PAGE_SIZE:
+                break
+    return sorted(found.values(), key=lambda repo: -repo.get("stargazers_count", 0))
+
+
+def recent_enough(app, today):
+    """Whether the release an entry describes is at most AUTO_RELEASE_DAYS old."""
+    published = published_at({"published_at": app.get("publishedAt")})
+    return published is not None and today - published <= AUTO_RELEASE_DAYS * 86400
+
+
+def build_auto_apps(published, previous_auto, state, today):
+    """Builds the list of automatically found apps.
+
+    state maps a repository to the pushed_at it had when it was last examined. A repository
+    whose pushed_at is unchanged is not asked about again: its previous entry, or its absence,
+    still stands. Returns the entries and the new state.
+    """
+    apps = []
+    new_state = {}
+    lookups = 0
+    for repo in discover_candidates(today):
+        full_name = repo["full_name"]
+        if full_name in published or TOPIC in (repo.get("topics") or []) or not listable(repo):
+            continue
+        pushed_at = repo.get("pushed_at") or ""
+        previous = previous_auto.get(full_name)
+        if state.get(full_name) == pushed_at:
+            new_state[full_name] = pushed_at
+            app = previous
+            if app:
+                # Stars and topics come with the search result, so they are always current.
+                app = dict(app, stars=repo.get("stargazers_count", 0), topics=repo.get("topics") or [])
+        elif lookups >= AUTO_MAX_LOOKUPS:
+            # Out of budget for this run; keep what is known and look next time.
+            app = previous
+        else:
+            lookups += 1
+            try:
+                app = build_app(
+                    repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400
+                )
+                new_state[full_name] = pushed_at
+            except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
+                print("%s: %s" % (full_name, error), file=sys.stderr)
+                app = previous
+            if app:
+                if app.get("betaOnly"):
+                    app = None
+                else:
+                    app.pop("beta", None)
+                    app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
+        if app and recent_enough(app, today):
+            apps.append(app)
+    apps.sort(key=lambda app: app["fullName"].lower())
+    print("%d automatically found apps, %d repositories examined" % (len(apps), lookups))
+    return apps, new_state
+
+
 def license_of(repo):
     spdx = (repo.get("license") or {}).get("spdx_id")
     return spdx if spdx and spdx != "NOASSERTION" else None
@@ -298,8 +393,19 @@ def release_info(release, previous_apks):
     }
 
 
-def build_app(repo, previous_apks):
+def published_at(release):
+    """The time a release was published, in seconds since the epoch, or None."""
+    try:
+        return calendar.timegm(time.strptime(release["published_at"], "%Y-%m-%dT%H:%M:%SZ"))
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def build_app(repo, previous_apks, not_before=None):
     """Returns the index entry of a repository, or None when it has nothing to install.
+
+    With not_before, a repository whose newest full release was published earlier than that
+    is given up on at once, before any of its APKs are examined.
 
     The entry describes the newest full release. When the newest release of all is a
     prerelease, it is added under "beta" for users who have asked for beta versions. A
@@ -315,6 +421,9 @@ def build_app(repo, previous_apks):
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
+    if not_before is not None:
+        if stable is None or (published_at(stable) or 0) < not_before:
+            return None
     # Releases come newest first, so a prerelease at the top is newer than the full release.
     newest = releases[0] if releases else None
     prerelease = newest if newest is not None and newest.get("prerelease") else None
@@ -355,10 +464,13 @@ def known_apks(app):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--previous", help="the previous index, to reuse what is known about unchanged APKs")
+    parser.add_argument("--state", help="what earlier runs learnt about automatically found repositories; "
+                                        "read if present and rewritten")
     parser.add_argument("--output", required=True)
     arguments = parser.parse_args()
 
     previous_apps = {}
+    previous_auto = {}
     if arguments.previous and os.path.exists(arguments.previous):
         try:
             with open(arguments.previous, encoding="utf-8") as file:
@@ -367,8 +479,17 @@ def main():
                     app["fullName"]: app
                     for app in loaded.get("apps", []) + loaded.get("betaApps", [])
                 }
+                previous_auto = {app["fullName"]: app for app in loaded.get("autoApps", [])}
         except (ValueError, KeyError, TypeError):
             print("previous index unreadable, starting fresh", file=sys.stderr)
+
+    state = {}
+    if arguments.state and os.path.exists(arguments.state):
+        try:
+            with open(arguments.state, encoding="utf-8") as file:
+                state = json.load(file)
+        except ValueError:
+            print("state unreadable, starting fresh", file=sys.stderr)
 
     apps = []
     failed = 0
@@ -392,6 +513,18 @@ def main():
             ))
 
     apps.sort(key=lambda app: app["fullName"].lower())
+
+    today = time.time()
+    try:
+        auto_apps, state = build_auto_apps(
+            {app["fullName"] for app in apps}, previous_auto, state, today
+        )
+    except Exception as error:  # pylint: disable=broad-except
+        # The published apps matter most; nothing that goes wrong in this optional part may
+        # cost them their update.
+        print("automatic discovery failed: %s" % error, file=sys.stderr)
+        auto_apps = [app for app in previous_auto.values() if recent_enough(app, today)]
+
     index = {
         "version": 1,
         "generatedAt": int(time.time() * 1000),
@@ -399,10 +532,15 @@ def main():
         # the store can read this list.
         "apps": [app for app in apps if not app.get("betaOnly")],
         "betaApps": [app for app in apps if app.get("betaOnly")],
+        # Apps found by searching GitHub rather than published by their developers.
+        "autoApps": auto_apps,
     }
     os.makedirs(os.path.dirname(os.path.abspath(arguments.output)), exist_ok=True)
     with open(arguments.output, "w", encoding="utf-8") as file:
         json.dump(index, file, ensure_ascii=False, separators=(",", ":"))
+    if arguments.state:
+        with open(arguments.state, "w", encoding="utf-8") as file:
+            json.dump(state, file, separators=(",", ":"))
     print("%d apps, %d repositories failed" % (len(apps), failed))
 
 
