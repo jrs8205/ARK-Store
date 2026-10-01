@@ -21,7 +21,9 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.CatalogRepository
+import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
+import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.ui.MainActivity
 
 /** Periodically refreshes the catalogue and tells the user when updates are waiting. */
@@ -29,18 +31,28 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
-        val catalog = try {
-            CatalogRepository.get(applicationContext).refresh(foreground = false)
-        } catch (_: IOException) {
-            return Result.retry()
+        val repository = CatalogRepository.get(applicationContext)
+        val failure = try {
+            repository.refresh(foreground = false)
+            null
+        } catch (e: IOException) {
+            e
         }
-        val updates = InstalledApps.countUpdates(applicationContext, catalog.apps)
-        if (updates.isEmpty()) {
-            NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
-        } else {
+        // A refresh that failed for one source has still updated the others, so whatever the
+        // catalogue holds now is worth acting on.
+        val updates = InstalledApps.countUpdates(applicationContext, repository.catalog.value.apps)
+        if (updates.isNotEmpty()) {
             notify(applicationContext, updates.map { it.repo })
+        } else if (failure == null) {
+            NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
         }
-        return Result.success()
+        return when (failure) {
+            null -> Result.success()
+            // Retrying soon cannot fix a source that no longer exists or a used-up quota;
+            // the next scheduled run will look again.
+            is HttpStatusException, is RateLimitedException -> Result.success()
+            else -> Result.retry()
+        }
     }
 
     companion object {

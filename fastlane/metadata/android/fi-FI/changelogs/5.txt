@@ -1,0 +1,1 @@
+Beta-versiot voi nyt ottaa käyttöön kohdasta Lähteet ja asetukset. Päivitysilmoitukset tulevat, vaikka yhteen lähteeseen ei saataisi yhteyttä, ja asennus kestää paremmin tallennusvirheitä.

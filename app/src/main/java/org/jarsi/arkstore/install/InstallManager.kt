@@ -12,6 +12,7 @@ import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,33 +63,48 @@ object InstallManager {
         scope.launch {
             val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_')}.apk")
             try {
-                var lastStep = -1
-                Http.download(app.apkUrl, target) { read, total ->
-                    val size = if (total > 0) total else app.apkSize
-                    val step = if (size > 0) (read * 100 / size).toInt() else -1
-                    if (step != lastStep) {
-                        lastStep = step
-                        setState(
-                            app.fullName,
-                            InstallState.Downloading(if (step < 0) null else step / 100f)
-                        )
-                    }
-                }
-            } catch (e: IOException) {
-                Log.w(TAG, "Download failed for ${app.fullName}", e)
+                downloadAndInstall(appContext, app, target)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Nothing here may take the process down or leave the app stuck as "installing".
+                Log.w(TAG, "Install failed for ${app.fullName}", e)
+                setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+            } finally {
+                // Once committed, the session holds its own copy of the file.
                 target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
-                return@launch
             }
+        }
+    }
 
-            val archive = readArchive(appContext, target)
-            if (archive == null ||
-                (app.packageName != null && archive.packageName != app.packageName)
-            ) {
-                target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
-                return@launch
+    private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File) {
+        try {
+            var lastStep = -1
+            Http.download(app.apkUrl, target) { read, total ->
+                val size = if (total > 0) total else app.apkSize
+                val step = if (size > 0) (read * 100 / size).toInt() else -1
+                if (step != lastStep) {
+                    lastStep = step
+                    setState(
+                        app.fullName,
+                        InstallState.Downloading(if (step < 0) null else step / 100f)
+                    )
+                }
             }
+        } catch (e: IOException) {
+            Log.w(TAG, "Download failed for ${app.fullName}", e)
+            setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
+            return
+        }
+
+        val archive = readArchive(appContext, target)
+        if (archive == null ||
+            (app.packageName != null && archive.packageName != app.packageName)
+        ) {
+            setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
+            return
+        }
+        try {
             CatalogRepository.get(appContext).rememberApkInfo(
                 app.fullName,
                 app.assetId,
@@ -98,21 +114,21 @@ object InstallManager {
                     archive.versionName
                 )
             )
-            if (!signaturesMatch(appContext, archive)) {
-                target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
-                return@launch
-            }
+        } catch (e: IOException) {
+            // Only a convenience for the next refresh; the install itself does not need it.
+            Log.w(TAG, "Could not store APK details for ${app.fullName}", e)
+        }
+        if (!signaturesMatch(appContext, archive)) {
+            setState(app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
+            return
+        }
 
-            setState(app.fullName, InstallState.Installing)
-            try {
-                commit(appContext, app.fullName, archive.packageName, target)
-            } catch (e: Exception) {
-                Log.w(TAG, "Install session failed for ${app.fullName}", e)
-                setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
-            } finally {
-                target.delete()
-            }
+        setState(app.fullName, InstallState.Installing)
+        try {
+            commit(appContext, app.fullName, archive.packageName, target)
+        } catch (e: Exception) {
+            Log.w(TAG, "Install session failed for ${app.fullName}", e)
+            setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
         }
     }
 

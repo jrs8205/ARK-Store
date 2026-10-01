@@ -15,6 +15,8 @@ data class StoreApp(
     /** Downloads of APK files summed over the repository's recent releases. */
     val downloads: Long,
     val repoUrl: String,
+    /** True when this is a prerelease, offered because beta versions are wanted. */
+    val prerelease: Boolean = false,
     val tag: String,
     val releaseName: String,
     val releaseNotes: String,
@@ -47,6 +49,7 @@ data class StoreApp(
         .put("license", license)
         .put("downloads", downloads)
         .put("repoUrl", repoUrl)
+        .put("prerelease", prerelease)
         .put("tag", tag)
         .put("releaseName", releaseName)
         .put("releaseNotes", releaseNotes)
@@ -69,6 +72,7 @@ data class StoreApp(
             license = json.optString("license"),
             downloads = json.optLong("downloads"),
             repoUrl = json.getString("repoUrl"),
+            prerelease = json.optBoolean("prerelease"),
             tag = json.getString("tag"),
             releaseName = json.optString("releaseName"),
             releaseNotes = json.optString("releaseNotes"),

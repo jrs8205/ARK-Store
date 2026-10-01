@@ -43,7 +43,7 @@
         <item quantity="one">%d sovelluspäivitys saatavilla</item>
         <item quantity="other">%d sovelluspäivitystä saatavilla</item>
     </plurals>
-    <string name="action_sources">Lähteet</string>
+    <string name="action_sources">Lähteet ja asetukset</string>
     <string name="action_add_source">Lisää</string>
     <string name="action_remove">Poista</string>
     <string name="action_details">Näytä tiedot</string>
@@ -61,7 +61,7 @@
     <string name="detail_developer">Kehittäjä</string>
     <string name="detail_stars">Tähdet</string>
     <string name="detail_downloads">Lataukset</string>
-    <string name="sources_title">Lähteet</string>
+    <string name="sources_title">Lähteet ja asetukset</string>
     <string name="sources_description">Sovellukset, joiden kehittäjä on lisännyt GitHub-repoonsa aiheen arkstore, näkyvät kaupassa kaikille. Täällä voit lisäksi lisätä itse GitHub-tilin tai yksittäisen repon, esimerkiksi omasi, nimellä tai linkillä. Sovellus näkyy listalla, kun sen uusimmassa julkaisussa on APK-tiedosto.</string>
     <string name="sources_hint">GitHub-tili, omistaja/repo tai linkki</string>
     <string name="sources_error_invalid">Anna GitHub-tilin nimi, omistaja/repo tai github.com-linkki.</string>
@@ -107,4 +107,9 @@
     <string name="sort_stars">Eniten tähtiä</string>
     <string name="sort_newest">Uusin julkaisu</string>
     <string name="sort_oldest">Vanhin julkaisu</string>
+    <string name="badge_beta">Beta</string>
+    <string name="version_beta">%1$s (beta)</string>
+    <string name="beta_title">Beta-versiot</string>
+    <string name="beta_switch">Näytä beta-versiot</string>
+    <string name="beta_description">Tarjoa esijulkaisut päivityksinä, kun kehittäjä on julkaissut sellaisen. Ne ovat uudempia mutta vähemmän testattuja.</string>
 </resources>

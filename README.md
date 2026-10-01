@@ -78,7 +78,9 @@ None of these are required, but they make your app look better in the store.
 
 - Sign every release with the same key and raise the `versionCode` each time. Android
   refuses to update an app whose signing key has changed.
-- Prereleases and drafts are ignored; the newest full release is the version offered.
+- The newest full release is the version offered. A prerelease that is newer than it is
+  offered only to users who have turned on **Show beta versions**, and is marked Beta.
+  Drafts are ignored.
 - Forks and archived repositories are skipped.
 
 ## For users
@@ -93,6 +95,7 @@ None of these are required, but they make your app look better in the store.
   check every four hours notifies about new versions.
 - **Safe updates**: the app warns before installing when the installed app is signed with a
   different key.
+- **Beta versions**: optionally get a developer's prereleases as updates.
 - **No account**: the app talks only to GitHub, without signing in.
 - **Accessible**: screen reader labels, text that scales, contrast that meets WCAG AA, and
   haptic feedback that follows the system setting.

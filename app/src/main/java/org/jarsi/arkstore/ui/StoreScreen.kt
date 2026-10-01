@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -48,6 +49,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -74,6 +76,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -469,6 +472,7 @@ private fun AppCard(
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.repo, style = MaterialTheme.typography.titleMedium)
+                    if (app.prerelease) BetaBadge()
                     Text(
                         text = stringResource(R.string.card_byline, app.owner, versionLine(row)),
                         style = MaterialTheme.typography.bodyMedium,
@@ -705,7 +709,14 @@ private fun DetailsSheet(row: AppRow) {
         }
         DetailLine(stringResource(R.string.detail_stars), fullNumber(app.stars.toLong()))
         DetailLine(stringResource(R.string.detail_downloads), fullNumber(app.downloads))
-        DetailLine(stringResource(R.string.detail_latest), app.displayVersion)
+        DetailLine(
+            stringResource(R.string.detail_latest),
+            if (app.prerelease) {
+                stringResource(R.string.version_beta, app.displayVersion)
+            } else {
+                app.displayVersion
+            }
+        )
         row.installed?.let {
             DetailLine(
                 stringResource(R.string.detail_installed),
@@ -781,6 +792,64 @@ private fun versionLine(row: AppRow): String {
     }
 }
 
+/** Marks an app whose offered version is a prerelease. */
+@Composable
+private fun BetaBadge() {
+    Text(
+        text = stringResource(R.string.badge_beta),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier
+            .padding(top = 2.dp, bottom = 2.dp)
+            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun BetaSwitch(viewModel: StoreViewModel) {
+    val includeBeta by viewModel.includeBeta.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    Text(
+        text = stringResource(R.string.beta_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    // The whole row is the switch, so the label is part of what gets announced and tapped.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = includeBeta,
+                role = Role.Switch,
+                onValueChange = {
+                    haptics.performHapticFeedback(
+                        if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
+                    )
+                    viewModel.setIncludeBeta(it)
+                }
+            )
+            .padding(vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.beta_switch),
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Text(
+                text = stringResource(R.string.beta_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Switch(checked = includeBeta, onCheckedChange = null)
+    }
+}
+
 @Composable
 private fun SourcesSheet(viewModel: StoreViewModel) {
     val state by viewModel.sources.collectAsStateWithLifecycle()
@@ -850,6 +919,7 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
                 input = it
                 viewModel.clearSourceError()
             },
+            enabled = !state.adding,
             label = { Text(stringResource(R.string.sources_hint)) },
             singleLine = true,
             isError = state.error != null,
@@ -895,6 +965,8 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
         ) {
             Text(stringResource(R.string.action_add_source))
         }
+
+        BetaSwitch(viewModel)
     }
 }
 

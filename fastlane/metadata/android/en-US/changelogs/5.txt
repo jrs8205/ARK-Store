@@ -1,0 +1,1 @@
+Beta versions can now be turned on under Sources and settings. Update notifications arrive even when one source cannot be reached, and installs are more robust against storage errors.

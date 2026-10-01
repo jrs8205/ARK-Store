@@ -3,6 +3,7 @@ package org.jarsi.arkstore.data
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.core.content.edit
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
@@ -39,14 +40,28 @@ class CatalogRepository private constructor(context: Context) {
     private class Entry(
         val stamp: String,
         val fetchedAt: Long,
+        /** The newest full release, if there is one for this device. */
         val app: StoreApp?,
+        /** A prerelease newer than [app], offered only when beta versions are wanted. */
+        val beta: StoreApp?,
         /** Found through the store topic rather than only through a source on this device. */
         val discovered: Boolean
-    )
+    ) {
+        val hasApp: Boolean get() = app != null || beta != null
+
+        fun mapApps(transform: (StoreApp) -> StoreApp) =
+            Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered)
+    }
 
     val sources = SourceStore(context)
 
     private val deviceAbis: List<String> = Build.SUPPORTED_ABIS.toList()
+
+    private val preferences = context.getSharedPreferences("catalog", Context.MODE_PRIVATE)
+
+    private val _includeBeta = MutableStateFlow(preferences.getBoolean(PREF_BETA, false))
+    /** Whether prereleases are offered as the version to install. */
+    val includeBeta: StateFlow<Boolean> = _includeBeta.asStateFlow()
 
     private val file = File(context.filesDir, "catalog.json")
     private val mutex = Mutex()
@@ -129,7 +144,7 @@ class CatalogRepository private constructor(context: Context) {
 
             // The more apps there are, the longer each stored answer has to last, or the
             // hourly request quota would not cover them all.
-            val known = repos.keys.count { entries[it]?.app != null }
+            val known = repos.keys.count { entries[it]?.hasApp == true }
             val foregroundAge = maxOf(MAX_AGE_FOREGROUND_MS, known * AGE_PER_APP_MS)
 
             updated += coroutineScope {
@@ -141,24 +156,29 @@ class CatalogRepository private constructor(context: Context) {
                         val category = Categories.of(topics(repo))
                         val license = licenseOf(repo).orEmpty()
                         val old = entries[fullName]
-                        val maxAge = if (foreground && old?.app != null) {
+                        val maxAge = if (foreground && old?.hasApp == true) {
                             foregroundAge
                         } else {
                             maxOf(MAX_AGE_BACKGROUND_MS, foregroundAge)
                         }
                         if (old != null && old.stamp == stamp && now - old.fetchedAt < maxAge) {
                             // These come with the repository list, so they are always fresh.
-                            val app = old.app?.copy(
-                                stars = stars,
-                                category = category,
-                                license = license
+                            val fresh = old.mapApps {
+                                it.copy(stars = stars, category = category, license = license)
+                            }
+                            return@async fullName to Entry(
+                                fresh.stamp,
+                                fresh.fetchedAt,
+                                fresh.app,
+                                fresh.beta,
+                                isDiscovered
                             )
-                            return@async fullName to
-                                Entry(old.stamp, old.fetchedAt, app, isDiscovered)
                         }
                         try {
-                            val app = limiter.withPermit { fetchApp(repo, old?.app) }
-                            fullName to Entry(stamp, now, app, isDiscovered)
+                            val (app, beta) = limiter.withPermit {
+                                fetchApp(repo, listOfNotNull(old?.app, old?.beta))
+                            }
+                            fullName to Entry(stamp, now, app, beta, isDiscovered)
                         } catch (e: IOException) {
                             Log.w(TAG, "Release lookup failed for $fullName", e)
                             record(e)
@@ -216,7 +236,8 @@ class CatalogRepository private constructor(context: Context) {
      */
     private fun refreshStoreDownloads(now: Long) {
         val listed = entries.entries
-            .firstOrNull { it.key.equals(BuildConfig.STORE_REPO, ignoreCase = true) }?.value?.app
+            .firstOrNull { it.key.equals(BuildConfig.STORE_REPO, ignoreCase = true) }?.value
+            ?.let { it.app ?: it.beta }
         if (listed != null) {
             storeDownloads = listed.downloads
             storeDownloadsAt = now
@@ -259,11 +280,31 @@ class CatalogRepository private constructor(context: Context) {
             Log.w(TAG, "Store index is stale")
             null
         } else {
-            val apps = root.getJSONArray("apps")
-            (0 until apps.length()).map { apps.getJSONObject(it) }.associate { app ->
-                app.getString("fullName") to
-                    Entry(app.optString("pushedAt"), now, indexedApp(app), discovered = true)
+            fun objects(key: String): List<JSONObject> {
+                val array = root.optJSONArray(key) ?: return emptyList()
+                return (0 until array.length()).map { array.getJSONObject(it) }
             }
+            // "apps" have a full release and possibly a newer prerelease under "beta";
+            // "betaApps" have nothing but a prerelease.
+            val stable = objects("apps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = indexedApp(app, app, prerelease = false),
+                    beta = app.optJSONObject("beta")?.let { indexedApp(app, it, prerelease = true) },
+                    discovered = true
+                )
+            }
+            val betaOnly = objects("betaApps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = null,
+                    beta = indexedApp(app, app, prerelease = true),
+                    discovered = true
+                )
+            }
+            betaOnly + stable
         }
     } catch (e: IOException) {
         Log.w(TAG, "Store index unavailable", e)
@@ -273,9 +314,12 @@ class CatalogRepository private constructor(context: Context) {
         null
     }
 
-    /** Builds an app from its index entry, or null when none of its APKs suits this device. */
-    private fun indexedApp(json: JSONObject): StoreApp? {
-        val apks = json.getJSONArray("apks").let { array ->
+    /**
+     * Builds an app from its index entry [json] and one of the releases described there, or
+     * returns null when none of that release's APKs suits this device.
+     */
+    private fun indexedApp(json: JSONObject, release: JSONObject, prerelease: Boolean): StoreApp? {
+        val apks = release.getJSONArray("apks").let { array ->
             (0 until array.length()).map { array.getJSONObject(it) }
         }
         val apk = ApkPicker.pick(apks.map { it.getString("name") }, deviceAbis)
@@ -292,11 +336,12 @@ class CatalogRepository private constructor(context: Context) {
             license = json.optStringOrEmpty("license"),
             downloads = json.optLong("downloads"),
             repoUrl = json.getString("repoUrl"),
-            tag = json.getString("tag"),
-            releaseName = json.optStringOrEmpty("releaseName"),
-            releaseNotes = json.optStringOrEmpty("releaseNotes"),
-            releaseUrl = json.optStringOrEmpty("releaseUrl"),
-            publishedAt = json.optStringOrEmpty("publishedAt"),
+            prerelease = prerelease,
+            tag = release.getString("tag"),
+            releaseName = release.optStringOrEmpty("releaseName"),
+            releaseNotes = release.optStringOrEmpty("releaseNotes"),
+            releaseUrl = release.optStringOrEmpty("releaseUrl"),
+            publishedAt = release.optStringOrEmpty("publishedAt"),
             apkName = apk.getString("name"),
             apkUrl = apk.getString("url"),
             apkSize = apk.getLong("size"),
@@ -364,7 +409,13 @@ class CatalogRepository private constructor(context: Context) {
             fullName.substringBefore('/').equals(source, ignoreCase = true)
         }
 
-    private fun fetchApp(repo: JSONObject, previous: StoreApp?): StoreApp? {
+    /**
+     * Looks up a repository's releases and returns its newest full release and, when the
+     * newest release of all is a prerelease, that one as well. Either is null when it does not
+     * exist or has no APK for this device. [previous] is what was known before, so that APKs
+     * already examined are not fetched again.
+     */
+    private fun fetchApp(repo: JSONObject, previous: List<StoreApp>): Pair<StoreApp?, StoreApp?> {
         val fullName = repo.getString("full_name")
         val page = JSONArray(Http.getApi("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
@@ -375,61 +426,70 @@ class CatalogRepository private constructor(context: Context) {
             return (0 until assets.length()).map { assets.getJSONObject(it) }
                 .filter { it.getString("name").endsWith(".apk", ignoreCase = true) }
         }
+        val downloads = releases.sumOf { r -> apkAssets(r).sumOf { it.optLong("download_count") } }
+
+        fun build(release: JSONObject, prerelease: Boolean): StoreApp? {
+            val candidates = apkAssets(release)
+            val apk = ApkPicker.pick(candidates.map { it.getString("name") }, deviceAbis)
+                ?.let { candidates[it] }
+                ?: return null
+            val assetId = apk.getLong("id")
+            val url = apk.getString("browser_download_url")
+            val size = apk.getLong("size")
+            // The asset id changes whenever a file is replaced, so a known id means a known APK.
+            val known = previous.firstOrNull { it.assetId == assetId && it.packageName != null }
+            val info = if (known != null) {
+                ApkInfo(known.packageName!!, known.versionCode, known.versionName)
+            } else {
+                try {
+                    ApkManifestReader.read(size) { start, length ->
+                        Http.readRange(url, start, length)
+                    }
+                } catch (e: IOException) {
+                    Log.w(TAG, "Could not read manifest of ${apk.getString("name")}", e)
+                    null
+                }
+            }
+            return StoreApp(
+                fullName = fullName,
+                description = repo.optStringOrEmpty("description"),
+                stars = repo.optInt("stargazers_count"),
+                category = Categories.of(topics(repo)),
+                license = licenseOf(repo).orEmpty(),
+                downloads = downloads,
+                repoUrl = repo.getString("html_url"),
+                prerelease = prerelease,
+                tag = release.getString("tag_name"),
+                releaseName = release.optStringOrEmpty("name"),
+                releaseNotes = release.optStringOrEmpty("body"),
+                releaseUrl = release.optStringOrEmpty("html_url"),
+                publishedAt = release.optStringOrEmpty("published_at"),
+                apkName = apk.getString("name"),
+                apkUrl = url,
+                apkSize = size,
+                assetId = assetId,
+                packageName = info?.packageName,
+                versionCode = info?.versionCode ?: 0,
+                versionName = info?.versionName
+            )
+        }
 
         // Releases come newest first; the first full release is what GitHub calls "latest".
         // When a full page holds nothing but prereleases, the stable one lies further back.
-        val release = releases.firstOrNull { !it.optBoolean("prerelease") }
+        val stable = releases.firstOrNull { !it.optBoolean("prerelease") }
             ?: if (page.size < PAGE_SIZE) {
-                return null
+                null
             } else {
                 try {
                     JSONObject(Http.getApi("$API/repos/$fullName/releases/latest"))
                 } catch (e: HttpStatusException) {
-                    if (e.code == 404) return null else throw e
+                    if (e.code == 404) null else throw e
                 }
             }
-        val candidates = apkAssets(release)
-        val apk = ApkPicker.pick(candidates.map { it.getString("name") }, deviceAbis)
-            ?.let { candidates[it] }
-            ?: return null
-        val downloads = releases.sumOf { r -> apkAssets(r).sumOf { it.optLong("download_count") } }
-
-        val assetId = apk.getLong("id")
-        val url = apk.getString("browser_download_url")
-        val size = apk.getLong("size")
-        // The asset id changes whenever a file is replaced, so a known id means a known APK.
-        val info = if (previous != null && previous.assetId == assetId && previous.packageName != null) {
-            ApkInfo(previous.packageName, previous.versionCode, previous.versionName)
-        } else {
-            try {
-                ApkManifestReader.read(size) { start, length -> Http.readRange(url, start, length) }
-            } catch (e: IOException) {
-                Log.w(TAG, "Could not read manifest of ${apk.getString("name")}", e)
-                null
-            }
-        }
-
-        return StoreApp(
-            fullName = fullName,
-            description = repo.optStringOrEmpty("description"),
-            stars = repo.optInt("stargazers_count"),
-            category = Categories.of(topics(repo)),
-            license = licenseOf(repo).orEmpty(),
-            downloads = downloads,
-            repoUrl = repo.getString("html_url"),
-            tag = release.getString("tag_name"),
-            releaseName = release.optStringOrEmpty("name"),
-            releaseNotes = release.optStringOrEmpty("body"),
-            releaseUrl = release.optStringOrEmpty("html_url"),
-            publishedAt = release.optStringOrEmpty("published_at"),
-            apkName = apk.getString("name"),
-            apkUrl = url,
-            apkSize = size,
-            assetId = assetId,
-            packageName = info?.packageName,
-            versionCode = info?.versionCode ?: 0,
-            versionName = info?.versionName
-        )
+        // A prerelease at the top of the list is newer than the full release.
+        val newest = releases.firstOrNull()?.takeIf { it.optBoolean("prerelease") }
+        return stable?.let { build(it, prerelease = false) } to
+            newest?.let { build(it, prerelease = true) }
     }
 
     /**
@@ -439,23 +499,38 @@ class CatalogRepository private constructor(context: Context) {
      */
     suspend fun rememberApkInfo(fullName: String, assetId: Long, info: ApkInfo) = mutex.withLock {
         val entry = entries[fullName] ?: return@withLock
-        val app = entry.app ?: return@withLock
-        if (app.assetId != assetId) return@withLock
-        if (app.packageName == info.packageName && app.versionCode == info.versionCode) return@withLock
-        val fixed = app.copy(
-            packageName = info.packageName,
-            versionCode = info.versionCode,
-            versionName = info.versionName
-        )
-        entries = entries +
-            (fullName to Entry(entry.stamp, entry.fetchedAt, fixed, entry.discovered))
+        if (entry.app?.assetId != assetId && entry.beta?.assetId != assetId) return@withLock
+        val fixed = entry.mapApps { app ->
+            if (app.assetId != assetId) {
+                app
+            } else {
+                app.copy(
+                    packageName = info.packageName,
+                    versionCode = info.versionCode,
+                    versionName = info.versionName
+                )
+            }
+        }
+        if (fixed.app == entry.app && fixed.beta == entry.beta) return@withLock
+        entries = entries + (fullName to fixed)
         val checkedAt = _catalog.value.checkedAt
         _catalog.value = Catalog(sorted(entries.values), checkedAt, storeDownloads)
         withContext(Dispatchers.IO) { save(checkedAt) }
     }
 
-    private fun sorted(entries: Collection<Entry>): List<StoreApp> =
-        entries.mapNotNull { it.app }.sortedBy { it.repo.lowercase() }
+    /** Turns beta versions on or off and republishes the catalogue accordingly. */
+    suspend fun setIncludeBeta(include: Boolean) = mutex.withLock {
+        preferences.edit { putBoolean(PREF_BETA, include) }
+        _includeBeta.value = include
+        _catalog.value = _catalog.value.copy(apps = sorted(entries.values))
+    }
+
+    /** The apps to show: the prerelease where there is one and beta versions are wanted. */
+    private fun sorted(entries: Collection<Entry>): List<StoreApp> {
+        val includeBeta = _includeBeta.value
+        return entries.mapNotNull { if (includeBeta) it.beta ?: it.app else it.app }
+            .sortedBy { it.repo.lowercase() }
+    }
 
     private fun load() {
         try {
@@ -468,6 +543,7 @@ class CatalogRepository private constructor(context: Context) {
                     stamp = entry.getString("stamp"),
                     fetchedAt = entry.getLong("fetchedAt"),
                     app = entry.optJSONObject("app")?.let(StoreApp::fromJson),
+                    beta = entry.optJSONObject("beta")?.let(StoreApp::fromJson),
                     discovered = entry.optBoolean("discovered")
                 )
             }
@@ -489,6 +565,7 @@ class CatalogRepository private constructor(context: Context) {
                     .put("stamp", entry.stamp)
                     .put("fetchedAt", entry.fetchedAt)
                     .put("app", entry.app?.toJson() ?: JSONObject.NULL)
+                    .put("beta", entry.beta?.toJson() ?: JSONObject.NULL)
                     .put("discovered", entry.discovered)
             )
         }
@@ -509,6 +586,7 @@ class CatalogRepository private constructor(context: Context) {
 
     companion object {
         private const val TAG = "CatalogRepository"
+        private const val PREF_BETA = "include_beta"
         private const val API = "https://api.github.com"
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100

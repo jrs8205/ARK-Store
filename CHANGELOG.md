@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.3.0-beta.1
+
+- Beta versions: a switch under Sources and settings offers a developer's prerelease when it
+  is newer than the full release; such apps carry a Beta badge
+- Update notifications still arrive when one source cannot be reached
+- A failure while storing APK details no longer interrupts an install
+- The index builder caps the size of a decompressed manifest, keeps an app listed through
+  network failures, follows renamed release files and records prereleases
+
 ## 1.2.1
 
 - The background update check runs every four hours instead of every twelve

@@ -46,7 +46,7 @@
         <item quantity="one">%d app update available</item>
         <item quantity="other">%d app updates available</item>
     </plurals>
-    <string name="action_sources">Sources</string>
+    <string name="action_sources">Sources and settings</string>
     <string name="action_add_source">Add</string>
     <string name="action_remove">Remove</string>
     <string name="card_byline" translatable="false">%1$s · %2$s</string>
@@ -65,7 +65,7 @@
     <string name="detail_developer">Developer</string>
     <string name="detail_stars">Stars</string>
     <string name="detail_downloads">Downloads</string>
-    <string name="sources_title">Sources</string>
+    <string name="sources_title">Sources and settings</string>
     <string name="sources_description">Apps whose developers have added the topic arkstore to their GitHub repository appear in the store for everyone. Here you can also add a GitHub account or a single repository yourself, for example your own, by name or link. An app appears when its latest release has an APK attached.</string>
     <string name="sources_hint">GitHub account, owner/repo or link</string>
     <string name="sources_error_invalid">Enter a GitHub account name, owner/repo or a github.com link.</string>
@@ -112,4 +112,9 @@
     <string name="sort_stars">Most stars</string>
     <string name="sort_newest">Newest release</string>
     <string name="sort_oldest">Oldest release</string>
+    <string name="badge_beta">Beta</string>
+    <string name="version_beta">%1$s (beta)</string>
+    <string name="beta_title">Beta versions</string>
+    <string name="beta_switch">Show beta versions</string>
+    <string name="beta_description">Offer prereleases as updates when a developer has published one. They are newer but less tested.</string>
 </resources>

@@ -72,6 +72,12 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, StoreUiState(refreshing = true))
 
+    val includeBeta: StateFlow<Boolean> = repository.includeBeta
+
+    fun setIncludeBeta(include: Boolean) {
+        viewModelScope.launch { repository.setIncludeBeta(include) }
+    }
+
     private val _sources = MutableStateFlow(SourcesUiState(sources = repository.sources.list()))
     val sources: StateFlow<SourcesUiState> = _sources
 
