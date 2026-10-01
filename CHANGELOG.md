@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.3.0-beta.4
+
+- An app from one of the user's own sources stays in the list when the index lists it as
+  automatically found, also after a refresh that could not reach the source
+- A source that could not be reached no longer brings back an older release than the one
+  already known
+- A beta version is offered only when it has the same package name and a higher version code
+  than the full release; a prerelease from an older branch or a nightly build is not
+- A source follows its repository when that is renamed or moved
+- The store index is rebuilt as soon as a release of the store is published
+- Automatically found repositories are examined again after a while even when nothing was
+  pushed, so a release whose files were attached late is found
+
 ## 1.3.0-beta.3
 
 - Colours reworked so that every text keeps a contrast of at least 7:1 (WCAG AAA) in both the

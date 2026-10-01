@@ -1,0 +1,1 @@
+An app from one of your own sources no longer disappears from the list after a failed refresh. A beta version is offered only when it really is newer than the stable one. A source follows its repository when that is renamed.

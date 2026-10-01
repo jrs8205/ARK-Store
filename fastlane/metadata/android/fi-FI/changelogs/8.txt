@@ -1,0 +1,1 @@
+Omasta lähteestä tuleva sovellus ei enää katoa luettelosta epäonnistuneen päivityksen jälkeen. Beta-versiota tarjotaan vain, kun se on oikeasti vakaata uudempi. Lähde seuraa repoa, kun se nimetään uudelleen.
