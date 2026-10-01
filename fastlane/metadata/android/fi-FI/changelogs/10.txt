@@ -1,0 +1,1 @@
+Sovellusten beta-versiot voi ottaa käyttöön uudelta asetussivulta. Lataukset jatkuvat taustalla ja ilmoittavat, kun sovellus on valmis asennettavaksi. Kauppa voi halutessasi listata myös GitHubista haulla löydetyt avoimen lähdekoodin sovellukset. Suurempi kontrasti molemmissa teemoissa, ja päivityksestä ilmoitetaan vain kerran.

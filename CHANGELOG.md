@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.3.0
+
+The work of the 1.3.0 beta versions, now for everyone:
+
+- Beta versions: a switch in the settings offers a developer's prerelease when it is the same
+  app with a higher version code than the full release; such apps carry a Beta badge, and an
+  installed beta shows the way back to the stable version
+- Settings have their own page behind a gear icon
+- Optional: a switch in the settings lists open-source Android apps found by searching GitHub,
+  marked as such; their list is downloaded only while the switch is on
+- Downloads continue in the background, with a progress notification, and a download that
+  finishes while the store is not on screen opens the install prompt from a notification
+- Colours reworked so that every text keeps a contrast of at least 7:1 in both themes
+- The settings show whether update notifications are allowed
+- Each update is announced once, and a failed check no longer repeats a notification
+- An app installed from elsewhere under another signing key is listed as installed instead of
+  being offered as an update over and over
+- An app from one of the user's own sources stays in the list, and a source follows its
+  repository when that is renamed or moved
+- The store index is downloaded only when it has changed, and is rebuilt as soon as a release
+  of the store is published
+- The search field gives up the keyboard when anything else is touched
+
 ## 1.3.0-beta.5
 
 - A download that finishes while the store is not on screen tells so with a notification;

@@ -1,0 +1,1 @@
+Beta versions of apps can be turned on in the new settings page. Downloads continue in the background and tell you when an app is ready to install. Optionally, the store also lists open-source apps found by searching GitHub. Higher contrast in both themes, and update notifications that are sent once per update.
