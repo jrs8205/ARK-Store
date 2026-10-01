@@ -59,12 +59,24 @@ def read_range(url, start, length):
     with urllib.request.urlopen(request, timeout=30) as response:
         data = response.read()
     if response.status != 206 or len(data) != length:
-        raise ValueError("range request not honoured")
+        # A transport problem, not a property of the file: the caller must not conclude
+        # anything about the APK from it.
+        raise OSError("range request not honoured")
     return data
 
 
 class ManifestError(Exception):
-    pass
+    """The APK itself is malformed. Network failures are reported as OSError instead."""
+
+
+def inflate(data, limit):
+    """Inflates raw deflate data, refusing to produce more than limit bytes. The size a zip
+    header declares is only a claim, so the output is capped while it is being produced."""
+    inflater = zlib.decompressobj(-15)
+    result = inflater.decompress(data, limit + 1)
+    if len(result) > limit or inflater.unconsumed_tail:
+        raise ManifestError("manifest too large")
+    return result
 
 
 def read_manifest(url, size):
@@ -114,7 +126,7 @@ def read_manifest_bytes(url, size):
             if method == 0:
                 return data
             if method == 8:
-                return zlib.decompress(data, -15)
+                return inflate(data, MAX_MANIFEST)
             raise ManifestError("unsupported compression")
         position += 46 + name_length + extra_length + comment_length
     raise ManifestError("manifest not found")
@@ -248,54 +260,35 @@ def apk_assets(release):
     return [a for a in release.get("assets", []) if a["name"].lower().endswith(".apk")]
 
 
-def build_app(repo, previous_apks):
-    full_name = repo["full_name"]
-    page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
-    releases = [r for r in page if not r.get("draft")]
-    release = next((r for r in releases if not r.get("prerelease")), None)
-    if release is None and len(page) == PAGE_SIZE:
-        try:
-            release = api("/repos/%s/releases/latest" % full_name)
-        except urllib.error.HTTPError as error:
-            if error.code != 404:
-                raise
-    if release is None:
-        return None
-
+def release_info(release, previous_apks):
+    """Describes one release and its usable APKs, or returns None when it has none."""
     apks = []
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
         if known:
-            # The asset id changes whenever a file is replaced, so a known id is a known APK.
-            apks.append(known)
-            continue
-        try:
-            package, version_code, version_name = read_manifest(asset["browser_download_url"], asset["size"])
-        except (ManifestError, urllib.error.URLError, OSError) as error:
-            print("  skipping %s: %s" % (asset["name"], error), file=sys.stderr)
-            continue
+            # The asset id changes whenever a file is replaced, so a known id means the same
+            # contents. Its name and address can still change, so those are never reused.
+            manifest = (known["packageName"], known["versionCode"], known["versionName"])
+        else:
+            try:
+                manifest = read_manifest(asset["browser_download_url"], asset["size"])
+            except ManifestError as error:
+                # The file is broken; leave it out. A network failure, on the other hand,
+                # propagates so that the caller keeps what it knew about the app.
+                print("  skipping %s: %s" % (asset["name"], error), file=sys.stderr)
+                continue
         apks.append({
             "id": asset["id"],
             "name": asset["name"],
             "url": asset["browser_download_url"],
             "size": asset["size"],
-            "packageName": package,
-            "versionCode": version_code,
-            "versionName": version_name,
+            "packageName": manifest[0],
+            "versionCode": manifest[1],
+            "versionName": manifest[2],
         })
     if not apks:
         return None
-
-    downloads = sum(a.get("download_count", 0) for r in releases for a in apk_assets(r))
     return {
-        "fullName": full_name,
-        "description": repo.get("description") or "",
-        "stars": repo.get("stargazers_count", 0),
-        "topics": repo.get("topics") or [],
-        "license": license_of(repo),
-        "repoUrl": repo["html_url"],
-        "pushedAt": repo.get("pushed_at") or "",
-        "downloads": downloads,
         "tag": release["tag_name"],
         "releaseName": release.get("name") or "",
         "releaseNotes": (release.get("body") or "")[:MAX_NOTES],
@@ -303,6 +296,60 @@ def build_app(repo, previous_apks):
         "publishedAt": release.get("published_at") or "",
         "apks": apks,
     }
+
+
+def build_app(repo, previous_apks):
+    """Returns the index entry of a repository, or None when it has nothing to install.
+
+    The entry describes the newest full release. When the newest release of all is a
+    prerelease, it is added under "beta" for users who have asked for beta versions. A
+    repository with nothing but a prerelease gets an entry marked "betaOnly", built from it.
+    """
+    full_name = repo["full_name"]
+    page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
+    releases = [r for r in page if not r.get("draft")]
+    stable = next((r for r in releases if not r.get("prerelease")), None)
+    if stable is None and len(page) == PAGE_SIZE:
+        try:
+            stable = api("/repos/%s/releases/latest" % full_name)
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+    # Releases come newest first, so a prerelease at the top is newer than the full release.
+    newest = releases[0] if releases else None
+    prerelease = newest if newest is not None and newest.get("prerelease") else None
+
+    stable_info = release_info(stable, previous_apks) if stable else None
+    beta_info = release_info(prerelease, previous_apks) if prerelease else None
+    if stable_info is None and beta_info is None:
+        return None
+
+    app = {
+        "fullName": full_name,
+        "description": repo.get("description") or "",
+        "stars": repo.get("stargazers_count", 0),
+        "topics": repo.get("topics") or [],
+        "license": license_of(repo),
+        "repoUrl": repo["html_url"],
+        "pushedAt": repo.get("pushed_at") or "",
+        "downloads": sum(a.get("download_count", 0) for r in releases for a in apk_assets(r)),
+    }
+    if stable_info is not None:
+        app.update(stable_info)
+        if beta_info is not None:
+            app["beta"] = beta_info
+    else:
+        app.update(beta_info)
+        app["betaOnly"] = True
+    return app
+
+
+def known_apks(app):
+    """Every APK an index entry describes, keyed by asset id."""
+    if not app:
+        return {}
+    apks = list(app.get("apks", [])) + list((app.get("beta") or {}).get("apks", []))
+    return {apk["id"]: apk for apk in apks}
 
 
 def main():
@@ -315,7 +362,11 @@ def main():
     if arguments.previous and os.path.exists(arguments.previous):
         try:
             with open(arguments.previous, encoding="utf-8") as file:
-                previous_apps = {app["fullName"]: app for app in json.load(file).get("apps", [])}
+                loaded = json.load(file)
+                previous_apps = {
+                    app["fullName"]: app
+                    for app in loaded.get("apps", []) + loaded.get("betaApps", [])
+                }
         except (ValueError, KeyError, TypeError):
             print("previous index unreadable, starting fresh", file=sys.stderr)
 
@@ -326,9 +377,8 @@ def main():
             continue
         full_name = repo["full_name"]
         previous = previous_apps.get(full_name)
-        previous_apks = {apk["id"]: apk for apk in previous["apks"]} if previous else {}
         try:
-            app = build_app(repo, previous_apks)
+            app = build_app(repo, known_apks(previous))
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             # Keep what was known rather than dropping an app over a passing error.
             print("%s: %s" % (full_name, error), file=sys.stderr)
@@ -336,10 +386,20 @@ def main():
             app = previous
         if app:
             apps.append(app)
-            print("%s %s (%d APK)" % (full_name, app["tag"], len(app["apks"])))
+            print("%s %s (%d APK)%s" % (
+                full_name, app["tag"], len(app["apks"]),
+                ", beta %s" % app["beta"]["tag"] if app.get("beta") else "",
+            ))
 
     apps.sort(key=lambda app: app["fullName"].lower())
-    index = {"version": 1, "generatedAt": int(time.time() * 1000), "apps": apps}
+    index = {
+        "version": 1,
+        "generatedAt": int(time.time() * 1000),
+        # Apps with a full release. Kept free of beta-only entries so that every version of
+        # the store can read this list.
+        "apps": [app for app in apps if not app.get("betaOnly")],
+        "betaApps": [app for app in apps if app.get("betaOnly")],
+    }
     os.makedirs(os.path.dirname(os.path.abspath(arguments.output)), exist_ok=True)
     with open(arguments.output, "w", encoding="utf-8") as file:
         json.dump(index, file, ensure_ascii=False, separators=(",", ":"))

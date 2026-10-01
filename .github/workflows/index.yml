@@ -27,6 +27,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test the index builder
+        run: python3 -m unittest discover -s tools
+
       - name: Fetch the previous index
         run: |
           mkdir -p previous
