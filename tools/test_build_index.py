@@ -85,19 +85,108 @@ def asset(name, asset_id):
 
 
 class PrereleaseTest(unittest.TestCase):
-    def build(self, releases):
+    def build(self, releases, manifests=None, previous_apks=None):
+        """manifests maps an APK's file name to (package, versionCode); the default makes
+        b.apk an upgrade of a.apk."""
+        manifests = manifests or {"a.apk": ("org.example", 1), "b.apk": ("org.example", 2)}
+
+        def read_manifest(url, size):
+            package, code = manifests[url.rsplit("/", 1)[1]]
+            return package, code, str(code)
+
         with mock.patch.object(build_index, "api", return_value=releases), \
-                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 1, "1")):
-            return build_index.build_app(REPO, {})
+                mock.patch.object(build_index, "read_manifest", side_effect=read_manifest) as reader:
+            app = build_index.build_app(REPO, previous_apks or {})
+        self.read_count = reader.call_count
+        return app
+
+    PRERELEASE_FIRST = [
+        {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("b.apk", 2)]},
+        {"tag_name": "v1", "assets": [asset("a.apk", 1)]},
+    ]
 
     def test_newer_prerelease_is_offered_as_beta(self):
-        app = self.build([
-            {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("b.apk", 2)]},
-            {"tag_name": "v1", "assets": [asset("a.apk", 1)]},
-        ])
+        app = self.build(self.PRERELEASE_FIRST)
         self.assertEqual(app["tag"], "v1")
         self.assertEqual(app["beta"]["tag"], "v2-beta.1")
         self.assertNotIn("betaOnly", app)
+        self.assertNotIn("skippedPrerelease", app)
+
+    def test_prerelease_from_an_older_branch_is_not_offered(self):
+        app = self.build(self.PRERELEASE_FIRST,
+                         {"a.apk": ("org.example", 200), "b.apk": ("org.example", 191)})
+        self.assertEqual(app["tag"], "v1")
+        self.assertNotIn("beta", app)
+
+    def test_prerelease_with_the_same_version_code_is_not_offered(self):
+        app = self.build(self.PRERELEASE_FIRST,
+                         {"a.apk": ("org.example", 8), "b.apk": ("org.example", 8)})
+        self.assertNotIn("beta", app)
+
+    def test_prerelease_of_another_package_is_not_offered(self):
+        app = self.build(self.PRERELEASE_FIRST,
+                         {"a.apk": ("org.example", 1), "b.apk": ("org.example.beta", 9)})
+        self.assertNotIn("beta", app)
+
+    SPLIT_BY_ARCHITECTURE = [
+        {"tag_name": "v2-rc.1", "prerelease": True,
+         "assets": [asset("rc-arm64-v8a.apk", 3), asset("rc-x86_64.apk", 4)]},
+        {"tag_name": "v2", "assets": [asset("arm64-v8a.apk", 1), asset("x86_64.apk", 2)]},
+    ]
+
+    def test_version_codes_are_compared_within_an_architecture(self):
+        codes = {"arm64-v8a.apk": ("org.example", 2001), "x86_64.apk": ("org.example", 2004),
+                 "rc-arm64-v8a.apk": ("org.example", 2001), "rc-x86_64.apk": ("org.example", 2004)}
+        self.assertNotIn("beta", self.build(self.SPLIT_BY_ARCHITECTURE, codes))
+        codes.update({"rc-arm64-v8a.apk": ("org.example", 2101), "rc-x86_64.apk": ("org.example", 2104)})
+        self.assertEqual(self.build(self.SPLIT_BY_ARCHITECTURE, codes)["beta"]["tag"], "v2-rc.1")
+
+    def test_prerelease_covering_fewer_architectures_is_offered(self):
+        # The x86_64 file of the full release has a higher code than the prerelease, yet for
+        # an arm64 device the prerelease is an upgrade.
+        releases = [
+            {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("rc-arm64-v8a.apk", 3)]},
+            {"tag_name": "v1", "assets": [asset("arm64-v8a.apk", 1), asset("x86_64.apk", 2)]},
+        ]
+        codes = {"arm64-v8a.apk": ("org.example", 2000010), "x86_64.apk": ("org.example", 4000010),
+                 "rc-arm64-v8a.apk": ("org.example", 2000011)}
+        self.assertEqual(self.build(releases, codes)["beta"]["tag"], "v2-beta.1")
+
+    def test_universal_files_are_compared_with_every_architecture(self):
+        releases = [
+            {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("b-universal.apk", 3)]},
+            {"tag_name": "v1", "assets": [asset("arm64-v8a.apk", 1), asset("x86_64.apk", 2)]},
+        ]
+        codes = {"arm64-v8a.apk": ("org.example", 2001), "x86_64.apk": ("org.example", 2004),
+                 "b-universal.apk": ("org.example", 2002)}
+        self.assertIn("beta", self.build(releases, codes))
+        codes["b-universal.apk"] = ("org.example", 2001)
+        self.assertNotIn("beta", self.build(releases, codes))
+
+    def test_prerelease_for_an_architecture_the_full_release_lacks_is_offered(self):
+        releases = [
+            {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("rc-arm64-v8a.apk", 3)]},
+            {"tag_name": "v1", "assets": [asset("x86_64.apk", 2)]},
+        ]
+        codes = {"x86_64.apk": ("org.example", 9), "rc-arm64-v8a.apk": ("org.example", 3)}
+        self.assertIn("beta", self.build(releases, codes))
+
+    def test_architectures_are_read_like_the_app_reads_them(self):
+        self.assertEqual(build_index.architectures("app-arm64-v8a-release.apk"), {"arm64-v8a"})
+        self.assertEqual(build_index.architectures("app-x86_64.apk"), {"x86_64"})
+        self.assertEqual(build_index.architectures("app-x86.apk"), {"x86"})
+        self.assertEqual(build_index.architectures("app-armeabi-v7a.apk"), {"armeabi-v7a"})
+        self.assertEqual(build_index.architectures("App-Universal.apk"), set())
+        self.assertEqual(build_index.architectures("ARK-launcher-0.8.2.apk"), set())
+
+    def test_skipped_prerelease_is_not_examined_again(self):
+        manifests = {"a.apk": ("org.example", 200), "b.apk": ("org.example", 191)}
+        first = self.build(self.PRERELEASE_FIRST, manifests)
+        self.assertEqual(first["skippedPrerelease"]["tag"], "v2-beta.1")
+        self.assertEqual(self.read_count, 2)
+        second = self.build(self.PRERELEASE_FIRST, manifests, build_index.known_apks(first))
+        self.assertEqual(self.read_count, 0)
+        self.assertEqual(second, first)
 
     def test_prerelease_older_than_the_full_release_is_ignored(self):
         app = self.build([
@@ -152,20 +241,71 @@ class AutoAppsTest(unittest.TestCase):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry()])
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
         self.assertEqual(len(apps[0]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
-        self.assertEqual(state, {"other/app": "2026-09-20T00:00:00Z"})
+        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
 
     def test_old_release_is_left_out_but_remembered(self):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry(published="2025-01-01T00:00:00Z")])
         self.assertEqual(apps, [])
         self.assertIn("other/app", state)
 
+    # The candidate was pushed to about 38 hours before NOW.
+    PUSHED = "2026-09-20T00:00:00Z"
+    HOUR = 3600
+
+    def examined(self, at, pushed=PUSHED):
+        return {"pushedAt": pushed, "examinedAt": at}
+
     def test_unchanged_repository_is_not_asked_about_again(self):
         previous = {"other/app": self.entry()}
-        apps, _, build_app = self.run_auto(
-            [self.candidate()], [], previous=previous,
-            state={"other/app": "2026-09-20T00:00:00Z"})
+        known = self.examined(self.NOW - self.HOUR)
+        apps, state, build_app = self.run_auto(
+            [self.candidate()], [], previous=previous, state={"other/app": known})
         build_app.assert_not_called()
         self.assertEqual(apps[0]["stars"], 50)
+        self.assertEqual(state, {"other/app": known})
+
+    def test_unchanged_repository_is_examined_again_after_a_day(self):
+        known = self.examined(self.NOW - (build_index.AUTO_RECHECK_HOURS + 1) * self.HOUR)
+        apps, state, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], state={"other/app": known})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
+
+    def test_repository_examined_right_after_a_push_is_examined_again(self):
+        # The release's APK may not have been attached yet when it was first looked at.
+        pushed = "2026-09-21T13:00:00Z"
+        known = self.examined(self.NOW - self.HOUR, pushed)
+        _, _, build_app = self.run_auto(
+            [self.candidate(pushed=pushed)], [self.entry()], state={"other/app": known})
+        self.assertEqual(build_app.call_count, 1)
+
+    def test_state_without_examination_time_is_examined_again(self):
+        _, state, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], state={"other/app": self.PUSHED})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
+
+    def test_changed_repositories_are_examined_before_those_merely_due(self):
+        limit = build_index.AUTO_MAX_LOOKUPS
+        due = [self.candidate("due/app%d" % i) for i in range(5)]
+        changed = [self.candidate("new/app%d" % i) for i in range(limit)]
+        state = {repo["full_name"]: self.examined(0) for repo in due}
+        _, new_state, build_app = self.run_auto(
+            due + changed, [None] * limit, state=state)
+        self.assertEqual(build_app.call_count, limit)
+        examined = {call.args[0]["full_name"] for call in build_app.call_args_list}
+        self.assertEqual(examined, {repo["full_name"] for repo in changed})
+        # Those passed over keep their state, so they are looked at on a later run.
+        self.assertEqual(new_state["due/app0"], self.examined(0))
+
+    def test_failed_lookup_keeps_the_previous_entry_and_state(self):
+        previous = {"other/app": self.entry()}
+        known = self.examined(0)
+        apps, state, _ = self.run_auto(
+            [self.candidate()], [OSError("down")], previous=previous, state={"other/app": known})
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state, {"other/app": known})
 
     def test_published_and_tagged_repositories_are_skipped(self):
         candidates = [self.candidate("a/published"), self.candidate("b/tagged", topics=("arkstore",))]

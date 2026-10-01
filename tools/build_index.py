@@ -50,6 +50,31 @@ AUTO_SEARCH_PAGES = 3
 # last examined cost nothing, so the list fills up over a few runs and then stays current.
 AUTO_MAX_LOOKUPS = 150
 AUTO_MAX_NOTES = 800
+# A repository that has not been pushed to is still examined again now and then: a release's
+# APKs are often attached a while after the push that tagged it, and files can be replaced
+# later without any push. One examined within AUTO_SETTLE_HOURS of its last push is looked at
+# on every run, any other once in AUTO_RECHECK_HOURS.
+AUTO_SETTLE_HOURS = 2
+AUTO_RECHECK_HOURS = 24
+
+# How file names tell which CPU architecture an APK is built for. This mirrors ApkPicker in
+# the app, which chooses the file for a device. Longer markers come first, so that "x86_64"
+# is not mistaken for "x86" nor "arm64" for "arm".
+ARCHITECTURE_MARKERS = (
+    ("arm64-v8a", "arm64-v8a"),
+    ("arm64", "arm64-v8a"),
+    ("aarch64", "arm64-v8a"),
+    ("armeabi-v7a", "armeabi-v7a"),
+    ("armeabi", "armeabi-v7a"),
+    ("armv7", "armeabi-v7a"),
+    ("arm32", "armeabi-v7a"),
+    ("x86_64", "x86_64"),
+    ("x86-64", "x86_64"),
+    ("x64", "x86_64"),
+    ("amd64", "x86_64"),
+    ("x86", "x86"),
+    ("i686", "x86"),
+)
 
 
 def api(path):
@@ -288,46 +313,85 @@ def recent_enough(app, today):
     return published is not None and today - published <= AUTO_RELEASE_DAYS * 86400
 
 
+def examined(state, full_name):
+    """What state holds about a repository: the pushed_at it had when it was last examined
+    and the time of that examination. State written before the time was recorded holds the
+    pushed_at alone; such a repository counts as examined long ago."""
+    value = state.get(full_name)
+    if isinstance(value, dict):
+        return value.get("pushedAt"), value.get("examinedAt", 0)
+    return value, 0
+
+
+def recheck_due(pushed_at, examined_at, today):
+    """Whether a repository that has not been pushed to since it was examined is due for
+    another look. See AUTO_SETTLE_HOURS."""
+    pushed = parse_time(pushed_at)
+    settling = pushed is not None and examined_at - pushed < AUTO_SETTLE_HOURS * 3600
+    return settling or today - examined_at >= AUTO_RECHECK_HOURS * 3600
+
+
 def build_auto_apps(published, previous_auto, state, today):
     """Builds the list of automatically found apps.
 
-    state maps a repository to the pushed_at it had when it was last examined. A repository
-    whose pushed_at is unchanged is not asked about again: its previous entry, or its absence,
-    still stands. Returns the entries and the new state.
+    state records, for each repository, the pushed_at it had when it was last examined and
+    when that was. A repository that has not changed and is not due for another look is not
+    asked about again: its previous entry, or its absence, still stands. Returns the entries
+    and the new state.
     """
+    candidates = [
+        repo for repo in discover_candidates(today)
+        if repo["full_name"] not in published
+        and TOPIC not in (repo.get("topics") or [])
+        and listable(repo)
+    ]
+
+    # The budget goes to repositories that have changed first, most starred first, and then
+    # to unchanged ones due for another look, the longest unexamined first.
+    changed = []
+    due = []
+    for repo in candidates:
+        pushed_at, examined_at = examined(state, repo["full_name"])
+        if pushed_at != (repo.get("pushed_at") or ""):
+            changed.append(repo["full_name"])
+        elif recheck_due(pushed_at, examined_at, today):
+            due.append((examined_at, repo["full_name"]))
+    examine = set((changed + [name for _, name in sorted(due)])[:AUTO_MAX_LOOKUPS])
+
     apps = []
     new_state = {}
     lookups = 0
-    for repo in discover_candidates(today):
+    for repo in candidates:
         full_name = repo["full_name"]
-        if full_name in published or TOPIC in (repo.get("topics") or []) or not listable(repo):
-            continue
         pushed_at = repo.get("pushed_at") or ""
         previous = previous_auto.get(full_name)
-        if state.get(full_name) == pushed_at:
-            new_state[full_name] = pushed_at
+        if full_name not in examine:
+            # Unchanged, or out of budget for this run: keep what is known. What state says
+            # stays as it was, so a repository that was passed over is looked at next time.
+            if full_name in state:
+                new_state[full_name] = state[full_name]
             app = previous
             if app:
                 # Stars and topics come with the search result, so they are always current.
                 app = dict(app, stars=repo.get("stargazers_count", 0), topics=repo.get("topics") or [])
-        elif lookups >= AUTO_MAX_LOOKUPS:
-            # Out of budget for this run; keep what is known and look next time.
-            app = previous
         else:
             lookups += 1
             try:
                 app = build_app(
                     repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400
                 )
-                new_state[full_name] = pushed_at
+                new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": int(today)}
             except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
                 print("%s: %s" % (full_name, error), file=sys.stderr)
+                if full_name in state:
+                    new_state[full_name] = state[full_name]
                 app = previous
             if app:
                 if app.get("betaOnly"):
                     app = None
                 else:
                     app.pop("beta", None)
+                    app.pop("skippedPrerelease", None)
                     app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
         if app and recent_enough(app, today):
             apps.append(app)
@@ -393,12 +457,60 @@ def release_info(release, previous_apks):
     }
 
 
+def parse_time(text):
+    """A GitHub timestamp in seconds since the epoch, or None when it is missing or odd."""
+    try:
+        return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+    except (TypeError, ValueError):
+        return None
+
+
 def published_at(release):
     """The time a release was published, in seconds since the epoch, or None."""
-    try:
-        return calendar.timegm(time.strptime(release["published_at"], "%Y-%m-%dT%H:%M:%SZ"))
-    except (KeyError, TypeError, ValueError):
-        return None
+    return parse_time(release.get("published_at"))
+
+
+def architectures(file_name):
+    """The CPU architectures an APK's file name says it is built for; empty when it names
+    none or says "universal", which means it runs everywhere."""
+    rest = file_name.lower()
+    if "universal" in rest:
+        return set()
+    found = set()
+    for marker, abi in ARCHITECTURE_MARKERS:
+        if marker in rest:
+            found.add(abi)
+            rest = rest.replace(marker, " ")
+    return found
+
+
+def is_upgrade(beta_info, stable_info):
+    """Whether a prerelease upgrades a full release on some device: the same package with a
+    higher version code.
+
+    GitHub lists releases by the date of the tagged commit, so a prerelease at the top of the
+    list may come from an older branch, be a nightly build tagged over and over, or be a
+    separate app with its own package name.
+
+    Releases with one APK per CPU architecture often give each its own version code, and the
+    two releases need not cover the same architectures. So each APK of the prerelease is
+    compared with the full-release APKs a device could have had in its place: those built
+    for the same architecture and those that run everywhere. The app makes the final choice
+    for the device at hand; this only drops a prerelease that upgrades nothing anywhere.
+    """
+    for beta in beta_info["apks"]:
+        same_package = [apk for apk in stable_info["apks"] if apk["packageName"] == beta["packageName"]]
+        if not same_package:
+            continue
+        built_for = architectures(beta["name"])
+        alternatives = [
+            apk for apk in same_package
+            if not built_for or not architectures(apk["name"]) or built_for & architectures(apk["name"])
+        ]
+        # With no full release for its architecture, the prerelease is all such a device has.
+        if not alternatives or any(beta["versionCode"] > apk["versionCode"] for apk in alternatives):
+            return True
+    return False
 
 
 def build_app(repo, previous_apks, not_before=None):
@@ -407,9 +519,11 @@ def build_app(repo, previous_apks, not_before=None):
     With not_before, a repository whose newest full release was published earlier than that
     is given up on at once, before any of its APKs are examined.
 
-    The entry describes the newest full release. When the newest release of all is a
-    prerelease, it is added under "beta" for users who have asked for beta versions. A
-    repository with nothing but a prerelease gets an entry marked "betaOnly", built from it.
+    The entry describes the newest full release. When the release at the top of the list is a
+    prerelease that upgrades it, that is added under "beta" for users who have asked for beta
+    versions. One that does not is noted under "skippedPrerelease", only so that its APKs are
+    not examined again on the next run. A repository with nothing but a prerelease gets an
+    entry marked "betaOnly", built from it.
     """
     full_name = repo["full_name"]
     page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
@@ -424,7 +538,8 @@ def build_app(repo, previous_apks, not_before=None):
     if not_before is not None:
         if stable is None or (published_at(stable) or 0) < not_before:
             return None
-    # Releases come newest first, so a prerelease at the top is newer than the full release.
+    # Releases come newest first, so a prerelease at the top is usually newer than the full
+    # release; is_upgrade makes sure.
     newest = releases[0] if releases else None
     prerelease = newest if newest is not None and newest.get("prerelease") else None
 
@@ -446,7 +561,10 @@ def build_app(repo, previous_apks, not_before=None):
     if stable_info is not None:
         app.update(stable_info)
         if beta_info is not None:
-            app["beta"] = beta_info
+            if is_upgrade(beta_info, stable_info):
+                app["beta"] = beta_info
+            else:
+                app["skippedPrerelease"] = {"tag": beta_info["tag"], "apks": beta_info["apks"]}
     else:
         app.update(beta_info)
         app["betaOnly"] = True
@@ -457,7 +575,9 @@ def known_apks(app):
     """Every APK an index entry describes, keyed by asset id."""
     if not app:
         return {}
-    apks = list(app.get("apks", [])) + list((app.get("beta") or {}).get("apks", []))
+    apks = list(app.get("apks", []))
+    for key in ("beta", "skippedPrerelease"):
+        apks += (app.get(key) or {}).get("apks", [])
     return {apk["id"]: apk for apk in apks}
 
 
