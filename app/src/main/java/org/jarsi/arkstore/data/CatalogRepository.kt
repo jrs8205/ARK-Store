@@ -42,15 +42,30 @@ class CatalogRepository private constructor(context: Context) {
         val fetchedAt: Long,
         /** The newest full release, if there is one for this device. */
         val app: StoreApp?,
-        /** A prerelease newer than [app], offered only when beta versions are wanted. */
+        /**
+         * The prerelease at the top of the release list, if there is one. Whether it is offered
+         * is decided by [CatalogRules.offered].
+         */
         val beta: StoreApp?,
         /** Found through the store topic rather than only through a source on this device. */
         val discovered: Boolean
     ) {
         val hasApp: Boolean get() = app != null || beta != null
 
+        /** Whether the store index lists the app as found by searching GitHub. */
+        val auto: Boolean get() = (app ?: beta)?.auto == true
+
         fun mapApps(transform: (StoreApp) -> StoreApp) =
             Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered)
+
+        /** This entry marked the way the store index lists its repository. */
+        fun listedAs(auto: Boolean) = Entry(
+            stamp,
+            fetchedAt,
+            app?.copy(auto = auto),
+            beta?.copy(auto = auto),
+            discovered = true
+        )
     }
 
     val sources = SourceStore(context)
@@ -111,7 +126,7 @@ class CatalogRepository private constructor(context: Context) {
 
             // Published apps normally come ready-made from the store index. Only when that is
             // missing or stale are they looked up one by one through the API.
-            val indexed = loadIndex(now)?.toMutableMap()
+            val indexed = loadIndex(now)
             if (indexed != null) {
                 discovered += indexed.keys
             } else {
@@ -129,28 +144,40 @@ class CatalogRepository private constructor(context: Context) {
             }
             for (source in sources.list()) {
                 try {
-                    for (repo in listRepositories(source)) {
+                    val listed = listRepositories(source)
+                    // A repository that was renamed or moved still answers at its old
+                    // address, under its new name. The source follows it there, so that it
+                    // keeps matching its own app.
+                    val current = listed.singleOrNull()?.getString("full_name")
+                        ?.takeIf { SourceStore.isRepository(source) }
+                    if (current != null && !current.equals(source, ignoreCase = true)) {
+                        Log.i(TAG, "Source $source is now $current")
+                        sources.rename(source, current)
+                    }
+                    for (repo in listed) {
                         val fullName = repo.getString("full_name")
                         // The index is rebuilt about hourly. A repository pushed to since then
                         // is asked about directly, so a release just made shows up at once.
                         val known = indexed?.get(fullName)
-                        if (known != null && known.stamp >= repo.optString("pushed_at")) {
-                            // An app the user asked for through a source is theirs to see,
-                            // whatever the index says about how it was found.
-                            indexed[fullName] = known.mapApps { it.copy(auto = false) }
-                            continue
-                        }
+                        if (known != null && known.stamp >= repo.optString("pushed_at")) continue
                         repos.putIfAbsent(fullName, repo)
                     }
                 } catch (e: IOException) {
                     Log.w(TAG, "Source $source unavailable", e)
                     record(e)
-                    updated += entries.filterKeys { belongsTo(it, source) }
+                    updated += entries.filterKeys { CatalogRules.belongsTo(it, source) }
                 }
             }
 
+            // The index speaks for every repository that is not asked about directly. The
+            // exception is one kept from a source that could not be reached, when it was read
+            // from GitHub after the index was built: falling back to the index would offer an
+            // older release than the one already known.
             indexed?.forEach { (fullName, entry) ->
-                if (fullName !in repos) updated[fullName] = entry
+                if (fullName in repos) return@forEach
+                val kept = updated[fullName]
+                val newer = kept != null && kept.stamp > entry.stamp
+                updated[fullName] = if (newer) kept.listedAs(entry.auto) else entry
             }
 
             // The more apps there are, the longer each stored answer has to last, or the
@@ -167,6 +194,10 @@ class CatalogRepository private constructor(context: Context) {
                         val category = Categories.of(topics(repo))
                         val license = licenseOf(repo).orEmpty()
                         val old = entries[fullName]
+                        // How the app was found is the index's to say. Without an index every
+                        // repository here comes from its topic or from a source, so none
+                        // counts as found by searching, whatever was known before.
+                        val auto = indexed?.get(fullName)?.auto == true
                         val maxAge = if (foreground && old?.hasApp == true) {
                             foregroundAge
                         } else {
@@ -175,7 +206,12 @@ class CatalogRepository private constructor(context: Context) {
                         if (old != null && old.stamp == stamp && now - old.fetchedAt < maxAge) {
                             // These come with the repository list, so they are always fresh.
                             val fresh = old.mapApps {
-                                it.copy(stars = stars, category = category, license = license)
+                                it.copy(
+                                    stars = stars,
+                                    category = category,
+                                    license = license,
+                                    auto = auto
+                                )
                             }
                             return@async fullName to Entry(
                                 fresh.stamp,
@@ -187,7 +223,7 @@ class CatalogRepository private constructor(context: Context) {
                         }
                         try {
                             val (app, beta) = limiter.withPermit {
-                                fetchApp(repo, listOfNotNull(old?.app, old?.beta))
+                                fetchApp(repo, listOfNotNull(old?.app, old?.beta), auto)
                             }
                             fullName to Entry(stamp, now, app, beta, isDiscovered)
                         } catch (e: IOException) {
@@ -233,7 +269,7 @@ class CatalogRepository private constructor(context: Context) {
         sources.remove(source)
         val remaining = sources.list()
         entries = entries.filter { (name, entry) ->
-            entry.discovered || remaining.any { belongsTo(name, it) }
+            entry.discovered || remaining.any { CatalogRules.belongsTo(name, it) }
         }
         val checkedAt = _catalog.value.checkedAt
         _catalog.value = Catalog(sorted(entries.values), checkedAt, storeDownloads)
@@ -448,20 +484,17 @@ class CatalogRepository private constructor(context: Context) {
         return List(array.length()) { array.getString(it) }
     }
 
-    private fun belongsTo(fullName: String, source: String): Boolean =
-        if (SourceStore.isRepository(source)) {
-            fullName.equals(source, ignoreCase = true)
-        } else {
-            fullName.substringBefore('/').equals(source, ignoreCase = true)
-        }
-
     /**
      * Looks up a repository's releases and returns its newest full release and, when the
-     * newest release of all is a prerelease, that one as well. Either is null when it does not
-     * exist or has no APK for this device. [previous] is what was known before, so that APKs
-     * already examined are not fetched again.
+     * release at the top of the list is a prerelease, that one as well. Either is null when it
+     * does not exist or has no APK for this device. [previous] is what was known before, so
+     * that APKs already examined are not fetched again; [auto] is how the index found the app.
      */
-    private fun fetchApp(repo: JSONObject, previous: List<StoreApp>): Pair<StoreApp?, StoreApp?> {
+    private fun fetchApp(
+        repo: JSONObject,
+        previous: List<StoreApp>,
+        auto: Boolean
+    ): Pair<StoreApp?, StoreApp?> {
         val fullName = repo.getString("full_name")
         val page = JSONArray(Http.getApi("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
@@ -505,6 +538,7 @@ class CatalogRepository private constructor(context: Context) {
                 downloads = downloads,
                 repoUrl = repo.getString("html_url"),
                 prerelease = prerelease,
+                auto = auto,
                 tag = release.getString("tag_name"),
                 releaseName = release.optStringOrEmpty("name"),
                 releaseNotes = release.optStringOrEmpty("body"),
@@ -532,7 +566,8 @@ class CatalogRepository private constructor(context: Context) {
                     if (e.code == 404) null else throw e
                 }
             }
-        // A prerelease at the top of the list is newer than the full release.
+        // A prerelease at the top of the list is usually newer than the full release, but the
+        // list is ordered by commit date; CatalogRules.offered compares the versions.
         val newest = releases.firstOrNull()?.takeIf { it.optBoolean("prerelease") }
         return stable?.let { build(it, prerelease = false) } to
             newest?.let { build(it, prerelease = true) }
@@ -578,12 +613,13 @@ class CatalogRepository private constructor(context: Context) {
         _catalog.value = _catalog.value.copy(apps = sorted(entries.values))
     }
 
-    /** The apps to show: the prerelease where there is one and beta versions are wanted. */
+    /** The apps to show, each in the version to offer. */
     private fun sorted(entries: Collection<Entry>): List<StoreApp> {
         val includeBeta = _includeBeta.value
         val includeAuto = _includeAuto.value
-        return entries.mapNotNull { if (includeBeta) it.beta ?: it.app else it.app }
-            .filter { includeAuto || !it.auto }
+        val own = sources.list()
+        return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta) }
+            .mapNotNull { CatalogRules.shown(it, own, includeAuto) }
             .sortedBy { it.repo.lowercase() }
     }
 

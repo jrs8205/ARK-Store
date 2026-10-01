@@ -19,7 +19,8 @@ data class StoreApp(
     val prerelease: Boolean = false,
     /**
      * True when the app was found by searching GitHub rather than published to the store by
-     * its developer or added as a source on this device.
+     * its developer. In the catalogue shown to the user it is false for an app that also comes
+     * from one of the sources on this device.
      */
     val auto: Boolean = false,
     val tag: String,

@@ -18,6 +18,21 @@ class SourceStoreTest {
     }
 
     @Test
+    fun renamedRepositoryTakesItsSourcesPlace() {
+        val sources = listOf("jrs8205", "old/app", "other/app")
+        assertEquals(
+            listOf("jrs8205", "new/app", "other/app"),
+            SourceStore.renamed(sources, "old/app", "new/app")
+        )
+    }
+
+    @Test
+    fun renamedRepositoryAlreadyAmongTheSourcesIsNotListedTwice() {
+        val sources = listOf("old/app", "New/App")
+        assertEquals(listOf("New/App"), SourceStore.renamed(sources, "old/app", "new/app"))
+    }
+
+    @Test
     fun rejectsAnythingElse() {
         assertNull(SourceStore.parse(""))
         assertNull(SourceStore.parse("two words"))

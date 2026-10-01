@@ -165,6 +165,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } while (refreshAgain)
             } finally {
+                // A refresh renames the source of a repository that has moved.
+                _sources.update { it.copy(sources = repository.sources.list()) }
                 refreshing.update { false }
             }
         }

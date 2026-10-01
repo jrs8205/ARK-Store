@@ -80,7 +80,8 @@ None of these are required, but they make your app look better in the store.
   refuses to update an app whose signing key has changed.
 - The newest full release is the version offered. A prerelease that is newer than it is
   offered only to users who have turned on **Show beta versions** in the settings, and is
-  marked Beta.
+  marked Beta. Newer means the same package name with a higher `versionCode`: a prerelease
+  built from an older branch, or one with a package name of its own, is not offered.
   Drafts are ignored.
 - Forks and archived repositories are skipped.
 
