@@ -1,0 +1,1 @@
+Settings now have their own page behind a gear icon, with the beta switch. An installed beta is pointed out, with a way back to the stable version.

@@ -23,7 +23,14 @@ import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.InstallManager
 
-data class AppRow(val app: StoreApp, val installed: InstalledVersion?, val status: AppStatus)
+data class AppRow(val app: StoreApp, val installed: InstalledVersion?, val status: AppStatus) {
+    /**
+     * A newer version than the one offered is installed, typically a beta after beta versions
+     * were turned off. Android cannot put the older version over it.
+     */
+    val newerInstalled: Boolean
+        get() = installed != null && app.versionCode > 0 && installed.versionCode > app.versionCode
+}
 
 enum class LoadError { NETWORK, RATE_LIMIT }
 

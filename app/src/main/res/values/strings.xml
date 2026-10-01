@@ -46,7 +46,7 @@
         <item quantity="one">%d app update available</item>
         <item quantity="other">%d app updates available</item>
     </plurals>
-    <string name="action_sources">Sources and settings</string>
+    <string name="action_sources">Sources</string>
     <string name="action_add_source">Add</string>
     <string name="action_remove">Remove</string>
     <string name="card_byline" translatable="false">%1$s · %2$s</string>
@@ -65,7 +65,7 @@
     <string name="detail_developer">Developer</string>
     <string name="detail_stars">Stars</string>
     <string name="detail_downloads">Downloads</string>
-    <string name="sources_title">Sources and settings</string>
+    <string name="sources_title">Sources</string>
     <string name="sources_description">Apps whose developers have added the topic arkstore to their GitHub repository appear in the store for everyone. Here you can also add a GitHub account or a single repository yourself, for example your own, by name or link. An app appears when its latest release has an APK attached.</string>
     <string name="sources_hint">GitHub account, owner/repo or link</string>
     <string name="sources_error_invalid">Enter a GitHub account name, owner/repo or a github.com link.</string>
@@ -117,4 +117,16 @@
     <string name="beta_title">Beta versions</string>
     <string name="beta_switch">Show beta versions</string>
     <string name="beta_description">Offer prereleases as updates when a developer has published one. They are newer but less tested.</string>
+    <string name="action_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_version" translatable="false">ARK-Store %1$s</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>
+    <string name="newer_installed_note">A newer beta is installed. The next stable version will replace it.</string>
+    <string name="stable_title">Back to the stable version</string>
+    <string name="stable_description">A newer beta of this app is installed. The next stable version replaces it by itself. To go back now, uninstall the app and install it again from the store. Uninstalling removes the app\'s data.</string>
+    <string name="stable_description_store">A newer beta of ARK-Store is installed. The next stable version replaces it by itself. To go back now, uninstall ARK-Store and install the stable version from its GitHub page.</string>
+    <string name="action_return_to_stable">Uninstall the beta</string>
+    <string name="stable_confirm_title">Uninstall the beta?</string>
+    <string name="stable_confirm_message">The app and its data are removed. After that, install the stable version from the list.</string>
 </resources>

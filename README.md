@@ -79,7 +79,8 @@ None of these are required, but they make your app look better in the store.
 - Sign every release with the same key and raise the `versionCode` each time. Android
   refuses to update an app whose signing key has changed.
 - The newest full release is the version offered. A prerelease that is newer than it is
-  offered only to users who have turned on **Show beta versions**, and is marked Beta.
+  offered only to users who have turned on **Show beta versions** in the settings, and is
+  marked Beta.
   Drafts are ignored.
 - Forks and archived repositories are skipped.
 

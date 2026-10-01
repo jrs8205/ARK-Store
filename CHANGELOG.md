@@ -1,8 +1,14 @@
 # Changelog
 
+## 1.3.0-beta.2
+
+- Settings have their own page behind a gear icon, and the beta switch lives there
+- An installed beta that is newer than the offered stable version is pointed out, with a way
+  back to the stable version in the app's details
+
 ## 1.3.0-beta.1
 
-- Beta versions: a switch under Sources and settings offers a developer's prerelease when it
+- Beta versions: a switch in the settings offers a developer's prerelease when it
   is newer than the full release; such apps carry a Beta badge
 - Update notifications still arrive when one source cannot be reached
 - A failure while storing APK details no longer interrupts an install

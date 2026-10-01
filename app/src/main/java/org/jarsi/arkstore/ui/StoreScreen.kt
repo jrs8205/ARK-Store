@@ -34,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -101,6 +102,7 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Categories
@@ -115,6 +117,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
@@ -143,6 +146,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         Icon(
                             painter = painterResource(R.drawable.ic_sources),
                             contentDescription = stringResource(R.string.action_sources)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            showSettings = true
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.action_settings)
                         )
                     }
                     IconButton(
@@ -370,6 +384,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
             SourcesSheet(viewModel)
         }
     }
+    if (showSettings) {
+        ModalBottomSheet(onDismissRequest = { showSettings = false }) {
+            SettingsSheet(viewModel)
+        }
+    }
 }
 
 private fun LazyListScope.section(
@@ -517,6 +536,15 @@ private fun AppCard(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+
+            if (row.newerInstalled) {
+                Text(
+                    text = stringResource(R.string.newer_installed_note),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp)
                 )
             }
@@ -754,6 +782,62 @@ private fun DetailsSheet(row: AppRow) {
                 }
             }
         }
+
+        if (row.newerInstalled && app.packageName != null) {
+            ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
+        }
+    }
+}
+
+/**
+ * Explains how to get from an installed beta back to the stable version. Android does not
+ * install an older version over a newer one, so the way back is to remove the app first.
+ */
+@Composable
+private fun ReturnToStable(packageName: String, isStore: Boolean) {
+    val context = LocalContext.current
+    var confirming by rememberSaveable { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(R.string.stable_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp, bottom = 4.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(
+            if (isStore) R.string.stable_description_store else R.string.stable_description
+        ),
+        style = MaterialTheme.typography.bodyMedium
+    )
+    if (!isStore) {
+        OutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(R.string.action_return_to_stable))
+        }
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.stable_confirm_title)) },
+            text = { Text(stringResource(R.string.stable_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        uninstall(context, packageName)
+                    }
+                ) {
+                    Text(stringResource(R.string.action_uninstall))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
     }
 }
 
@@ -807,6 +891,36 @@ private fun BetaBadge() {
 }
 
 @Composable
+private fun SettingsSheet(viewModel: StoreViewModel) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() }
+        )
+        BetaSwitch(viewModel)
+        Text(
+            text = stringResource(R.string.beta_return_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        Text(
+            text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 24.dp)
+        )
+    }
+}
+
+@Composable
 private fun BetaSwitch(viewModel: StoreViewModel) {
     val includeBeta by viewModel.includeBeta.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
@@ -814,7 +928,7 @@ private fun BetaSwitch(viewModel: StoreViewModel) {
         text = stringResource(R.string.beta_title),
         style = MaterialTheme.typography.titleMedium,
         modifier = Modifier
-            .padding(top = 24.dp)
+            .padding(top = 16.dp)
             .semantics { heading() }
     )
     // The whole row is the switch, so the label is part of what gets announced and tapped.
@@ -965,8 +1079,6 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
         ) {
             Text(stringResource(R.string.action_add_source))
         }
-
-        BetaSwitch(viewModel)
     }
 }
 

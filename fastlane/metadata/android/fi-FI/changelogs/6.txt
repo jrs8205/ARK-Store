@@ -1,0 +1,1 @@
+Asetuksilla on nyt oma sivu rataskuvakkeen takana, ja beta-kytkin on siellä. Asennettu beta näytetään selvästi, ja sovelluksen tiedoista pääsee takaisin vakaaseen versioon.
