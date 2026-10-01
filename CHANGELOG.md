@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.0-beta.5
+
+- A download that finishes while the store is not on screen tells so with a notification;
+  tapping it opens the install prompt
+- An app installed from elsewhere under another signing key is no longer offered as an update
+  over and over; it is listed as installed, with an explanation and a way to try again
+- Each update is announced once; a failed check that is retried does not bring a dismissed
+  notification back, and passing GitHub errors are retried
+- "A newer beta is installed" is shown only when the installed version really is a beta
+- The settings switches answer at once, also while the list is being refreshed
+- Automatically found apps are downloaded only while they are shown
+- The download notification is updated at most twice a second, and tapping a notification no
+  longer opens a second copy of the store
+- An install no longer waits for a refresh that is running
+- The search field gives up the keyboard when anything else is touched
+- The index builder keeps automatically found apps in a file of their own, fetches the previous
+  index in one piece and no longer examines prereleases it would not list
+
 ## 1.3.0-beta.4
 
 - An app from one of the user's own sources stays in the list when the index lists it as

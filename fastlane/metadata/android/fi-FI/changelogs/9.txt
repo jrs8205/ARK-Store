@@ -1,0 +1,1 @@
+Taustalla valmistunut lataus kertoo nyt ilmoituksella, josta asennuksen vahvistus avautuu. Toisesta kaupasta asennettuja sovelluksia ei enää tarjota päivitettäviksi yhä uudelleen. Jokaisesta päivityksestä ilmoitetaan kerran. Hakukenttä sulkee näppäimistön, kun napautat muualle.
