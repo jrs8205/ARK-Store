@@ -35,11 +35,17 @@ jobs:
           mkdir -p previous
           curl -fsSL -o previous/index.json \
             "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/index/index.json" || true
+          curl -fsSL -o previous/state.json \
+            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/index/state.json" || true
 
       - name: Build the index
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 tools/build_index.py --previous previous/index.json --output out/index.json
+        run: |
+          mkdir -p out
+          if [ -f previous/state.json ]; then cp previous/state.json out/state.json; fi
+          python3 tools/build_index.py --previous previous/index.json \
+            --state out/state.json --output out/index.json
 
       - name: Publish to the index branch
         run: |
@@ -47,7 +53,7 @@ jobs:
           git init -q -b index
           git config user.name "${GITHUB_REPOSITORY_OWNER}"
           git config user.email "${GITHUB_REPOSITORY_OWNER}@users.noreply.github.com"
-          git add index.json
+          git add index.json state.json
           git commit -q -m "Update the store index"
           # The branch holds only the newest index, so its history never grows.
           git push -q --force \
