@@ -1,0 +1,1 @@
+Kehittäjä voi nyt julkaista sovelluksensa kaupassa lisäämällä sen GitHub-repoon aiheen "arkstore". Nämä sovellukset näkyvät kaikille. Tilejä ja repoja voi yhä lisätä myös käsin Lähteet-sivulla.

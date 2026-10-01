@@ -11,42 +11,64 @@
   <a href="LICENSE"><img src="https://img.shields.io/github/license/jrs8205/ARK-Store?label=license" alt="License"></a>
 </p>
 
-ARK-Store is an Android app store for open-source apps that live on GitHub. Anyone can put
-their own apps in it: add a GitHub account in the app and every public, licensed Android app
-of that account is listed, ready to install and to keep up to date.
+ARK-Store is an Android app store for open-source apps that live on GitHub. Developers
+publish their apps to it themselves: add one topic to the repository on GitHub and the app
+appears in the store for everyone, ready to install and to keep up to date.
 
 There is nothing to sign up for and nobody to ask. No developer account, no submission form,
-no review queue, no fees and no metadata files to maintain. If your app has a public
-repository, an open-source license and a release with an APK, it is already compatible.
+no review queue, no fees and no metadata files to maintain.
 
-## Add your apps
+## Publish your app
 
-Your repository needs exactly two things:
-
-1. **It is public.**
-2. **It has an open-source license** that GitHub recognises, for example a `LICENSE` file
+1. **Make the repository public.**
+2. **Give it an open-source license** that GitHub recognises, for example a `LICENSE` file
    created with GitHub's license picker.
+3. **Create a release and attach the APK**, the way you probably already do.
+4. **Add the topic `arkstore`** to the repository (the gear next to *About* on the
+   repository's front page).
 
-Then publish the way you probably already do: create a GitHub release and attach the APK.
+That is all. The app shows up in ARK-Store for every user the next time the store refreshes,
+and new versions follow by themselves whenever you publish a release. To take the app out of
+the store, remove the topic.
 
-That is all. In ARK-Store, open **Sources**, type your GitHub user name (or paste a link to
-your profile or to a single repository) and tap **Add**. Every repository of yours that meets
-the two requirements and has a release with an APK appears in the list straight away. New
-apps and new versions show up by themselves from then on.
+The first two points are requirements: a repository that is private or has no recognised
+license is never listed, with or without the topic.
 
-To let other people install your apps, tell them your GitHub user name. Sources are kept on
-each device, so everyone chooses whose apps they want to see.
+### How quickly it shows up
+
+- **A newly tagged app**: usually within a few minutes. GitHub first has to add the topic to
+  its search index, which is normally quick but can occasionally take longer. After that the
+  app appears the next time a user opens the store or pulls down to refresh.
+- **A new release of a listed app**: on the next refresh after the release is published.
+  Users who do not open the store are told about the update by the background check, which
+  runs about every twelve hours.
+- **Stars and download counts**: stars on every refresh, download counts within about
+  20 minutes, or more slowly in a large store.
+- **A repository added by hand under Sources**: immediately.
+
+The store refreshes when it is opened, at most once every five minutes; pulling down or the
+refresh button checks right away. If an app is still missing after an hour, check that the
+repository is public, has a license GitHub recognises, and that its latest full release has
+an `.apk` file attached.
+
+### Adding a repository by hand
+
+The topic is the way to reach everyone, but it is not the only way in. In the app, under
+**Sources**, anyone can type a GitHub user name or paste a link to a profile or to a single
+repository. All apps of that account, or that one app, are then listed on that device, with
+the same two requirements. This is handy for trying your own app in the store before you add
+the topic, or for following a developer who has not added it.
 
 ### Optional extras
 
 None of these are required, but they make your app look better in the store.
 
-- **Category.** Add one topic to the repository and the app is filed under it:
-  `arkstore-communication`, `arkstore-productivity`, `arkstore-tools`,
-  `arkstore-personalization`, `arkstore-media`, `arkstore-games`, `arkstore-travel`,
-  `arkstore-news`, `arkstore-system`, `arkstore-health`, `arkstore-finance` or
-  `arkstore-education`. Without one, a few common topics such as `launcher`, `keyboard`,
-  `dialer` or `weather` are recognised, and everything else goes under Other.
+- **Category.** Add a second topic and the app is filed under it: `arkstore-communication`,
+  `arkstore-productivity`, `arkstore-tools`, `arkstore-personalization`, `arkstore-media`,
+  `arkstore-games`, `arkstore-travel`, `arkstore-news`, `arkstore-system`, `arkstore-health`,
+  `arkstore-finance` or `arkstore-education`. Without one, a few common topics such as
+  `launcher`, `keyboard`, `dialer` or `weather` are recognised, and everything else goes
+  under Other.
 - **Description.** The repository's description is shown on the app's card.
 - **Release notes.** The text of the release is shown in the app's details.
 - **Several APKs.** If you ship one APK per CPU architecture, keep the architecture
@@ -86,13 +108,14 @@ Repositories that are private, or public but unlicensed, are never listed, and a
 that loses its license disappears from the store.
 
 ARK-Store does not review, build or host apps. It shows what developers publish on GitHub
-and installs the files they attached to their releases. Add sources you trust.
+and installs the files they attached to their releases. Every app shows its developer, and
+its source is one tap away; install apps from developers you trust.
 
 ## How it works
 
-1. For every source, the app asks GitHub for the account's public repositories (or for the
-   single repository). Forks, archived repositories and repositories without a recognised
-   license are dropped.
+1. The app asks GitHub for every repository carrying the `arkstore` topic, and for the
+   repositories of the accounts and single repositories added under Sources. Forks, archived
+   repositories and repositories without a recognised license are dropped.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
 3. The package name and version are read from the APK's own manifest. Only the zip directory
@@ -100,10 +123,11 @@ and installs the files they attached to their releases. Add sources you trust.
 4. The result is compared with what is installed on the device.
 
 GitHub allows 60 anonymous requests an hour per network. The app spaces its requests to stay
-below that: the repository list is fetched at most every five minutes, releases of listed
-apps every 20 minutes or when the repository has been pushed to, and repositories without an
-APK every six hours. If the limit is reached anyway, the app keeps showing what it has and
-says so.
+below that: the repository lists are fetched at most every five minutes, and the releases of
+a listed app when its repository has been pushed to or when the stored answer has grown old.
+That age starts at 20 minutes and stretches as the store grows, so that the quota covers
+every app. If the limit is reached anyway, for instance on the first start of a large store,
+the app keeps showing what it has, says so, and fills in the rest on later refreshes.
 
 ## Building
 
@@ -113,7 +137,8 @@ says so.
 
 The debug build installs as `org.jarsi.arkstore.debug` next to a release build.
 
-The source that is present on first start is the `GITHUB_OWNER` build config field in
+The store topic, the account that is a source on every new installation and the store's own
+repository are the `STORE_TOPIC`, `GITHUB_OWNER` and `STORE_REPO` build config fields in
 `app/build.gradle.kts`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never

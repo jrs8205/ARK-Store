@@ -2,8 +2,8 @@ package org.jarsi.arkstore.data
 
 /**
  * App categories, decided by the repository's GitHub topics. A developer files an app under a
- * category by adding the topic `arkstore-<category>` (for example `arkstore-tools`) to the
- * repository. Without one, a few widely used topics are recognised; everything else is "other".
+ * category by adding the topic `arkstore-<category>` (for example `arkstore-tools`) next to the
+ * store topic. Without one, a few widely used topics are recognised; everything else is "other".
  */
 object Categories {
     const val OTHER = "other"

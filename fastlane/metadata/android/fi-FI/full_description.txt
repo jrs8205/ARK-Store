@@ -1,7 +1,7 @@
-ARK-Store asentaa ja päivittää sovellukset suoraan niiden GitHub-julkaisuista. Se listaa lisäämiesi GitHub-tilien kaikki julkiset repot, joiden uusimmassa julkaisussa on APK-tiedosto, näyttää mitkä sovellukset on asennettu ja mihin on saatavilla uudempi versio, ja asentaa tai päivittää ne yhdellä napautuksella.
+ARK-Store asentaa ja päivittää sovellukset suoraan niiden GitHub-julkaisuista. Kehittäjä julkaisee sovelluksensa lisäämällä julkiseen, avoimen lähdekoodin repoonsa aiheen "arkstore". Kauppa listaa kaikki tällaiset repot, joiden uusimmassa julkaisussa on APK-tiedosto, näyttää mitkä sovellukset on asennettu ja mihin on saatavilla uudempi versio, ja asentaa tai päivittää ne yhdellä napautuksella.
 
 • Automaattinen luettelo: uusi sovellus ilmestyy listaan heti, kun siitä julkaistaan APK
-• Lisää lähteeksi mikä tahansa GitHub-tili tai repo
+• Lisää GitHub-tili tai repo myös käsin
 • Tähdet ja latausmäärät GitHubista
 • Haku ja kategoriat
 • Listalla vain julkiset, avoimen lähdekoodin sovellukset

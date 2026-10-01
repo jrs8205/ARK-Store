@@ -1,0 +1,1 @@
+Developers can now publish an app to the store by adding the topic "arkstore" to its GitHub repository. Such apps appear for everyone. Accounts and repositories can still be added by hand under Sources.

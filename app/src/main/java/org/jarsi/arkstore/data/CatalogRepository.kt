@@ -24,8 +24,10 @@ import org.json.JSONException
 import org.json.JSONObject
 
 /**
- * Builds the catalogue from the configured GitHub sources: every public repository whose
- * latest release has an APK attached becomes an app.
+ * Builds the catalogue from GitHub. Developers publish an app by adding the store topic to its
+ * repository, which makes it show up for everyone; the sources configured on this device add
+ * further accounts and repositories. Every public, open-source repository found either way
+ * whose latest release has an APK attached becomes an app.
  *
  * Anonymous GitHub API calls are limited to 60 an hour, so a repository's releases are looked
  * up again only when the repository has been pushed to since, or the stored answer has grown
@@ -33,7 +35,13 @@ import org.json.JSONObject
  */
 class CatalogRepository private constructor(context: Context) {
 
-    private class Entry(val stamp: String, val fetchedAt: Long, val app: StoreApp?)
+    private class Entry(
+        val stamp: String,
+        val fetchedAt: Long,
+        val app: StoreApp?,
+        /** Found through the store topic rather than only through a source on this device. */
+        val discovered: Boolean
+    )
 
     val sources = SourceStore(context)
 
@@ -74,50 +82,73 @@ class CatalogRepository private constructor(context: Context) {
             }
 
             val updated = HashMap<String, Entry>()
+            // Every repository to look at, keyed by full name so that one found both through
+            // its topic and through a source is handled once.
+            val repos = LinkedHashMap<String, JSONObject>()
+            val discovered = HashSet<String>()
+
+            try {
+                for (repo in discoverRepositories()) {
+                    val fullName = repo.getString("full_name")
+                    repos[fullName] = repo
+                    discovered += fullName
+                }
+            } catch (e: IOException) {
+                Log.w(TAG, "Discovery unavailable", e)
+                record(e)
+                updated += entries.filterValues { it.discovered }
+            }
             for (source in sources.list()) {
-                val repos = try {
-                    listRepositories(source)
+                try {
+                    for (repo in listRepositories(source)) {
+                        repos.putIfAbsent(repo.getString("full_name"), repo)
+                    }
                 } catch (e: IOException) {
                     Log.w(TAG, "Source $source unavailable", e)
                     record(e)
                     updated += entries.filterKeys { belongsTo(it, source) }
-                    continue
                 }
+            }
 
-                updated += coroutineScope {
-                    repos.map { repo ->
-                        async {
-                            val fullName = repo.getString("full_name")
-                            val stamp = repo.optString("pushed_at")
-                            val stars = repo.optInt("stargazers_count")
-                            val category = Categories.of(topics(repo))
-                            val license = licenseOf(repo).orEmpty()
-                            val old = entries[fullName]
-                            val maxAge = if (foreground && old?.app != null) {
-                                MAX_AGE_FOREGROUND_MS
-                            } else {
-                                MAX_AGE_BACKGROUND_MS
-                            }
-                            if (old != null && old.stamp == stamp && now - old.fetchedAt < maxAge) {
-                                // These come with the repository list, so they are always fresh.
-                                val app = old.app?.copy(
-                                    stars = stars,
-                                    category = category,
-                                    license = license
-                                )
-                                return@async fullName to Entry(old.stamp, old.fetchedAt, app)
-                            }
-                            try {
-                                val app = limiter.withPermit { fetchApp(repo, old?.app) }
-                                fullName to Entry(stamp, now, app)
-                            } catch (e: IOException) {
-                                Log.w(TAG, "Release lookup failed for $fullName", e)
-                                record(e)
-                                old?.let { fullName to it }
-                            }
+            // The more apps there are, the longer each stored answer has to last, or the
+            // hourly request quota would not cover them all.
+            val known = repos.keys.count { entries[it]?.app != null }
+            val foregroundAge = maxOf(MAX_AGE_FOREGROUND_MS, known * AGE_PER_APP_MS)
+
+            updated += coroutineScope {
+                repos.map { (fullName, repo) ->
+                    async {
+                        val isDiscovered = fullName in discovered
+                        val stamp = repo.optString("pushed_at")
+                        val stars = repo.optInt("stargazers_count")
+                        val category = Categories.of(topics(repo))
+                        val license = licenseOf(repo).orEmpty()
+                        val old = entries[fullName]
+                        val maxAge = if (foreground && old?.app != null) {
+                            foregroundAge
+                        } else {
+                            maxOf(MAX_AGE_BACKGROUND_MS, foregroundAge)
                         }
-                    }.awaitAll().filterNotNull()
-                }
+                        if (old != null && old.stamp == stamp && now - old.fetchedAt < maxAge) {
+                            // These come with the repository list, so they are always fresh.
+                            val app = old.app?.copy(
+                                stars = stars,
+                                category = category,
+                                license = license
+                            )
+                            return@async fullName to
+                                Entry(old.stamp, old.fetchedAt, app, isDiscovered)
+                        }
+                        try {
+                            val app = limiter.withPermit { fetchApp(repo, old?.app) }
+                            fullName to Entry(stamp, now, app, isDiscovered)
+                        } catch (e: IOException) {
+                            Log.w(TAG, "Release lookup failed for $fullName", e)
+                            record(e)
+                            old?.let { fullName to it }
+                        }
+                    }
+                }.awaitAll().filterNotNull()
             }
 
             entries = updated
@@ -153,7 +184,9 @@ class CatalogRepository private constructor(context: Context) {
     suspend fun removeSource(source: String) = mutex.withLock {
         sources.remove(source)
         val remaining = sources.list()
-        entries = entries.filterKeys { name -> remaining.any { belongsTo(name, it) } }
+        entries = entries.filter { (name, entry) ->
+            entry.discovered || remaining.any { belongsTo(name, it) }
+        }
         val checkedAt = _catalog.value.checkedAt
         _catalog.value = Catalog(sorted(entries.values), checkedAt, storeDownloads)
         withContext(Dispatchers.IO) { save(checkedAt) }
@@ -196,6 +229,24 @@ class CatalogRepository private constructor(context: Context) {
         } catch (e: JSONException) {
             Log.w(TAG, "Store download count unreadable", e)
         }
+    }
+
+    /** Repositories whose developers have tagged them with the store topic. */
+    private fun discoverRepositories(): List<JSONObject> {
+        val repos = ArrayList<JSONObject>()
+        for (page in 1..MAX_DISCOVERY_PAGES) {
+            val result = JSONObject(
+                Http.getApi(
+                    "$API/search/repositories?q=topic:${BuildConfig.STORE_TOPIC}+archived:false" +
+                        "&sort=updated&per_page=$PAGE_SIZE&page=$page"
+                )
+            )
+            val items = result.optJSONArray("items") ?: break
+            for (i in 0 until items.length()) repos += items.getJSONObject(i)
+            if (items.length() < PAGE_SIZE) break
+        }
+        return repos.filter { !it.optBoolean("fork") && !it.optBoolean("archived") }
+            .filter(::isListable)
     }
 
     private fun listRepositories(source: String): List<JSONObject> {
@@ -320,7 +371,8 @@ class CatalogRepository private constructor(context: Context) {
             versionCode = info.versionCode,
             versionName = info.versionName
         )
-        entries = entries + (fullName to Entry(entry.stamp, entry.fetchedAt, fixed))
+        entries = entries +
+            (fullName to Entry(entry.stamp, entry.fetchedAt, fixed, entry.discovered))
         val checkedAt = _catalog.value.checkedAt
         _catalog.value = Catalog(sorted(entries.values), checkedAt, storeDownloads)
         withContext(Dispatchers.IO) { save(checkedAt) }
@@ -339,7 +391,8 @@ class CatalogRepository private constructor(context: Context) {
                 Entry(
                     stamp = entry.getString("stamp"),
                     fetchedAt = entry.getLong("fetchedAt"),
-                    app = entry.optJSONObject("app")?.let(StoreApp::fromJson)
+                    app = entry.optJSONObject("app")?.let(StoreApp::fromJson),
+                    discovered = entry.optBoolean("discovered")
                 )
             }
             storeDownloads = if (root.isNull("storeDownloads")) null else root.getLong("storeDownloads")
@@ -360,6 +413,7 @@ class CatalogRepository private constructor(context: Context) {
                     .put("stamp", entry.stamp)
                     .put("fetchedAt", entry.fetchedAt)
                     .put("app", entry.app?.toJson() ?: JSONObject.NULL)
+                    .put("discovered", entry.discovered)
             )
         }
         val temp = File(file.parentFile, file.name + ".tmp")
@@ -383,6 +437,8 @@ class CatalogRepository private constructor(context: Context) {
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100
         private const val MAX_REPO_PAGES = 10
+        private const val MAX_DISCOVERY_PAGES = 5
+        private const val AGE_PER_APP_MS = 90 * 1000L
         private const val MAX_AGE_FOREGROUND_MS = 20 * 60 * 1000L
         private const val MAX_AGE_BACKGROUND_MS = 6 * 60 * 60 * 1000L
 

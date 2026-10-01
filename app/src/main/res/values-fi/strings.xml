@@ -62,7 +62,7 @@
     <string name="detail_stars">Tähdet</string>
     <string name="detail_downloads">Lataukset</string>
     <string name="sources_title">Lähteet</string>
-    <string name="sources_description">Sovellukset listataan näistä GitHub-tileistä ja repoista. Lisää tili, niin saat kaikki sen julkiset sovellukset, tai lisää yksittäinen repo. Sovellus näkyy listalla, kun sen uusimmassa julkaisussa on APK-tiedosto.</string>
+    <string name="sources_description">Sovellukset, joiden kehittäjä on lisännyt GitHub-repoonsa aiheen arkstore, näkyvät kaupassa kaikille. Täällä voit lisäksi lisätä itse GitHub-tilin tai yksittäisen repon, esimerkiksi omasi, nimellä tai linkillä. Sovellus näkyy listalla, kun sen uusimmassa julkaisussa on APK-tiedosto.</string>
     <string name="sources_hint">GitHub-tili, omistaja/repo tai linkki</string>
     <string name="sources_error_invalid">Anna GitHub-tilin nimi, omistaja/repo tai github.com-linkki.</string>
     <string name="sources_error_duplicate">Tämä lähde on jo lisätty.</string>
@@ -94,7 +94,8 @@
     <string name="category_other">Muut</string>
     <string name="detail_category">Kategoria</string>
     <string name="detail_license">Lisenssi</string>
-    <string name="sources_requirements">Listalle pääsevät vain julkiset repot, joilla on avoimen lähdekoodin lisenssi. Kehittäjä valitsee kategorian lisäämällä repoon GitHubissa aiheen (topic), esimerkiksi arkstore-tools.</string>
+    <string name="sources_requirements">Listalle pääsevät vain julkiset repot, joilla on avoimen lähdekoodin lisenssi. Kehittäjä valitsee kategorian toisella aiheella, esimerkiksi arkstore-tools.</string>
+    <string name="sources_list_title">Tähän laitteeseen lisätyt</string>
     <string name="sources_error_not_open">Tällä repolla ei ole GitHubin tunnistamaa avoimen lähdekoodin lisenssiä, joten sitä ei voi listata.</string>
     <plurals name="footer_store_downloads">
         <item quantity="one">ARK-Store on ladattu %s kerran</item>

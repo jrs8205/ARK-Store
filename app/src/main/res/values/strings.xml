@@ -66,7 +66,7 @@
     <string name="detail_stars">Stars</string>
     <string name="detail_downloads">Downloads</string>
     <string name="sources_title">Sources</string>
-    <string name="sources_description">Apps are listed from these GitHub accounts and repositories. Add an account to get all of its public apps, or a single repository. An app appears when its latest release has an APK attached.</string>
+    <string name="sources_description">Apps whose developers have added the topic arkstore to their GitHub repository appear in the store for everyone. Here you can also add a GitHub account or a single repository yourself, for example your own, by name or link. An app appears when its latest release has an APK attached.</string>
     <string name="sources_hint">GitHub account, owner/repo or link</string>
     <string name="sources_error_invalid">Enter a GitHub account name, owner/repo or a github.com link.</string>
     <string name="sources_error_duplicate">This source has already been added.</string>
@@ -99,7 +99,8 @@
     <string name="category_other">Other</string>
     <string name="detail_category">Category</string>
     <string name="detail_license">License</string>
-    <string name="sources_requirements">Only public repositories with an open-source license are listed. Developers choose the category by adding a topic such as arkstore-tools to the repository on GitHub.</string>
+    <string name="sources_requirements">Only public repositories with an open-source license are listed. Developers choose the category with a second topic such as arkstore-tools.</string>
+    <string name="sources_list_title">Added on this device</string>
     <string name="sources_error_not_open">This repository has no open-source license that GitHub recognises, so it cannot be listed.</string>
     <plurals name="footer_store_downloads">
         <item quantity="one">ARK-Store has been downloaded %s time</item>
