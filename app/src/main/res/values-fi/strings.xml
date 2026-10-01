@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="action_refresh">Tarkista päivitykset</string>
+    <string name="action_update">Päivitä</string>
+    <string name="action_update_all">Päivitä kaikki</string>
+    <string name="action_install">Asenna</string>
+    <string name="action_open">Avaa</string>
+    <string name="action_uninstall">Poista asennus</string>
+    <string name="action_retry">Yritä uudelleen</string>
+    <string name="action_dismiss">Sulje</string>
+    <string name="action_view_source">Näytä GitHubissa</string>
+
+    <plurals name="section_updates">
+        <item quantity="one">%d päivitys saatavilla</item>
+        <item quantity="other">%d päivitystä saatavilla</item>
+    </plurals>
+    <string name="section_installed">Asennetut</string>
+    <string name="section_available">Ei asennettu</string>
+
+    <string name="footer_checked">Tarkistettu viimeksi %1$s</string>
+
+    <string name="list_loading">Ladataan sovelluksia…</string>
+    <string name="list_empty">Julkaistuja APK-sovelluksia ei löytynyt.</string>
+    <string name="list_empty_error">Sovelluslistaa ei voitu ladata. Yritä uudelleen vetämällä alaspäin.</string>
+
+    <string name="error_network">GitHubiin ei saatu yhteyttä. Tarkista verkkoyhteys ja yritä uudelleen.</string>
+    <string name="error_rate_limit">GitHub rajoittaa juuri nyt tästä verkosta tulevia pyyntöjä. Yritä uudelleen tunnin kuluttua.</string>
+
+    <string name="fail_download">Lataus epäonnistui.</string>
+    <string name="fail_invalid_apk">Ladattu tiedosto ei ole kelvollinen sovelluspaketti.</string>
+    <string name="fail_signature">Asennettu sovellus on allekirjoitettu eri avaimella, joten sitä ei voi päivittää suoraan. Poista sovellus ensin ja asenna se sitten uudelleen. Tämä poistaa sovelluksen tiedot.</string>
+    <string name="fail_install">Asennus epäonnistui.</string>
+
+    <string name="detail_latest">Uusin versio</string>
+    <string name="detail_installed">Asennettu</string>
+    <string name="detail_published">Julkaistu</string>
+    <string name="detail_size">Koko</string>
+    <string name="detail_package">Paketti</string>
+    <string name="detail_notes">Julkaisutiedot</string>
+
+    <string name="channel_updates">Sovelluspäivitykset</string>
+    <plurals name="notification_updates_title">
+        <item quantity="one">%d sovelluspäivitys saatavilla</item>
+        <item quantity="other">%d sovelluspäivitystä saatavilla</item>
+    </plurals>
+    <string name="action_sources">Lähteet</string>
+    <string name="action_add_source">Lisää</string>
+    <string name="action_remove">Poista</string>
+    <string name="action_details">Näytä tiedot</string>
+    <string name="action_remove_source">Poista lähde %1$s</string>
+    <string name="state_downloading">Ladataan</string>
+    <string name="state_installing">Asennetaan</string>
+    <plurals name="stat_stars">
+        <item quantity="one">%d tähti</item>
+        <item quantity="other">%d tähteä</item>
+    </plurals>
+    <plurals name="stat_downloads">
+        <item quantity="one">%d lataus</item>
+        <item quantity="other">%d latausta</item>
+    </plurals>
+    <string name="detail_developer">Kehittäjä</string>
+    <string name="detail_stars">Tähdet</string>
+    <string name="detail_downloads">Lataukset</string>
+    <string name="sources_title">Lähteet</string>
+    <string name="sources_description">Sovellukset listataan näistä GitHub-tileistä ja repoista. Lisää tili, niin saat kaikki sen julkiset sovellukset, tai lisää yksittäinen repo. Sovellus näkyy listalla, kun sen uusimmassa julkaisussa on APK-tiedosto.</string>
+    <string name="sources_hint">GitHub-tili, omistaja/repo tai linkki</string>
+    <string name="sources_error_invalid">Anna GitHub-tilin nimi, omistaja/repo tai github.com-linkki.</string>
+    <string name="sources_error_duplicate">Tämä lähde on jo lisätty.</string>
+    <string name="sources_error_not_found">GitHubista ei löytynyt mitään tällä nimellä.</string>
+    <string name="search_hint">Hae sovelluksia</string>
+    <string name="action_clear_search">Tyhjennä haku</string>
+    <string name="list_no_match">Haulla ei löytynyt sovelluksia.</string>
+    <plurals name="count_apps">
+        <item quantity="one">%d sovellus</item>
+        <item quantity="other">%d sovellusta</item>
+    </plurals>
+    <plurals name="count_apps_filtered">
+        <item quantity="one">Näytetään %1$d / %2$d sovellus</item>
+        <item quantity="other">Näytetään %1$d / %2$d sovellusta</item>
+    </plurals>
+    <string name="category_all">Kaikki</string>
+    <string name="category_communication">Viestintä</string>
+    <string name="category_productivity">Tuottavuus</string>
+    <string name="category_tools">Työkalut</string>
+    <string name="category_personalization">Mukauttaminen</string>
+    <string name="category_media">Media</string>
+    <string name="category_games">Pelit</string>
+    <string name="category_travel">Kartat ja matkailu</string>
+    <string name="category_news">Uutiset ja sää</string>
+    <string name="category_system">Järjestelmä</string>
+    <string name="category_health">Terveys ja kunto</string>
+    <string name="category_finance">Raha-asiat</string>
+    <string name="category_education">Opetus</string>
+    <string name="category_other">Muut</string>
+    <string name="detail_category">Kategoria</string>
+    <string name="detail_license">Lisenssi</string>
+    <string name="sources_requirements">Listalle pääsevät vain julkiset repot, joilla on avoimen lähdekoodin lisenssi. Kehittäjä valitsee kategorian lisäämällä repoon GitHubissa aiheen (topic), esimerkiksi arkstore-tools.</string>
+    <string name="sources_error_not_open">Tällä repolla ei ole GitHubin tunnistamaa avoimen lähdekoodin lisenssiä, joten sitä ei voi listata.</string>
+    <plurals name="footer_store_downloads">
+        <item quantity="one">ARK-Store on ladattu %s kerran</item>
+        <item quantity="other">ARK-Store on ladattu %s kertaa</item>
+    </plurals>
+    <string name="sort_button">Järjestys: %1$s</string>
+    <string name="sort_name">Nimi</string>
+    <string name="sort_downloads">Ladatuimmat</string>
+    <string name="sort_stars">Eniten tähtiä</string>
+    <string name="sort_newest">Uusin julkaisu</string>
+    <string name="sort_oldest">Vanhin julkaisu</string>
+</resources>

@@ -1,0 +1,30 @@
+<!--
+  ~ ARK-Store
+  ~ SPDX-License-Identifier: GPL-3.0-or-later
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Paths are @drawable/ic_launcher_monochrome verbatim; the group scales them out of the
+         adaptive-icon safe zone so the mark fills a 24dp notification canvas. -->
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="2"
+        android:scaleY="2">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M49,37 h10 q3,0 3,3 v10 h-16 v-10 q0,-3 3,-3 z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M33,50 L75,50 L68,63 Q54,69 40,63 Z" />
+        <path
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.4"
+            android:strokeLineCap="round"
+            android:fillColor="#00000000"
+            android:pathData="M28,71 Q34.5,66 41,71 Q47.5,76 54,71 Q60.5,66 67,71 Q73.5,76 80,71" />
+    </group>
+</vector>

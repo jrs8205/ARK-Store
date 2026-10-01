@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?><!--
+  ~ ARK-Store
+  ~ SPDX-License-Identifier: GPL-3.0-or-later
+  -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Cabin -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M49,37 h10 q3,0 3,3 v10 h-16 v-10 q0,-3 3,-3 z" />
+    <!-- Cabin window -->
+    <path
+        android:fillColor="#11999E"
+        android:pathData="M54,43.5 m-2.4,0 a2.4,2.4 0 1,1 4.8,0 a2.4,2.4 0 1,1 -4.8,0" />
+    <!-- Hull -->
+    <path
+        android:fillColor="#FFC24B"
+        android:pathData="M33,50 L75,50 L68,63 Q54,69 40,63 Z" />
+    <!-- Wave -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M28,71 Q34.5,66 41,71 Q47.5,76 54,71 Q60.5,66 67,71 Q73.5,76 80,71" />
+</vector>

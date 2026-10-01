@@ -1,0 +1,1 @@
+Asenna ja päivitä Android-sovellukset suoraan GitHub-julkaisuista

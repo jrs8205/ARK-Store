@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">ARK-Store</string>
+
+    <string name="action_refresh">Check for updates</string>
+    <string name="action_update">Update</string>
+    <string name="action_update_all">Update all</string>
+    <string name="action_install">Install</string>
+    <string name="action_open">Open</string>
+    <string name="action_uninstall">Uninstall</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_view_source">View on GitHub</string>
+
+    <plurals name="section_updates">
+        <item quantity="one">%d update available</item>
+        <item quantity="other">%d updates available</item>
+    </plurals>
+    <string name="section_installed">Installed</string>
+    <string name="section_available">Not installed</string>
+
+    <string name="version_update" translatable="false">%1$s → %2$s</string>
+    <string name="footer_checked">Last checked %1$s</string>
+
+    <string name="list_loading">Loading apps…</string>
+    <string name="list_empty">No apps with a published APK were found.</string>
+    <string name="list_empty_error">The app list could not be loaded. Pull down to try again.</string>
+
+    <string name="error_network">Could not reach GitHub. Check your connection and try again.</string>
+    <string name="error_rate_limit">GitHub is limiting requests from this network right now. Try again in an hour.</string>
+
+    <string name="fail_download">The download failed.</string>
+    <string name="fail_invalid_apk">The downloaded file is not a valid app package.</string>
+    <string name="fail_signature">The installed app is signed with a different key, so it cannot be updated in place. Uninstall it first and then install it again. This removes the app\'s data.</string>
+    <string name="fail_install">The installation failed.</string>
+
+    <string name="detail_latest">Latest version</string>
+    <string name="detail_installed">Installed</string>
+    <string name="detail_published">Published</string>
+    <string name="detail_size">Size</string>
+    <string name="detail_package">Package</string>
+    <string name="detail_notes">Release notes</string>
+
+    <string name="channel_updates">App updates</string>
+    <plurals name="notification_updates_title">
+        <item quantity="one">%d app update available</item>
+        <item quantity="other">%d app updates available</item>
+    </plurals>
+    <string name="action_sources">Sources</string>
+    <string name="action_add_source">Add</string>
+    <string name="action_remove">Remove</string>
+    <string name="card_byline" translatable="false">%1$s · %2$s</string>
+    <string name="action_details">Show details</string>
+    <string name="action_remove_source">Remove source %1$s</string>
+    <string name="state_downloading">Downloading</string>
+    <string name="state_installing">Installing</string>
+    <plurals name="stat_stars">
+        <item quantity="one">%d star</item>
+        <item quantity="other">%d stars</item>
+    </plurals>
+    <plurals name="stat_downloads">
+        <item quantity="one">%d download</item>
+        <item quantity="other">%d downloads</item>
+    </plurals>
+    <string name="detail_developer">Developer</string>
+    <string name="detail_stars">Stars</string>
+    <string name="detail_downloads">Downloads</string>
+    <string name="sources_title">Sources</string>
+    <string name="sources_description">Apps are listed from these GitHub accounts and repositories. Add an account to get all of its public apps, or a single repository. An app appears when its latest release has an APK attached.</string>
+    <string name="sources_hint">GitHub account, owner/repo or link</string>
+    <string name="sources_error_invalid">Enter a GitHub account name, owner/repo or a github.com link.</string>
+    <string name="sources_error_duplicate">This source has already been added.</string>
+    <string name="sources_error_not_found">Nothing was found on GitHub with that name.</string>
+    <string name="search_hint">Search apps</string>
+    <string name="action_clear_search">Clear search</string>
+    <string name="list_no_match">No apps match the search.</string>
+    <plurals name="count_apps">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="count_apps_filtered">
+        <item quantity="one">Showing %1$d of %2$d app</item>
+        <item quantity="other">Showing %1$d of %2$d apps</item>
+    </plurals>
+    <string name="category_chip" translatable="false">%1$s (%2$d)</string>
+    <string name="category_all">All</string>
+    <string name="category_communication">Communication</string>
+    <string name="category_productivity">Productivity</string>
+    <string name="category_tools">Tools</string>
+    <string name="category_personalization">Personalization</string>
+    <string name="category_media">Media</string>
+    <string name="category_games">Games</string>
+    <string name="category_travel">Maps &amp; travel</string>
+    <string name="category_news">News &amp; weather</string>
+    <string name="category_system">System</string>
+    <string name="category_health">Health &amp; fitness</string>
+    <string name="category_finance">Finance</string>
+    <string name="category_education">Education</string>
+    <string name="category_other">Other</string>
+    <string name="detail_category">Category</string>
+    <string name="detail_license">License</string>
+    <string name="sources_requirements">Only public repositories with an open-source license are listed. Developers choose the category by adding a topic such as arkstore-tools to the repository on GitHub.</string>
+    <string name="sources_error_not_open">This repository has no open-source license that GitHub recognises, so it cannot be listed.</string>
+    <plurals name="footer_store_downloads">
+        <item quantity="one">ARK-Store has been downloaded %s time</item>
+        <item quantity="other">ARK-Store has been downloaded %s times</item>
+    </plurals>
+    <string name="sort_button">Sort: %1$s</string>
+    <string name="sort_name">Name</string>
+    <string name="sort_downloads">Most downloaded</string>
+    <string name="sort_stars">Most stars</string>
+    <string name="sort_newest">Newest release</string>
+    <string name="sort_oldest">Oldest release</string>
+</resources>

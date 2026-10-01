@@ -1,0 +1,13 @@
+ARK-Store installs and updates apps straight from their GitHub releases. It lists every public repository of the GitHub accounts you add whose latest release has an APK attached, shows which apps are installed and which have a newer version, and installs or updates them with one tap.
+
+• Automatic catalogue: a new app appears as soon as it publishes a release with an APK
+• Add any GitHub account or repository as a source
+• Stars and download counts from GitHub
+• Search and categories
+• Only public, open-source apps are listed
+• Accurate versions read from the APK itself
+• One-tap install and update, with "Update all"
+• Background update check with a notification
+• Warns when an installed app is signed with a different key
+• No accounts, no sign-in, no third-party services
+• English and Finnish

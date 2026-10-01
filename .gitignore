@@ -1,0 +1,21 @@
+# Build output
+.gradle/
+.kotlin/
+build/
+/*/build/
+*.apk
+*.ap_
+*.aab
+
+# Local configuration
+local.properties
+
+# IDE
+*.iml
+/.idea
+.DS_Store
+
+# Signing configuration and keys are never committed
+keystore.properties
+*.jks
+*.keystore
