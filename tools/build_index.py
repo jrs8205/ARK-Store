@@ -314,13 +314,14 @@ def recent_enough(app, today):
 
 
 def examined(state, full_name):
-    """What state holds about a repository: the pushed_at it had when it was last examined
-    and the time of that examination. State written before the time was recorded holds the
-    pushed_at alone; such a repository counts as examined long ago."""
+    """What state holds about a repository: the pushed_at it had when it was last examined,
+    the time of that examination and whether it was listed as a result. State written before
+    the time was recorded holds the pushed_at alone; such a repository counts as examined
+    long ago."""
     value = state.get(full_name)
     if isinstance(value, dict):
-        return value.get("pushedAt"), value.get("examinedAt", 0)
-    return value, 0
+        return value.get("pushedAt"), value.get("examinedAt", 0), bool(value.get("listed"))
+    return value, 0, False
 
 
 def recheck_due(pushed_at, examined_at, today):
@@ -351,11 +352,17 @@ def build_auto_apps(published, previous_auto, state, today):
     changed = []
     due = []
     for repo in candidates:
-        pushed_at, examined_at = examined(state, repo["full_name"])
+        full_name = repo["full_name"]
+        pushed_at, examined_at, listed = examined(state, full_name)
         if pushed_at != (repo.get("pushed_at") or ""):
-            changed.append(repo["full_name"])
+            changed.append(full_name)
+        elif listed and full_name not in previous_auto:
+            # State says the app was listed, yet the previous list does not have it: the two
+            # files did not come from the same run. Leaving the repository alone would keep
+            # the app out until its next push.
+            changed.append(full_name)
         elif recheck_due(pushed_at, examined_at, today):
-            due.append((examined_at, repo["full_name"]))
+            due.append((examined_at, full_name))
     examine = set((changed + [name for _, name in sorted(due)])[:AUTO_MAX_LOOKUPS])
 
     apps = []
@@ -365,11 +372,9 @@ def build_auto_apps(published, previous_auto, state, today):
         full_name = repo["full_name"]
         pushed_at = repo.get("pushed_at") or ""
         previous = previous_auto.get(full_name)
+        looked = False
         if full_name not in examine:
-            # Unchanged, or out of budget for this run: keep what is known. What state says
-            # stays as it was, so a repository that was passed over is looked at next time.
-            if full_name in state:
-                new_state[full_name] = state[full_name]
+            # Unchanged, or out of budget for this run: keep what is known.
             app = previous
             if app:
                 # Stars and topics come with the search result, so they are always current.
@@ -377,24 +382,27 @@ def build_auto_apps(published, previous_auto, state, today):
         else:
             lookups += 1
             try:
+                # Beta versions of these apps are never offered, so a prerelease is not
+                # worth the requests that reading its files takes.
                 app = build_app(
-                    repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400
+                    repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400,
+                    with_prerelease=False,
                 )
-                new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": int(today)}
+                looked = True
             except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
                 print("%s: %s" % (full_name, error), file=sys.stderr)
-                if full_name in state:
-                    new_state[full_name] = state[full_name]
                 app = previous
-            if app:
-                if app.get("betaOnly"):
-                    app = None
-                else:
-                    app.pop("beta", None)
-                    app.pop("skippedPrerelease", None)
-                    app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
-        if app and recent_enough(app, today):
+            if app and looked:
+                app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
+        listed = bool(app) and recent_enough(app, today)
+        if listed:
             apps.append(app)
+        if looked:
+            new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": int(today), "listed": listed}
+        elif full_name in state:
+            # What state says stays as it was, so a repository that was passed over or
+            # could not be reached is looked at next time.
+            new_state[full_name] = state[full_name]
     apps.sort(key=lambda app: app["fullName"].lower())
     print("%d automatically found apps, %d repositories examined" % (len(apps), lookups))
     return apps, new_state
@@ -513,7 +521,7 @@ def is_upgrade(beta_info, stable_info):
     return False
 
 
-def build_app(repo, previous_apks, not_before=None):
+def build_app(repo, previous_apks, not_before=None, with_prerelease=True):
     """Returns the index entry of a repository, or None when it has nothing to install.
 
     With not_before, a repository whose newest full release was published earlier than that
@@ -523,7 +531,8 @@ def build_app(repo, previous_apks, not_before=None):
     prerelease that upgrades it, that is added under "beta" for users who have asked for beta
     versions. One that does not is noted under "skippedPrerelease", only so that its APKs are
     not examined again on the next run. A repository with nothing but a prerelease gets an
-    entry marked "betaOnly", built from it.
+    entry marked "betaOnly", built from it. Without with_prerelease, prereleases are not
+    looked at.
     """
     full_name = repo["full_name"]
     page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
@@ -542,6 +551,8 @@ def build_app(repo, previous_apks, not_before=None):
     # release; is_upgrade makes sure.
     newest = releases[0] if releases else None
     prerelease = newest if newest is not None and newest.get("prerelease") else None
+    if not with_prerelease:
+        prerelease = None
 
     stable_info = release_info(stable, previous_apks) if stable else None
     beta_info = release_info(prerelease, previous_apks) if prerelease else None
@@ -581,27 +592,43 @@ def known_apks(app):
     return {apk["id"]: apk for apk in apks}
 
 
+def load_previous(path, keys):
+    """The entries under keys in a file written by an earlier run, by repository; None when
+    the file is missing or unreadable."""
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as file:
+            loaded = json.load(file)
+        return {app["fullName"]: app for key in keys for app in loaded.get(key, [])}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        print("%s unreadable, starting fresh" % path, file=sys.stderr)
+        return None
+
+
+def write_json(path, value, **options):
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(value, file, separators=(",", ":"), **options)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--previous", help="the previous index, to reuse what is known about unchanged APKs")
+    parser.add_argument("--previous-auto", help="the previous list of automatically found apps")
     parser.add_argument("--state", help="what earlier runs learnt about automatically found repositories; "
                                         "read if present and rewritten")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--auto-output", required=True,
+                        help="where the automatically found apps go; they are many and wanted by few, "
+                             "so the app downloads them separately and only on request")
     arguments = parser.parse_args()
 
-    previous_apps = {}
-    previous_auto = {}
-    if arguments.previous and os.path.exists(arguments.previous):
-        try:
-            with open(arguments.previous, encoding="utf-8") as file:
-                loaded = json.load(file)
-                previous_apps = {
-                    app["fullName"]: app
-                    for app in loaded.get("apps", []) + loaded.get("betaApps", [])
-                }
-                previous_auto = {app["fullName"]: app for app in loaded.get("autoApps", [])}
-        except (ValueError, KeyError, TypeError):
-            print("previous index unreadable, starting fresh", file=sys.stderr)
+    previous_apps = load_previous(arguments.previous, ("apps", "betaApps")) or {}
+    previous_auto = load_previous(arguments.previous_auto, ("autoApps",))
+    if previous_auto is None:
+        # An index built before the list had a file of its own carries it itself.
+        previous_auto = load_previous(arguments.previous, ("autoApps",)) or {}
 
     state = {}
     if arguments.state and os.path.exists(arguments.state):
@@ -645,22 +672,23 @@ def main():
         print("automatic discovery failed: %s" % error, file=sys.stderr)
         auto_apps = [app for app in previous_auto.values() if recent_enough(app, today)]
 
-    index = {
+    generated_at = int(time.time() * 1000)
+    write_json(arguments.output, {
         "version": 1,
-        "generatedAt": int(time.time() * 1000),
+        "generatedAt": generated_at,
         # Apps with a full release. Kept free of beta-only entries so that every version of
         # the store can read this list.
         "apps": [app for app in apps if not app.get("betaOnly")],
         "betaApps": [app for app in apps if app.get("betaOnly")],
-        # Apps found by searching GitHub rather than published by their developers.
+    }, ensure_ascii=False)
+    # Apps found by searching GitHub rather than published by their developers.
+    write_json(arguments.auto_output, {
+        "version": 1,
+        "generatedAt": generated_at,
         "autoApps": auto_apps,
-    }
-    os.makedirs(os.path.dirname(os.path.abspath(arguments.output)), exist_ok=True)
-    with open(arguments.output, "w", encoding="utf-8") as file:
-        json.dump(index, file, ensure_ascii=False, separators=(",", ":"))
+    }, ensure_ascii=False)
     if arguments.state:
-        with open(arguments.state, "w", encoding="utf-8") as file:
-            json.dump(state, file, separators=(",", ":"))
+        write_json(arguments.state, state)
     print("%d apps, %d repositories failed" % (len(apps), failed))
 
 

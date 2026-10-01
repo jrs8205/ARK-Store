@@ -196,6 +196,16 @@ class PrereleaseTest(unittest.TestCase):
         self.assertEqual(app["tag"], "v2")
         self.assertNotIn("beta", app)
 
+    def test_prerelease_is_left_alone_when_not_wanted(self):
+        with mock.patch.object(build_index, "api", return_value=self.PRERELEASE_FIRST), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 1, "1")) as reader:
+            app = build_index.build_app(REPO, {}, with_prerelease=False)
+        self.assertEqual(app["tag"], "v1")
+        self.assertNotIn("beta", app)
+        self.assertNotIn("skippedPrerelease", app)
+        self.assertEqual(reader.call_count, 1)
+
     def test_repository_with_only_a_prerelease_is_beta_only(self):
         app = self.build([
             {"tag_name": "v1-beta.1", "prerelease": True, "assets": [asset("b.apk", 2)]},
@@ -241,23 +251,23 @@ class AutoAppsTest(unittest.TestCase):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry()])
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
         self.assertEqual(len(apps[0]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
-        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
+        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
 
     def test_old_release_is_left_out_but_remembered(self):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry(published="2025-01-01T00:00:00Z")])
         self.assertEqual(apps, [])
-        self.assertIn("other/app", state)
+        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=False)})
 
     # The candidate was pushed to about 38 hours before NOW.
     PUSHED = "2026-09-20T00:00:00Z"
     HOUR = 3600
 
-    def examined(self, at, pushed=PUSHED):
-        return {"pushedAt": pushed, "examinedAt": at}
+    def examined(self, at, pushed=PUSHED, listed=False):
+        return {"pushedAt": pushed, "examinedAt": at, "listed": listed}
 
     def test_unchanged_repository_is_not_asked_about_again(self):
         previous = {"other/app": self.entry()}
-        known = self.examined(self.NOW - self.HOUR)
+        known = self.examined(self.NOW - self.HOUR, listed=True)
         apps, state, build_app = self.run_auto(
             [self.candidate()], [], previous=previous, state={"other/app": known})
         build_app.assert_not_called()
@@ -270,7 +280,7 @@ class AutoAppsTest(unittest.TestCase):
             [self.candidate()], [self.entry()], state={"other/app": known})
         self.assertEqual(build_app.call_count, 1)
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
-        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
+        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
 
     def test_repository_examined_right_after_a_push_is_examined_again(self):
         # The release's APK may not have been attached yet when it was first looked at.
@@ -284,7 +294,19 @@ class AutoAppsTest(unittest.TestCase):
         _, state, build_app = self.run_auto(
             [self.candidate()], [self.entry()], state={"other/app": self.PUSHED})
         self.assertEqual(build_app.call_count, 1)
-        self.assertEqual(state, {"other/app": self.examined(self.NOW)})
+        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
+
+    def test_listed_app_missing_from_the_previous_list_is_examined_again(self):
+        # State and the list did not come from the same run.
+        known = self.examined(self.NOW - self.HOUR, listed=True)
+        apps, _, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], previous={}, state={"other/app": known})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+
+    def test_prereleases_are_not_looked_at(self):
+        _, _, build_app = self.run_auto([self.candidate()], [self.entry()])
+        self.assertFalse(build_app.call_args.kwargs["with_prerelease"])
 
     def test_changed_repositories_are_examined_before_those_merely_due(self):
         limit = build_index.AUTO_MAX_LOOKUPS
@@ -327,23 +349,64 @@ class AutoAppsTest(unittest.TestCase):
 
 
 class MainTest(unittest.TestCase):
-    def test_network_failure_keeps_the_previously_listed_app(self):
-        known = {"fullName": "owner/app", "tag": "v1", "apks": [{"id": 7}]}
+    KNOWN = {"fullName": "owner/app", "tag": "v1", "apks": [{"id": 7}]}
+    FOUND = {"fullName": "other/app", "tag": "v3", "publishedAt": "2026-09-01T00:00:00Z",
+             "releaseNotes": "", "apks": [{"id": 9}], "stars": 1, "topics": []}
+
+    def candidate(self):
+        return dict(REPO, full_name="other/app", html_url="https://github.com/other/app",
+                    topics=["android"], stargazers_count=50)
+
+    @staticmethod
+    def api(path):
+        if path.startswith("/repos/other/app/"):
+            raise urllib.error.URLError("down")
+        return release(asset_id=8)
+
+    def run_main(self, previous, candidates=(), previous_auto=None):
+        """Runs main while GitHub cannot be reached, so that only what the previous files
+        hold can be listed. Returns the index and the list of automatically found apps."""
         with tempfile.TemporaryDirectory() as directory:
-            previous = os.path.join(directory, "previous.json")
-            output = os.path.join(directory, "index.json")
-            with open(previous, "w", encoding="utf-8") as file:
-                json.dump({"apps": [known]}, file)
+            paths = {name: os.path.join(directory, name)
+                     for name in ("previous.json", "previous-auto.json", "index.json", "auto.json")}
+            with open(paths["previous.json"], "w", encoding="utf-8") as file:
+                json.dump(previous, file)
+            if previous_auto is not None:
+                with open(paths["previous-auto.json"], "w", encoding="utf-8") as file:
+                    json.dump(previous_auto, file)
+            argv = ["build_index.py", "--previous", paths["previous.json"],
+                    "--previous-auto", paths["previous-auto.json"],
+                    "--output", paths["index.json"], "--auto-output", paths["auto.json"]]
             with mock.patch.object(build_index, "discover", return_value=[REPO]), \
-                    mock.patch.object(build_index, "discover_candidates", return_value=[]), \
-                    mock.patch.object(build_index, "api", return_value=release(asset_id=8)), \
+                    mock.patch.object(build_index, "discover_candidates",
+                                      return_value=list(candidates)), \
+                    mock.patch.object(build_index, "api", side_effect=self.api), \
                     mock.patch.object(build_index, "read_manifest",
                                       side_effect=OSError("range request not honoured")), \
-                    mock.patch("sys.argv", ["build_index.py", "--previous", previous,
-                                            "--output", output]):
+                    mock.patch.object(build_index.time, "time", return_value=1790000000), \
+                    mock.patch("sys.argv", argv):
                 build_index.main()
-            with open(output, encoding="utf-8") as file:
-                self.assertEqual(json.load(file)["apps"], [known])
+            with open(paths["index.json"], encoding="utf-8") as file:
+                index = json.load(file)
+            with open(paths["auto.json"], encoding="utf-8") as file:
+                auto = json.load(file)
+        return index, auto
+
+    def test_network_failure_keeps_the_previously_listed_app(self):
+        index, _ = self.run_main({"apps": [self.KNOWN]})
+        self.assertEqual(index["apps"], [self.KNOWN])
+
+    def test_automatically_found_apps_go_to_a_file_of_their_own(self):
+        index, auto = self.run_main(
+            {"apps": [self.KNOWN]}, [self.candidate()], previous_auto={"autoApps": [self.FOUND]})
+        self.assertNotIn("autoApps", index)
+        self.assertEqual([app["fullName"] for app in auto["autoApps"]], ["other/app"])
+        self.assertEqual(auto["generatedAt"], index["generatedAt"])
+
+    def test_previous_list_inside_an_old_index_is_still_used(self):
+        _, auto = self.run_main(
+            {"apps": [self.KNOWN], "autoApps": [self.FOUND]}, [self.candidate()])
+        self.assertEqual([app["fullName"] for app in auto["autoApps"]], ["other/app"])
 
 
 if __name__ == "__main__":
