@@ -37,13 +37,22 @@ jobs:
       - name: Test the index builder
         run: python3 -m unittest discover -s tools
 
+      # One clone rather than one download per file, so that the files come from the same run.
+      # Only a branch that does not exist yet means starting afresh. A clone that fails for
+      # any other reason stops the run: building without the previous index would publish a
+      # much shorter one.
       - name: Fetch the previous index
         run: |
-          mkdir -p previous
-          curl -fsSL -o previous/index.json \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/index/index.json" || true
-          curl -fsSL -o previous/state.json \
-            "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/index/state.json" || true
+          url="https://github.com/${GITHUB_REPOSITORY}.git"
+          found=0
+          git ls-remote --exit-code --heads "$url" index > /dev/null || found=$?
+          if [ "$found" -eq 0 ]; then
+            git clone -q --depth 1 --branch index "$url" previous
+          elif [ "$found" -eq 2 ]; then
+            mkdir -p previous
+          else
+            exit "$found"
+          fi
 
       - name: Build the index
         env:
@@ -52,7 +61,8 @@ jobs:
           mkdir -p out
           if [ -f previous/state.json ]; then cp previous/state.json out/state.json; fi
           python3 tools/build_index.py --previous previous/index.json \
-            --state out/state.json --output out/index.json
+            --previous-auto previous/auto.json --state out/state.json \
+            --output out/index.json --auto-output out/auto.json
 
       - name: Publish to the index branch
         run: |
@@ -60,7 +70,7 @@ jobs:
           git init -q -b index
           git config user.name "${GITHUB_REPOSITORY_OWNER}"
           git config user.email "${GITHUB_REPOSITORY_OWNER}@users.noreply.github.com"
-          git add index.json state.json
+          git add index.json auto.json state.json
           git commit -q -m "Update the store index"
           # The branch holds only the newest index, so its history never grows.
           git push -q --force \
