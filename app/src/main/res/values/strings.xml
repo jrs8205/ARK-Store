@@ -147,4 +147,11 @@
     <string name="auto_switch">Show automatically found apps</string>
     <string name="auto_description">Also list open-source Android apps found by searching GitHub. Their developers have not published them to ARK-Store, and nobody has checked them. Only actively developed apps with a recent release are included.</string>
     <string name="auto_detail">This app was found by searching GitHub. Its developer has not published it to ARK-Store.</string>
+    <string name="install_ready_title">%1$s is ready to install</string>
+    <string name="install_ready_text">Tap to continue</string>
+    <string name="newer_version_note">A newer version than the one offered here is installed.</string>
+    <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
+    <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
+    <string name="channel_installs">Ready to install</string>
+    <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
 </resources>

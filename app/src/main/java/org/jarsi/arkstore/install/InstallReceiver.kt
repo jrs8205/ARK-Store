@@ -12,6 +12,7 @@ class InstallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_STATUS) return
         val repo = intent.getStringExtra(EXTRA_REPO) ?: return
+        val appContext = context.applicationContext
         val status = intent.getIntExtra(
             PackageInstaller.EXTRA_STATUS,
             PackageInstaller.STATUS_FAILURE
@@ -25,9 +26,13 @@ class InstallReceiver : BroadcastReceiver() {
                 intent.getParcelableExtra(Intent.EXTRA_INTENT)
             }
             if (confirm != null) {
-                InstallManager.onConfirmationRequired(repo, confirm)
+                // The system puts the session's id on every status it reports.
+                val sessionId =
+                    intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, repo.hashCode())
+                InstallManager.onConfirmationRequired(appContext, repo, sessionId, confirm)
             } else {
                 InstallManager.onSessionResult(
+                    appContext,
                     repo,
                     PackageInstaller.STATUS_FAILURE,
                     null
@@ -36,7 +41,9 @@ class InstallReceiver : BroadcastReceiver() {
             return
         }
 
+        InstallService.cancelReady(appContext, repo)
         InstallManager.onSessionResult(
+            appContext,
             repo,
             status,
             intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)

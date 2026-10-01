@@ -101,7 +101,12 @@ data class Catalog(
     val apps: List<StoreApp>,
     val checkedAt: Long,
     /** How many times the store's own APKs have been downloaded; null when unknown. */
-    val storeDownloads: Long? = null
+    val storeDownloads: Long? = null,
+    /**
+     * For each repository with a prerelease that upgrades its full release, the version code
+     * of that prerelease. It tells an installed beta apart from any other newer version.
+     */
+    val betaVersions: Map<String, Long> = emptyMap()
 ) {
     companion object {
         val EMPTY = Catalog(emptyList(), 0)

@@ -8,7 +8,7 @@ class ArkStoreApp : Application() {
     override fun onCreate() {
         super.onCreate()
         UpdateCheckWorker.createChannel(this)
-        InstallService.createChannel(this)
+        InstallService.createChannels(this)
         UpdateCheckWorker.schedule(this)
     }
 }

@@ -141,4 +141,11 @@
     <string name="auto_switch">Näytä automaattisesti löydetyt sovellukset</string>
     <string name="auto_description">Listaa myös GitHubista haulla löydetyt avoimen lähdekoodin Android-sovellukset. Niiden kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä. Mukana ovat vain aktiivisesti kehitetyt sovellukset, joilla on tuore julkaisu.</string>
     <string name="auto_detail">Tämä sovellus löytyi GitHubista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="install_ready_title">%1$s on valmis asennettavaksi</string>
+    <string name="install_ready_text">Jatka napauttamalla</string>
+    <string name="newer_version_note">Asennettuna on uudempi versio kuin täällä tarjottu.</string>
+    <string name="other_signer_note">Asennettu muualta. ARK-Store ei voi päivittää sitä.</string>
+    <string name="other_signer_detail">Asennettu sovellus on allekirjoitettu eri avaimella kuin täällä tarjottu versio, yleensä siksi, että se on asennettu toisesta kaupasta. Android ei anna ARK-Storen päivittää sitä. Jos haluat vaihtaa tähän versioon, poista sovellus ensin ja asenna se sitten täältä. Poisto tyhjentää sovelluksen tiedot.</string>
+    <string name="channel_installs">Valmiina asennettavaksi</string>
+    <string name="channel_installs_description">Kertoo, kun ladattu sovellus odottaa, että vahvistat asennuksen</string>
 </resources>

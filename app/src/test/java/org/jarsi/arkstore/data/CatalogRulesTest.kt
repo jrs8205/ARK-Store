@@ -15,29 +15,7 @@ class CatalogRulesTest {
         versionCode: Long = 1,
         prerelease: Boolean = false,
         auto: Boolean = false
-    ) = StoreApp(
-        fullName = fullName,
-        description = "",
-        stars = 0,
-        category = Categories.OTHER,
-        license = "MIT",
-        downloads = 0,
-        repoUrl = "https://github.com/$fullName",
-        prerelease = prerelease,
-        auto = auto,
-        tag = "v$versionCode",
-        releaseName = "",
-        releaseNotes = "",
-        releaseUrl = "",
-        publishedAt = "",
-        apkName = "app.apk",
-        apkUrl = "https://example.invalid/app.apk",
-        apkSize = 1,
-        assetId = versionCode,
-        packageName = packageName,
-        versionCode = versionCode,
-        versionName = null
-    )
+    ) = testApp(fullName, packageName, versionCode, prerelease, auto)
 
     @Test
     fun offersThePrereleaseOnlyWhenBetaVersionsAreWanted() {

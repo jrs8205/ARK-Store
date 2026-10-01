@@ -10,6 +10,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,9 +73,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -126,6 +135,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    var searchFocused by remember { mutableStateOf(false) }
+    var searchBounds by remember { mutableStateOf(Rect.Zero) }
     val preferences = remember { context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE) }
     var sortOrder by remember {
         mutableStateOf(
@@ -137,6 +149,15 @@ fun StoreScreen(viewModel: StoreViewModel) {
     InstallHaptics(installs)
 
     Scaffold(
+        // The search field gives up the keyboard as soon as the user touches anything else.
+        // Watching every touch from here covers each button, chip and list without their
+        // having to know about it, and leaves navigation with a keyboard alone.
+        modifier = Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
@@ -200,6 +221,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
+                        .onGloballyPositioned { searchBounds = it.boundsInRoot() }
+                        .onFocusChanged { searchFocused = it.hasFocus }
                 )
                 CategoryChips(
                     categories = categories,
@@ -216,7 +239,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 modifier = Modifier.fillMaxSize()
             ) {
                 val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                val installed = visible.filter { it.status == AppStatus.UP_TO_DATE }
+                val installed = visible.filter {
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER
+                }
                 val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
 
                 LazyColumn(
@@ -375,7 +400,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
         ModalBottomSheet(onDismissRequest = { selectedRepo = null }) {
-            DetailsSheet(selected)
+            DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
         }
     }
     if (showSources) {
@@ -517,7 +542,7 @@ private fun AppCard(
                         AppStatus.NOT_INSTALLED -> Button(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
-                        AppStatus.UP_TO_DATE -> {
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -548,9 +573,15 @@ private fun AppCard(
                 )
             }
 
-            if (row.newerInstalled) {
+            val note = when {
+                row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
+                row.betaInstalled -> R.string.newer_installed_note
+                row.newerInstalled -> R.string.newer_version_note
+                else -> null
+            }
+            if (note != null) {
                 Text(
-                    text = stringResource(R.string.newer_installed_note),
+                    text = stringResource(note),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp)
@@ -713,7 +744,7 @@ private fun AppIcon(name: String, packageName: String?, installed: Boolean) {
 }
 
 @Composable
-private fun DetailsSheet(row: AppRow) {
+private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
     val context = LocalContext.current
     val app = row.app
 
@@ -799,7 +830,19 @@ private fun DetailsSheet(row: AppRow) {
             }
         }
 
-        if (row.newerInstalled && app.packageName != null) {
+        if (row.status == AppStatus.OTHER_SIGNER) {
+            Text(
+                text = stringResource(R.string.other_signer_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            // The way out when a later release is signed with the right key after all: the
+            // attempt compares the keys again and forgets the conflict when they match.
+            OutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_retry))
+            }
+        }
+        if (row.betaInstalled && app.packageName != null) {
             ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
         }
     }
@@ -1241,6 +1284,7 @@ private fun SortMenu(selected: SortOrder, onSelect: (SortOrder) -> Unit) {
 @Composable
 private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -1268,7 +1312,9 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
                 }
             }
         },
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        // The list is filtered while typing, so the search key only puts the keyboard away.
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
     )
 }
 

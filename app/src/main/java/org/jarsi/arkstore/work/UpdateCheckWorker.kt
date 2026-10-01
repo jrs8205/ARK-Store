@@ -4,9 +4,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.edit
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -21,7 +21,34 @@ import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.RateLimitedException
+import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.ui.MainActivity
+
+/** A request that timed out, or too many of them. */
+private val PASSING_CODES = setOf(408, 429)
+
+/**
+ * Whether trying again soon is pointless: a used-up quota lasts until the hour is out, and a
+ * source that no longer exists or that GitHub has blocked stays that way. The next scheduled
+ * run looks again. A server error passes, and so does GitHub asking to slow down, which it
+ * does by saying when to come back.
+ */
+internal fun isLasting(failure: IOException): Boolean = when (failure) {
+    is RateLimitedException -> true
+    is HttpStatusException ->
+        failure.code in 400..499 && failure.code !in PASSING_CODES && !failure.retryAfter
+    else -> false
+}
+
+/**
+ * What identifies one waiting update: the repository's full name, since repositories of
+ * different owners can share a name, and the version offered.
+ */
+internal fun announcement(app: StoreApp): String = "${app.fullName.lowercase()}@${app.versionCode}"
+
+/** Whether [waiting] holds an update that is not among those already [announced]. */
+internal fun newToAnnounce(waiting: Set<String>, announced: Set<String>): Boolean =
+    (waiting - announced).isNotEmpty()
 
 /** Periodically refreshes the catalogue and tells the user when updates are waiting. */
 class UpdateCheckWorker(context: Context, params: WorkerParameters) :
@@ -38,18 +65,19 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         // A refresh that failed for one source has still updated the others, so whatever the
         // catalogue holds now is worth acting on.
         val updates = InstalledApps.countUpdates(applicationContext, repository.catalog.value.apps)
-        if (updates.isNotEmpty()) {
+        val waiting = updates.map(::announcement).toSet()
+        val preferences = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val announced = preferences.getStringSet(PREF_ANNOUNCED, null).orEmpty()
+        // Each update is announced once. A check that fails is retried, and every later check
+        // finds the same updates again; a notification the user has dismissed must not come
+        // back because of that.
+        if (newToAnnounce(waiting, announced)) {
             notify(applicationContext, updates.map { it.repo })
-        } else if (failure == null) {
+        } else if (waiting.isEmpty() && failure == null) {
             NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
         }
-        return when (failure) {
-            null -> Result.success()
-            // Retrying soon cannot fix a source that no longer exists or a used-up quota;
-            // the next scheduled run will look again.
-            is HttpStatusException, is RateLimitedException -> Result.success()
-            else -> Result.retry()
-        }
+        preferences.edit { putStringSet(PREF_ANNOUNCED, waiting) }
+        return if (failure == null || isLasting(failure)) Result.success() else Result.retry()
     }
 
     companion object {
@@ -57,6 +85,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         private const val CHANNEL_ID = "updates"
         private const val NOTIFICATION_ID = 1
         private const val INTERVAL_HOURS = 4L
+        private const val PREFS = "updates"
+        private const val PREF_ANNOUNCED = "announced"
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(
@@ -102,7 +132,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             val open = PendingIntent.getActivity(
                 context,
                 0,
-                Intent(context, MainActivity::class.java),
+                MainActivity.openIntent(context),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)

@@ -6,7 +6,12 @@ import java.net.HttpURLConnection
 import java.net.URL
 import org.jarsi.arkstore.BuildConfig
 
-class HttpStatusException(val code: Int) : IOException("HTTP $code")
+/**
+ * A response other than the one asked for. [retryAfter] tells that the server said when to
+ * come back, which is how GitHub asks a client that is going too fast to slow down.
+ */
+class HttpStatusException(val code: Int, val retryAfter: Boolean = false) :
+    IOException("HTTP $code")
 
 /** GitHub refused the request because the hourly quota of anonymous calls is used up. */
 class RateLimitedException(val resetAtMillis: Long) : IOException("GitHub rate limit reached")
@@ -39,7 +44,7 @@ object Http {
                 val reset = connection.getHeaderField("x-ratelimit-reset")?.toLongOrNull() ?: 0
                 throw RateLimitedException(reset * 1000)
             }
-            throw HttpStatusException(code)
+            throw HttpStatusException(code, connection.getHeaderField("retry-after") != null)
         } finally {
             connection.disconnect()
         }
@@ -60,18 +65,6 @@ object Http {
                 304 -> null to etag
                 else -> throw HttpStatusException(connection.responseCode)
             }
-        } finally {
-            connection.disconnect()
-        }
-    }
-
-    /** Fetches a plain text document that is not served by the GitHub API. */
-    @Throws(IOException::class)
-    fun getText(url: String): String {
-        val connection = open(url)
-        try {
-            if (connection.responseCode != 200) throw HttpStatusException(connection.responseCode)
-            return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
         } finally {
             connection.disconnect()
         }

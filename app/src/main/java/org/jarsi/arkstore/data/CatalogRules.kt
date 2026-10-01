@@ -17,11 +17,14 @@ internal object CatalogRules {
     fun offered(stable: StoreApp?, beta: StoreApp?, includeBeta: Boolean): StoreApp? {
         if (!includeBeta || beta == null) return stable
         if (stable == null) return beta
-        val upgrade = beta.packageName != null &&
+        return if (upgrades(beta, stable)) beta else stable
+    }
+
+    /** Whether [beta] is the same package as [stable] with a higher version code. */
+    fun upgrades(beta: StoreApp, stable: StoreApp): Boolean =
+        beta.packageName != null &&
             beta.packageName == stable.packageName &&
             beta.versionCode > stable.versionCode
-        return if (upgrade) beta else stable
-    }
 
     /**
      * [app] as the user is to see it, or null when it is hidden. An automatically found app is

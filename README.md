@@ -120,6 +120,9 @@ These limits are constants at the top of `tools/build_index.py`. A developer who
 rather not be listed this way can remove the `android` topics the search looks for; one who
 wants to be listed for everyone adds the `arkstore` topic.
 
+The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
+only while the setting is on. Beta versions of these apps are not offered.
+
 ## Why only public and licensed apps
 
 Those two requirements are the store's only gatekeeping, and they are checked automatically
@@ -164,8 +167,9 @@ The debug build installs as `org.jarsi.arkstore.debug` next to a release build.
 
 The store topic, the index location, the account that is a source on every new installation
 and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER` and
-`STORE_REPO` build config fields in `app/build.gradle.kts`. The index is built with
-`python3 tools/build_index.py --output index.json`.
+`STORE_REPO` build config fields in `app/build.gradle.kts`; `AUTO_INDEX_URL` is where the
+automatically found apps are listed. The index is built with
+`python3 tools/build_index.py --output index.json --auto-output auto.json`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:
