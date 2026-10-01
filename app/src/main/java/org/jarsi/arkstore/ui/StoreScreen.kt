@@ -3,11 +3,15 @@ package org.jarsi.arkstore.ui
 import android.content.Context
 import android.icu.text.CompactDecimalFormat
 import android.content.Intent
+import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,11 +32,13 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -48,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -66,14 +73,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -89,6 +104,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import java.time.ZoneId
@@ -98,12 +114,14 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
+import org.jarsi.arkstore.work.UpdateCheckWorker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,10 +130,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
+    var searchFocused by remember { mutableStateOf(false) }
+    var searchBounds by remember { mutableStateOf(Rect.Zero) }
     val preferences = remember { context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE) }
     var sortOrder by remember {
         mutableStateOf(
@@ -127,6 +149,15 @@ fun StoreScreen(viewModel: StoreViewModel) {
     InstallHaptics(installs)
 
     Scaffold(
+        // The search field gives up the keyboard as soon as the user touches anything else.
+        // Watching every touch from here covers each button, chip and list without their
+        // having to know about it, and leaves navigation with a keyboard alone.
+        modifier = Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
+            }
+        },
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.app_name)) },
@@ -140,6 +171,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         Icon(
                             painter = painterResource(R.drawable.ic_sources),
                             contentDescription = stringResource(R.string.action_sources)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            showSettings = true
+                        }
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_settings),
+                            contentDescription = stringResource(R.string.action_settings)
                         )
                     }
                     IconButton(
@@ -179,6 +221,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
+                        .onGloballyPositioned { searchBounds = it.boundsInRoot() }
+                        .onFocusChanged { searchFocused = it.hasFocus }
                 )
                 CategoryChips(
                     categories = categories,
@@ -195,7 +239,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 modifier = Modifier.fillMaxSize()
             ) {
                 val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                val installed = visible.filter { it.status == AppStatus.UP_TO_DATE }
+                val installed = visible.filter {
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER
+                }
                 val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
 
                 LazyColumn(
@@ -354,7 +400,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
         ModalBottomSheet(onDismissRequest = { selectedRepo = null }) {
-            DetailsSheet(selected)
+            DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
         }
     }
     if (showSources) {
@@ -365,6 +411,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
             }
         ) {
             SourcesSheet(viewModel)
+        }
+    }
+    if (showSettings) {
+        ModalBottomSheet(onDismissRequest = { showSettings = false }) {
+            SettingsSheet(viewModel)
         }
     }
 }
@@ -458,6 +509,9 @@ private fun AppCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer
         ),
+        // The fill alone is too close to the background to show where a card ends in bright
+        // light, so the edge is drawn as well.
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier
             .fillMaxWidth()
             .clip(CardDefaults.shape)
@@ -469,6 +523,8 @@ private fun AppCard(
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.repo, style = MaterialTheme.typography.titleMedium)
+                    if (app.prerelease) Badge(stringResource(R.string.badge_beta))
+                    if (app.auto) Badge(stringResource(R.string.badge_auto))
                     Text(
                         text = stringResource(R.string.card_byline, app.owner, versionLine(row)),
                         style = MaterialTheme.typography.bodyMedium,
@@ -486,7 +542,7 @@ private fun AppCard(
                         AppStatus.NOT_INSTALLED -> Button(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
-                        AppStatus.UP_TO_DATE -> {
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -513,6 +569,21 @@ private fun AppCard(
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 12.dp)
+                )
+            }
+
+            val note = when {
+                row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
+                row.betaInstalled -> R.string.newer_installed_note
+                row.newerInstalled -> R.string.newer_version_note
+                else -> null
+            }
+            if (note != null) {
+                Text(
+                    text = stringResource(note),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp)
                 )
             }
@@ -673,7 +744,7 @@ private fun AppIcon(name: String, packageName: String?, installed: Boolean) {
 }
 
 @Composable
-private fun DetailsSheet(row: AppRow) {
+private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
     val context = LocalContext.current
     val app = row.app
 
@@ -698,6 +769,14 @@ private fun DetailsSheet(row: AppRow) {
         }
 
         Spacer(Modifier.height(16.dp))
+        if (app.auto) {
+            Text(
+                text = stringResource(R.string.auto_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(8.dp))
+        }
         DetailLine(stringResource(R.string.detail_developer), app.owner)
         DetailLine(stringResource(R.string.detail_category), stringResource(categoryLabel(app.category)))
         if (app.license.isNotBlank()) {
@@ -705,7 +784,14 @@ private fun DetailsSheet(row: AppRow) {
         }
         DetailLine(stringResource(R.string.detail_stars), fullNumber(app.stars.toLong()))
         DetailLine(stringResource(R.string.detail_downloads), fullNumber(app.downloads))
-        DetailLine(stringResource(R.string.detail_latest), app.displayVersion)
+        DetailLine(
+            stringResource(R.string.detail_latest),
+            if (app.prerelease) {
+                stringResource(R.string.version_beta, app.displayVersion)
+            } else {
+                app.displayVersion
+            }
+        )
         row.installed?.let {
             DetailLine(
                 stringResource(R.string.detail_installed),
@@ -743,6 +829,74 @@ private fun DetailsSheet(row: AppRow) {
                 }
             }
         }
+
+        if (row.status == AppStatus.OTHER_SIGNER) {
+            Text(
+                text = stringResource(R.string.other_signer_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            // The way out when a later release is signed with the right key after all: the
+            // attempt compares the keys again and forgets the conflict when they match.
+            OutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_retry))
+            }
+        }
+        if (row.betaInstalled && app.packageName != null) {
+            ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
+        }
+    }
+}
+
+/**
+ * Explains how to get from an installed beta back to the stable version. Android does not
+ * install an older version over a newer one, so the way back is to remove the app first.
+ */
+@Composable
+private fun ReturnToStable(packageName: String, isStore: Boolean) {
+    val context = LocalContext.current
+    var confirming by rememberSaveable { mutableStateOf(false) }
+
+    Text(
+        text = stringResource(R.string.stable_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp, bottom = 4.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(
+            if (isStore) R.string.stable_description_store else R.string.stable_description
+        ),
+        style = MaterialTheme.typography.bodyMedium
+    )
+    if (!isStore) {
+        OutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+            Text(stringResource(R.string.action_return_to_stable))
+        }
+    }
+
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.stable_confirm_title)) },
+            text = { Text(stringResource(R.string.stable_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        uninstall(context, packageName)
+                    }
+                ) {
+                    Text(stringResource(R.string.action_uninstall))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
     }
 }
 
@@ -778,6 +932,168 @@ private fun versionLine(row: AppRow): String {
         )
         installed != null -> installed.versionName ?: row.app.displayVersion
         else -> row.app.displayVersion
+    }
+}
+
+/** A short label on a card: a prerelease, or an app nobody published to the store. */
+@Composable
+private fun Badge(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onTertiaryContainer,
+        modifier = Modifier
+            .padding(top = 2.dp, bottom = 2.dp)
+            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
+}
+
+@Composable
+private fun SettingsSheet(viewModel: StoreViewModel) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .navigationBarsPadding()
+            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.semantics { heading() }
+        )
+        BetaSwitch(viewModel)
+        Text(
+            text = stringResource(R.string.beta_return_note),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        AutoSwitch(viewModel)
+        NotificationSetting()
+        Text(
+            text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 24.dp)
+        )
+    }
+}
+
+/**
+ * Shows whether update notifications can reach the user and leads to the system page where they
+ * are turned on. The system decides this (permission, app and channel switches), so the app
+ * reports the state instead of keeping a switch of its own that could disagree with it.
+ */
+@Composable
+private fun NotificationSetting() {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    var enabled by remember { mutableStateOf(UpdateCheckWorker.notificationsEnabled(context)) }
+    // The user may come back from the system settings with a different answer.
+    LifecycleResumeEffect(Unit) {
+        enabled = UpdateCheckWorker.notificationsEnabled(context)
+        onPauseOrDispose {}
+    }
+
+    Text(
+        text = stringResource(R.string.notifications_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(
+            if (enabled) R.string.notifications_on else R.string.notifications_off
+        ),
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    OutlinedButton(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            runCatching {
+                context.startActivity(
+                    Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                )
+            }
+        },
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        Text(stringResource(R.string.action_notification_settings))
+    }
+}
+
+@Composable
+private fun BetaSwitch(viewModel: StoreViewModel) {
+    val includeBeta by viewModel.includeBeta.collectAsStateWithLifecycle()
+    SettingSwitch(
+        heading = stringResource(R.string.beta_title),
+        label = stringResource(R.string.beta_switch),
+        description = stringResource(R.string.beta_description),
+        checked = includeBeta,
+        onCheckedChange = viewModel::setIncludeBeta
+    )
+}
+
+@Composable
+private fun AutoSwitch(viewModel: StoreViewModel) {
+    val includeAuto by viewModel.includeAuto.collectAsStateWithLifecycle()
+    SettingSwitch(
+        heading = stringResource(R.string.auto_title),
+        label = stringResource(R.string.auto_switch),
+        description = stringResource(R.string.auto_description),
+        checked = includeAuto,
+        onCheckedChange = viewModel::setIncludeAuto
+    )
+}
+
+@Composable
+private fun SettingSwitch(
+    heading: String,
+    label: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    Text(
+        text = heading,
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 16.dp)
+            .semantics { heading() }
+    )
+    // The whole row is the switch, so the label is part of what gets announced and tapped.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = {
+                    haptics.performHapticFeedback(
+                        if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff
+                    )
+                    onCheckedChange(it)
+                }
+            )
+            .padding(vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(Modifier.width(16.dp))
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
@@ -850,6 +1166,7 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
                 input = it
                 viewModel.clearSourceError()
             },
+            enabled = !state.adding,
             label = { Text(stringResource(R.string.sources_hint)) },
             singleLine = true,
             isError = state.error != null,
@@ -967,6 +1284,7 @@ private fun SortMenu(selected: SortOrder, onSelect: (SortOrder) -> Unit) {
 @Composable
 private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -994,7 +1312,9 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
                 }
             }
         },
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        // The list is filtered while typing, so the search key only puts the keyboard away.
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
     )
 }
 

@@ -11,7 +11,9 @@ import android.util.Log
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
-import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -23,6 +25,7 @@ import kotlinx.coroutines.launch
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.Http
+import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.StoreApp
 
 sealed interface InstallState {
@@ -44,7 +47,20 @@ object InstallManager {
     /** In-flight or failed installs keyed by the repository's full name. */
     val states: StateFlow<Map<String, InstallState>> = _states.asStateFlow()
 
-    internal val confirmations = InstallConfirmationQueue<Intent>()
+    /** The system's request to confirm one install: its session and the prompt to open. */
+    internal data class Confirmation(val sessionId: Int, val prompt: Intent)
+
+    internal val confirmations = InstallConfirmationQueue<Confirmation>()
+
+    /** How many of the store's screens are showing; there can be one per window. */
+    private val screens = AtomicInteger(0)
+
+    /** What was committed for each repository, kept until the system reports the outcome. */
+    private val committed = ConcurrentHashMap<String, Pair<StoreApp, String>>()
+
+    private val _activeJobs = MutableStateFlow(0)
+    /** How many downloads and installs are being worked on right now. */
+    val activeJobs: StateFlow<Int> = _activeJobs.asStateFlow()
 
     private val _installedChanged = MutableStateFlow(0)
     /** Ticks whenever an install finishes, so observers re-read the installed versions. */
@@ -58,61 +74,105 @@ object InstallManager {
         val appContext = context.applicationContext
         if (isBusy(app.fullName)) return
         setState(app.fullName, InstallState.Downloading(0f))
+        _activeJobs.update { it + 1 }
+        // Lets the download carry on if the user leaves the app before it is done.
+        InstallService.start(appContext)
 
         scope.launch {
             val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_')}.apk")
             try {
-                var lastStep = -1
-                Http.download(app.apkUrl, target) { read, total ->
-                    val size = if (total > 0) total else app.apkSize
-                    val step = if (size > 0) (read * 100 / size).toInt() else -1
-                    if (step != lastStep) {
-                        lastStep = step
-                        setState(
-                            app.fullName,
-                            InstallState.Downloading(if (step < 0) null else step / 100f)
-                        )
-                    }
-                }
-            } catch (e: IOException) {
-                Log.w(TAG, "Download failed for ${app.fullName}", e)
-                target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
-                return@launch
-            }
-
-            val archive = readArchive(appContext, target)
-            if (archive == null ||
-                (app.packageName != null && archive.packageName != app.packageName)
-            ) {
-                target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
-                return@launch
-            }
-            CatalogRepository.get(appContext).rememberApkInfo(
-                app.fullName,
-                app.assetId,
-                ApkInfo(
-                    archive.packageName,
-                    PackageInfoCompat.getLongVersionCode(archive),
-                    archive.versionName
-                )
-            )
-            if (!signaturesMatch(appContext, archive)) {
-                target.delete()
-                setState(app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
-                return@launch
-            }
-
-            setState(app.fullName, InstallState.Installing)
-            try {
-                commit(appContext, app.fullName, archive.packageName, target)
+                downloadAndInstall(appContext, app, target)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Install session failed for ${app.fullName}", e)
+                // Nothing here may take the process down or leave the app stuck as "installing".
+                Log.w(TAG, "Install failed for ${app.fullName}", e)
                 setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
             } finally {
+                // Once committed, the session holds its own copy of the file.
                 target.delete()
+                _activeJobs.update { it - 1 }
             }
+        }
+    }
+
+    private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File) {
+        try {
+            var lastStep = -1
+            Http.download(app.apkUrl, target) { read, total ->
+                val size = if (total > 0) total else app.apkSize
+                val step = if (size > 0) (read * 100 / size).toInt() else -1
+                if (step != lastStep) {
+                    lastStep = step
+                    setState(
+                        app.fullName,
+                        InstallState.Downloading(if (step < 0) null else step / 100f)
+                    )
+                }
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "Download failed for ${app.fullName}", e)
+            setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
+            return
+        }
+
+        val archive = readArchive(appContext, target)
+        if (archive == null ||
+            (app.packageName != null && archive.packageName != app.packageName)
+        ) {
+            setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
+            return
+        }
+        val versionCode = PackageInfoCompat.getLongVersionCode(archive)
+        // Needed only when the manifest could not be read remotely. Storing it waits for a
+        // refresh that is running, which an install should not have to do otherwise.
+        if (app.packageName == null) {
+            try {
+                CatalogRepository.get(appContext).rememberApkInfo(
+                    app.fullName,
+                    app.assetId,
+                    ApkInfo(archive.packageName, versionCode, archive.versionName)
+                )
+            } catch (e: IOException) {
+                // Only a convenience for the next refresh; the install itself does not need it.
+                Log.w(TAG, "Could not store APK details for ${app.fullName}", e)
+            }
+        }
+        if (!signaturesMatch(appContext, archive)) {
+            InstalledApps.rememberConflict(appContext, app, archive.packageName)
+            setState(app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
+            // The app now counts as installed from elsewhere rather than as an update.
+            notifyInstalledChanged()
+            return
+        }
+        InstalledApps.forgetConflict(appContext, app, archive.packageName)
+
+        setState(app.fullName, InstallState.Installing)
+        committed[app.fullName] = app to archive.packageName
+        if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
+        try {
+            commit(appContext, app.fullName, archive.packageName, target)
+        } catch (e: Exception) {
+            Log.w(TAG, "Install session failed for ${app.fullName}", e)
+            committed.remove(app.fullName)
+            setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+        }
+    }
+
+    /** Called by each of the store's screens as it comes into view. */
+    internal fun onScreenStarted() {
+        screens.incrementAndGet()
+    }
+
+    /**
+     * Called by each of the store's screens as it goes out of view. When none is left to ask,
+     * the confirmations still waiting are handed to notifications: they may have arrived
+     * while a screen was showing but busy with another prompt.
+     */
+    internal fun onScreenStopped(context: Context) {
+        if (screens.decrementAndGet() > 0) return
+        confirmations.waiting().forEach {
+            InstallService.showReady(context, it.repo, it.value.sessionId, it.value.prompt)
         }
     }
 
@@ -120,21 +180,39 @@ object InstallManager {
         if (_states.value[repo] is InstallState.Failed) setState(repo, null)
     }
 
-    internal fun onConfirmationRequired(repo: String, intent: Intent) {
+    /**
+     * The system wants the user to confirm the install of [repo]. The store's screen asks
+     * when it is showing. Otherwise the download finished in the background, where nothing
+     * may open a prompt, so a notification takes the user to it.
+     */
+    internal fun onConfirmationRequired(
+        context: Context,
+        repo: String,
+        sessionId: Int,
+        intent: Intent
+    ) {
         setState(repo, InstallState.Installing)
-        confirmations.enqueue(repo, intent)
+        confirmations.enqueue(repo, Confirmation(sessionId, intent))
+        if (screens.get() == 0) InstallService.showReady(context, repo, sessionId, intent)
     }
 
     /** Called by [InstallReceiver] once the system has decided on a session. */
-    internal fun onSessionResult(repo: String, status: Int, message: String?) {
+    internal fun onSessionResult(context: Context, repo: String, status: Int, message: String?) {
         confirmations.remove(repo)
+        val attempted = committed.remove(repo)
         when (status) {
             PackageInstaller.STATUS_SUCCESS -> setState(repo, null)
             // The user backed out of the system prompt; that is not an error worth showing.
             PackageInstaller.STATUS_FAILURE_ABORTED -> setState(repo, null)
             PackageInstaller.STATUS_FAILURE_CONFLICT,
-            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
-                setState(repo, InstallState.Failed(conflictReason(message), message))
+            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
+                val reason = conflictReason(message)
+                // The system can see a conflict that comparing the certificates here did not.
+                if (reason == FailReason.SIGNATURE_MISMATCH && attempted != null) {
+                    InstalledApps.rememberConflict(context, attempted.first, attempted.second)
+                }
+                setState(repo, InstallState.Failed(reason, message))
+            }
             else -> setState(repo, InstallState.Failed(FailReason.INSTALL, message))
         }
         _installedChanged.update { it + 1 }
@@ -215,17 +293,9 @@ object InstallManager {
     /** False only when the app is installed and provably signed with a different key. */
     @Suppress("DEPRECATION")
     private fun signaturesMatch(context: Context, archive: PackageInfo): Boolean {
-        val installed = try {
-            context.packageManager.getPackageInfo(archive.packageName, PackageManager.GET_SIGNATURES)
-        } catch (_: PackageManager.NameNotFoundException) {
-            return true
-        }
-        val installedSigners = installed.signatures?.map { digest(it.toByteArray()) }.orEmpty()
-        val archiveSigners = archive.signatures?.map { digest(it.toByteArray()) }.orEmpty()
-        if (installedSigners.isEmpty() || archiveSigners.isEmpty()) return true
+        val installedSigners = InstalledApps.signers(context, archive.packageName) ?: return true
+        val archiveSigners = archive.signatures?.map { InstalledApps.digest(it.toByteArray()) }.orEmpty()
+        if (archiveSigners.isEmpty()) return true
         return archiveSigners.any { it in installedSigners }
     }
-
-    private fun digest(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 }

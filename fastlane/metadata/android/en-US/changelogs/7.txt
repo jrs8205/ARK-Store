@@ -1,0 +1,1 @@
+Higher contrast in both the light and the dark theme for reading in bright light. Downloads continue in the background when you leave the app. The settings now show whether update notifications are allowed.

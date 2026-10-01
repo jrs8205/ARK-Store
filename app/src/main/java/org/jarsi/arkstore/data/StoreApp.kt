@@ -15,6 +15,14 @@ data class StoreApp(
     /** Downloads of APK files summed over the repository's recent releases. */
     val downloads: Long,
     val repoUrl: String,
+    /** True when this is a prerelease, offered because beta versions are wanted. */
+    val prerelease: Boolean = false,
+    /**
+     * True when the app was found by searching GitHub rather than published to the store by
+     * its developer. In the catalogue shown to the user it is false for an app that also comes
+     * from one of the sources on this device.
+     */
+    val auto: Boolean = false,
     val tag: String,
     val releaseName: String,
     val releaseNotes: String,
@@ -47,6 +55,8 @@ data class StoreApp(
         .put("license", license)
         .put("downloads", downloads)
         .put("repoUrl", repoUrl)
+        .put("prerelease", prerelease)
+        .put("auto", auto)
         .put("tag", tag)
         .put("releaseName", releaseName)
         .put("releaseNotes", releaseNotes)
@@ -69,6 +79,8 @@ data class StoreApp(
             license = json.optString("license"),
             downloads = json.optLong("downloads"),
             repoUrl = json.getString("repoUrl"),
+            prerelease = json.optBoolean("prerelease"),
+            auto = json.optBoolean("auto"),
             tag = json.getString("tag"),
             releaseName = json.optString("releaseName"),
             releaseNotes = json.optString("releaseNotes"),
@@ -89,7 +101,12 @@ data class Catalog(
     val apps: List<StoreApp>,
     val checkedAt: Long,
     /** How many times the store's own APKs have been downloaded; null when unknown. */
-    val storeDownloads: Long? = null
+    val storeDownloads: Long? = null,
+    /**
+     * For each repository with a prerelease that upgrades its full release, the version code
+     * of that prerelease. It tells an installed beta apart from any other newer version.
+     */
+    val betaVersions: Map<String, Long> = emptyMap()
 ) {
     companion object {
         val EMPTY = Catalog(emptyList(), 0)

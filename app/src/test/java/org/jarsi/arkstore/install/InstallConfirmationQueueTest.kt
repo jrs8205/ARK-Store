@@ -17,6 +17,18 @@ class InstallConfirmationQueueTest {
     }
 
     @Test
+    fun listsOnlyTheConfirmationsNobodyHasPresented() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.enqueue("owner/second", "second")
+        queue.enqueue("owner/third", "third")
+        queue.take()
+        queue.remove("owner/third")
+
+        assertEquals(listOf(InstallConfirmation("owner/second", "second")), queue.waiting())
+    }
+
+    @Test
     fun waitsForTheOpenActivityEvenAfterItsSessionCompletes() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/first", "first")

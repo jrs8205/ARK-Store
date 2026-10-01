@@ -1,0 +1,1 @@
+Suurempi kontrasti sekä vaaleassa että tummassa teemassa, jotta teksti näkyy kirkkaassa valossa. Lataukset jatkuvat taustalla, kun poistut sovelluksesta. Asetuksista näkee nyt, ovatko päivitysilmoitukset sallittuja.

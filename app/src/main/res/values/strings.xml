@@ -112,4 +112,46 @@
     <string name="sort_stars">Most stars</string>
     <string name="sort_newest">Newest release</string>
     <string name="sort_oldest">Oldest release</string>
+    <string name="badge_beta">Beta</string>
+    <string name="version_beta">%1$s (beta)</string>
+    <string name="beta_title">Beta versions</string>
+    <string name="beta_switch">Show beta versions</string>
+    <string name="beta_description">Offer prereleases as updates when a developer has published one. They are newer but less tested.</string>
+    <string name="action_settings">Settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="settings_version" translatable="false">ARK-Store %1$s</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>
+    <string name="newer_installed_note">A newer beta is installed. The next stable version will replace it.</string>
+    <string name="stable_title">Back to the stable version</string>
+    <string name="stable_description">A newer beta of this app is installed. The next stable version replaces it by itself. To go back now, uninstall the app and install it again from the store. Uninstalling removes the app\'s data.</string>
+    <string name="stable_description_store">A newer beta of ARK-Store is installed. The next stable version replaces it by itself. To go back now, uninstall ARK-Store and install the stable version from its GitHub page.</string>
+    <string name="action_return_to_stable">Uninstall the beta</string>
+    <string name="stable_confirm_title">Uninstall the beta?</string>
+    <string name="stable_confirm_message">The app and its data are removed. After that, install the stable version from the list.</string>
+    <string name="channel_updates_description">Tells you when installed apps have a newer version</string>
+    <string name="notifications_title">Update notifications</string>
+    <string name="notifications_on">On. ARK-Store checks for updates in the background and notifies you about them.</string>
+    <string name="notifications_off">Off. Android is not letting ARK-Store show notifications, so updates are only shown when you open the app.</string>
+    <string name="action_notification_settings">Notification settings</string>
+    <string name="channel_downloads">Downloads</string>
+    <string name="channel_downloads_description">Shows the progress of app downloads</string>
+    <string name="download_notification_one">Downloading %1$s</string>
+    <plurals name="download_notification_many">
+        <item quantity="one">Downloading %d app</item>
+        <item quantity="other">Downloading %d apps</item>
+    </plurals>
+    <string name="download_notification_installing">Installing</string>
+    <string name="badge_auto">Found automatically</string>
+    <string name="auto_title">More apps</string>
+    <string name="auto_switch">Show automatically found apps</string>
+    <string name="auto_description">Also list open-source Android apps found by searching GitHub. Their developers have not published them to ARK-Store, and nobody has checked them. Only actively developed apps with a recent release are included.</string>
+    <string name="auto_detail">This app was found by searching GitHub. Its developer has not published it to ARK-Store.</string>
+    <string name="install_ready_title">%1$s is ready to install</string>
+    <string name="install_ready_text">Tap to continue</string>
+    <string name="newer_version_note">A newer version than the one offered here is installed.</string>
+    <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
+    <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
+    <string name="channel_installs">Ready to install</string>
+    <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
 </resources>

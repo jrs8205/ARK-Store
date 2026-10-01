@@ -23,7 +23,30 @@ import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.InstallManager
 
-data class AppRow(val app: StoreApp, val installed: InstalledVersion?, val status: AppStatus)
+data class AppRow(
+    val app: StoreApp,
+    val installed: InstalledVersion?,
+    val status: AppStatus,
+    /** The version code of the app's prerelease, when it has one that the store knows of. */
+    val betaVersion: Long? = null
+) {
+    /**
+     * A newer version than the one offered is installed. Android cannot put the older version
+     * over it.
+     */
+    val newerInstalled: Boolean
+        get() = installed != null && app.versionCode > 0 && installed.versionCode > app.versionCode
+
+    /**
+     * The newer installed version is a beta: the store installed it as one, or it lies between
+     * the version offered and the prerelease the store knows of, as it does after beta
+     * versions were turned off. Anything else came from somewhere else, such as another store
+     * with its own version codes, and cannot be called a beta.
+     */
+    val betaInstalled: Boolean
+        get() = newerInstalled &&
+            (installed!!.beta || (betaVersion != null && installed.versionCode <= betaVersion))
+}
 
 enum class LoadError { NETWORK, RATE_LIMIT }
 
@@ -61,8 +84,13 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     ) { catalog, _, isRefreshing, loadError ->
         StoreUiState(
             rows = catalog.apps.map { app ->
-                val installed = InstalledApps.find(application, app.packageName)
-                AppRow(app, installed, InstalledApps.status(app, installed))
+                val installed = InstalledApps.find(application, app)
+                AppRow(
+                    app,
+                    installed,
+                    InstalledApps.status(app, installed),
+                    catalog.betaVersions[app.fullName]
+                )
             },
             checkedAt = catalog.checkedAt,
             storeDownloads = catalog.storeDownloads,
@@ -71,6 +99,17 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, StoreUiState(refreshing = true))
+
+    val includeBeta: StateFlow<Boolean> = repository.includeBeta
+    val includeAuto: StateFlow<Boolean> = repository.includeAuto
+
+    fun setIncludeAuto(include: Boolean) {
+        repository.setIncludeAuto(include)
+        // Their list is downloaded only once they are wanted.
+        if (include) refresh()
+    }
+
+    fun setIncludeBeta(include: Boolean) = repository.setIncludeBeta(include)
 
     private val _sources = MutableStateFlow(SourcesUiState(sources = repository.sources.list()))
     val sources: StateFlow<SourcesUiState> = _sources
@@ -147,6 +186,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } while (refreshAgain)
             } finally {
+                // A refresh renames the source of a repository that has moved.
+                _sources.update { it.copy(sources = repository.sources.list()) }
                 refreshing.update { false }
             }
         }

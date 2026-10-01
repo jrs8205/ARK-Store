@@ -30,6 +30,9 @@ class SourceStore(context: Context) {
 
     fun remove(source: String) = save(list() - source)
 
+    /** Replaces [source] with [renamed], the name its repository goes by now. */
+    fun rename(source: String, renamed: String) = save(renamed(list(), source, renamed))
+
     private fun save(sources: List<String>) = prefs.edit {
         putString(KEY, JSONArray(sources).toString())
     }
@@ -57,5 +60,15 @@ class SourceStore(context: Context) {
         }
 
         fun isRepository(source: String): Boolean = '/' in source
+
+        /**
+         * [sources] with [source] replaced by [renamed] in the same place, or simply dropped
+         * when the new name is already among them.
+         */
+        internal fun renamed(sources: List<String>, source: String, renamed: String): List<String> {
+            val others = sources.filter { it != source }
+            if (others.any { it.equals(renamed, ignoreCase = true) }) return others
+            return sources.map { if (it == source) renamed else it }
+        }
     }
 }

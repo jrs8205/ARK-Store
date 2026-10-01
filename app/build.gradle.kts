@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 9
+        versionName = "1.3.0-beta.5"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
@@ -32,6 +32,12 @@ android {
             "String",
             "INDEX_URL",
             "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/index.json\""
+        )
+        // The list of automatically found apps, downloaded only by users who ask for them.
+        buildConfigField(
+            "String",
+            "AUTO_INDEX_URL",
+            "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/auto.json\""
         )
         // The store's own repository, whose download count is shown in the app.
         buildConfigField("String", "STORE_REPO", "\"jrs8205/ARK-Store\"")

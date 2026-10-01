@@ -1,0 +1,1 @@
+A download that finishes in the background now tells you with a notification that opens the install prompt. Apps installed from another store are no longer offered as updates again and again. Each update is announced once. The search field closes the keyboard when you tap elsewhere.

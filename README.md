@@ -78,13 +78,18 @@ None of these are required, but they make your app look better in the store.
 
 - Sign every release with the same key and raise the `versionCode` each time. Android
   refuses to update an app whose signing key has changed.
-- Prereleases and drafts are ignored; the newest full release is the version offered.
+- The newest full release is the version offered. A prerelease that is newer than it is
+  offered only to users who have turned on **Show beta versions** in the settings, and is
+  marked Beta. Newer means the same package name with a higher `versionCode`: a prerelease
+  built from an older branch, or one with a package name of its own, is not offered.
+  Drafts are ignored.
 - Forks and archived repositories are skipped.
 
 ## For users
 
 - **One list for everything**: updates available, installed apps and apps you could install.
 - **One tap** to install or update, and **Update all** when several updates are waiting.
+  Downloads carry on in the background if you leave the app.
 - **Search** with a clear button, **categories** to narrow the list down, and **sorting** by
   name, downloads, stars or release date.
 - **Numbers from GitHub**: stars and download counts for every app, the number of apps in the
@@ -93,10 +98,30 @@ None of these are required, but they make your app look better in the store.
   check every four hours notifies about new versions.
 - **Safe updates**: the app warns before installing when the installed app is signed with a
   different key.
+- **Beta versions**: optionally get a developer's prereleases as updates.
 - **No account**: the app talks only to GitHub, without signing in.
 - **Accessible**: screen reader labels, text that scales, contrast that meets WCAG AA, and
   haptic feedback that follows the system setting.
 - **English and Finnish.**
+
+## Automatically found apps
+
+Besides the apps developers publish with the topic, the index workflow searches GitHub for
+other open-source Android apps. They are shown only to users who turn on **Show automatically
+found apps** in the settings, and each carries a label saying that its developer did not
+publish it to the store. To keep the list fresh, a repository qualifies only when it
+
+- is public and has a recognised open-source license, like every app in the store,
+- has been pushed to within the last 30 days,
+- has at least 20 stars, and
+- has a full release, at most 180 days old, with an APK attached.
+
+These limits are constants at the top of `tools/build_index.py`. A developer who would
+rather not be listed this way can remove the `android` topics the search looks for; one who
+wants to be listed for everyone adds the `arkstore` topic.
+
+The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
+only while the setting is on. Beta versions of these apps are not offered.
 
 ## Why only public and licensed apps
 
@@ -142,8 +167,9 @@ The debug build installs as `org.jarsi.arkstore.debug` next to a release build.
 
 The store topic, the index location, the account that is a source on every new installation
 and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER` and
-`STORE_REPO` build config fields in `app/build.gradle.kts`. The index is built with
-`python3 tools/build_index.py --output index.json`.
+`STORE_REPO` build config fields in `app/build.gradle.kts`; `AUTO_INDEX_URL` is where the
+automatically found apps are listed. The index is built with
+`python3 tools/build_index.py --output index.json --auto-output auto.json`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:

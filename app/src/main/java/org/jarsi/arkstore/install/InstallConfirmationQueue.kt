@@ -30,6 +30,11 @@ internal class InstallConfirmationQueue<T> {
         return confirmation
     }
 
+    /** The confirmations nobody has presented yet, oldest first. */
+    @Synchronized
+    fun waiting(): List<InstallConfirmation<T>> =
+        waiting.map { InstallConfirmation(it.key, it.value) }
+
     @Synchronized
     fun finishActive() {
         activeRepo = null
