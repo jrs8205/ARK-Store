@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1
+
+- The background update check runs every four hours instead of every twelve
+
 ## 1.2.0
 
 - Published apps are read from a store index, one file rebuilt every hour, so the store loads

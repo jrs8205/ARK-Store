@@ -47,7 +47,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         private const val WORK_NAME = "update-check"
         private const val CHANNEL_ID = "updates"
         private const val NOTIFICATION_ID = 1
-        private const val INTERVAL_HOURS = 12L
+        private const val INTERVAL_HOURS = 4L
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(
@@ -58,7 +58,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             ).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                // UPDATE rather than KEEP, so that a changed interval reaches existing installs.
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
         }

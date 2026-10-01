@@ -39,7 +39,7 @@ license is never listed, with or without the topic.
 - **A newly tagged app**: within about an hour. The list of published apps is rebuilt once an
   hour, and the app appears the next time a user opens the store after that.
 - **A new release of a listed app**: likewise within about an hour. Users who do not open
-  the store are told about the update by the background check, which runs about every twelve
+  the store are told about the update by the background check, which runs about every four
   hours.
 - **Stars and download counts**: updated with the same hourly rebuild.
 - **A repository added by hand under Sources**: immediately, and its new releases show up on
@@ -90,7 +90,7 @@ None of these are required, but they make your app look better in the store.
 - **Numbers from GitHub**: stars and download counts for every app, the number of apps in the
   store, and how many times ARK-Store itself has been downloaded.
 - **Always current**: the list is refreshed whenever the app is opened, and a background
-  check twice a day notifies about new versions.
+  check every four hours notifies about new versions.
 - **Safe updates**: the app warns before installing when the installed app is signed with a
   different key.
 - **No account**: the app talks only to GitHub, without signing in.

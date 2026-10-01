@@ -1,0 +1,1 @@
+Taustalla tehtävä päivitystarkistus ajetaan nyt neljän tunnin välein aiemman kahdentoista sijaan.
