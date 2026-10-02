@@ -44,11 +44,11 @@ AUTO_QUERIES = (
 AUTO_PUSHED_DAYS = 30
 AUTO_RELEASE_DAYS = 180
 AUTO_MIN_STARS = 20
-AUTO_SEARCH_PAGES = 3
+AUTO_SEARCH_PAGES = 10
 # Each repository costs one API request, and a workflow run has a limited number of them, so
 # only this many are examined per run. Repositories that have not changed since they were
 # last examined cost nothing, so the list fills up over a few runs and then stays current.
-AUTO_MAX_LOOKUPS = 150
+AUTO_MAX_LOOKUPS = 300
 AUTO_MAX_NOTES = 800
 # A repository that has not been pushed to is still examined again now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
