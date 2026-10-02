@@ -27,28 +27,30 @@ no review queue, no fees and no metadata files to maintain.
 4. **Add the topic `arkstore`** to the repository (the gear next to *About* on the
    repository's front page).
 
-That is all. The app shows up in ARK-Store for every user within about an hour, and new
-versions follow by themselves whenever you publish a release. To take the app out of
-the store, remove the topic.
+That is all. The app shows up in ARK-Store for every user the next time the list of
+published apps is rebuilt, usually within a few hours, and new versions follow by themselves
+whenever you publish a release. To take the app out of the store, remove the topic.
 
 The first two points are requirements: a repository that is private or has no recognised
 license is never listed, with or without the topic.
 
 ### How quickly it shows up
 
-- **A newly tagged app**: within about an hour. The list of published apps is rebuilt once an
-  hour, and the app appears the next time a user opens the store after that.
-- **A new release of a listed app**: likewise within about an hour. Users who do not open
-  the store are told about the update by the background check, which runs about every four
+- **A newly tagged app**: usually within a few hours. The list of published apps is rebuilt
+  by a workflow that is scheduled to run once an hour, but GitHub starts scheduled workflows
+  when it has room for them, and in practice the runs have been three to five hours apart.
+  The app appears the next time a user opens the store after a run.
+- **A new release of a listed app**: likewise at the next run. Users who do not open the
+  store are told about the update by the background check, which runs about every four
   hours.
-- **Stars and download counts**: updated with the same hourly rebuild.
+- **Stars and download counts**: updated with the same rebuild.
 - **A repository added by hand under Sources**: immediately, and its new releases show up on
   the next refresh.
 
 The store refreshes when it is opened, at most once every five minutes; pulling down or the
-refresh button checks right away. If an app is still missing after a couple of hours, check
-that the repository is public, has a license GitHub recognises, and that its latest full
-release has an `.apk` file attached.
+refresh button checks right away. If an app is still missing after half a day, check that
+the repository is public, has a license GitHub recognises, and that its latest full release
+has an `.apk` file attached.
 
 ### Adding a repository by hand
 
@@ -100,8 +102,8 @@ None of these are required, but they make your app look better in the store.
   different key.
 - **Beta versions**: optionally get a developer's prereleases as updates.
 - **No account**: the app talks only to GitHub, without signing in.
-- **Accessible**: screen reader labels, text that scales, contrast that meets WCAG AA, and
-  haptic feedback that follows the system setting.
+- **Accessible**: screen reader labels, text that scales, text contrast of at least 7:1
+  (WCAG AAA), and haptic feedback that follows the system setting.
 - **English and Finnish.**
 
 ## Automatically found apps
@@ -109,19 +111,38 @@ None of these are required, but they make your app look better in the store.
 Besides the apps developers publish with the topic, the index workflow searches GitHub for
 other open-source Android apps. They are shown only to users who turn on **Show automatically
 found apps** in the settings, and each carries a label saying that its developer did not
-publish it to the store. To keep the list fresh, a repository qualifies only when it
+publish it to the store. Nobody has checked these apps.
 
-- is public and has a recognised open-source license, like every app in the store,
+The search looks for repositories that carry the topic `android` and are written in Kotlin,
+Java or Dart, and for repositories that carry the topic `android-app`. To keep the list
+fresh, a repository qualifies only when it
+
+- is public, is not a fork or archived, and has a recognised open-source license, like
+  every app in the store,
 - has been pushed to within the last 30 days,
 - has at least 20 stars, and
 - has a full release, at most 180 days old, with an APK attached.
 
 These limits are constants at the top of `tools/build_index.py`. A developer who would
-rather not be listed this way can remove the `android` topics the search looks for; one who
-wants to be listed for everyone adds the `arkstore` topic.
+rather not be listed this way can remove the topic the search found the repository by; one
+who wants to be listed for everyone adds the `arkstore` topic.
+
+What the list does not promise:
+
+- **It is not complete.** GitHub's search returns at most a thousand repositories for each
+  of the four searches, the most starred first, so a qualifying app with fewer stars can be
+  left out. An Android app without those topics, or written in another language without the
+  `android-app` topic, is not found at all.
+- **Not everything on it is an app in its own right.** The rules cannot tell an app from a
+  library that attaches a sample or demo APK to its releases, so some of those are listed
+  too.
+- **It follows releases more slowly.** A repository is looked at again when it has been
+  pushed to, and otherwise once a day, so a new version whose APK was attached without a
+  push can take a day longer to show up.
 
 Nobody has chosen a category for these apps, so the index guesses one from the words of the
-repository's topics and description. An app it cannot place goes under Other.
+repository's topics and description. The guess can be wrong, and an app it cannot place goes
+under Other.
 
 The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
 only while the setting is on. Beta versions of these apps are not offered.
@@ -140,9 +161,10 @@ its source is one tap away; install apps from developers you trust.
 
 ## How it works
 
-1. Once an hour a workflow in this repository (`.github/workflows/index.yml`) asks GitHub for
-   every repository carrying the `arkstore` topic. Forks, archived repositories and
-   repositories without a recognised license are dropped.
+1. A workflow in this repository (`.github/workflows/index.yml`) asks GitHub for every
+   repository carrying the `arkstore` topic. It is scheduled once an hour; GitHub decides
+   when a scheduled run actually starts, which has been every three to five hours. Forks,
+   archived repositories and repositories without a recognised license are dropped.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
 3. The package name and version are read from each APK's own manifest. Only the zip directory
