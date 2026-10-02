@@ -40,6 +40,20 @@ internal object CatalogRules {
     }
 
     /**
+     * The name for a release whose own is not known, taken from what was listed [before]: an
+     * app keeps its name from one version to the next. Only an entry of the same package
+     * will do, since a repository can release several apps, and one of the same kind of
+     * release is preferred, since a beta may go by a name of its own.
+     */
+    fun inheritedLabel(before: List<StoreApp>, packageName: String?, prerelease: Boolean): String? {
+        if (packageName == null) return null
+        return before
+            .filter { it.packageName == packageName && it.label != null }
+            .minByOrNull { it.prerelease != prerelease }
+            ?.label
+    }
+
+    /**
      * The downloads to show for one version of an app: those of the prereleases for a
      * [prerelease], and the rest, which the full releases account for, otherwise. [all] counts
      * every release and [beta] the prereleases among them.

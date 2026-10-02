@@ -606,7 +606,8 @@ class CatalogRepository private constructor(context: Context) {
                 versionName = info?.versionName,
                 // Only the index reads an app's name. A release newer than the index is
                 // taken to be called what the one before it was.
-                label = known?.label ?: previous.firstNotNullOfOrNull { it.label },
+                label = known?.label
+                    ?: CatalogRules.inheritedLabel(previous, info?.packageName, prerelease),
                 allDownloads = downloads
             )
         }

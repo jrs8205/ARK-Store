@@ -59,6 +59,7 @@
         <item quantity="other">%d latausta</item>
     </plurals>
     <string name="detail_developer">Kehittäjä</string>
+    <string name="detail_repository">Repo</string>
     <string name="detail_stars">Tähdet</string>
     <string name="detail_downloads">Lataukset</string>
     <string name="sources_title">Lähteet</string>

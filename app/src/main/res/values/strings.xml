@@ -63,6 +63,7 @@
         <item quantity="other">%d downloads</item>
     </plurals>
     <string name="detail_developer">Developer</string>
+    <string name="detail_repository">Repository</string>
     <string name="detail_stars">Stars</string>
     <string name="detail_downloads">Downloads</string>
     <string name="sources_title">Sources</string>

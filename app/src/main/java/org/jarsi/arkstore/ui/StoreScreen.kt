@@ -118,6 +118,7 @@ import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Categories
+import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
@@ -526,7 +527,7 @@ private fun AppCard(
                     if (app.prerelease) Badge(stringResource(R.string.badge_beta))
                     if (app.auto) Badge(stringResource(R.string.badge_auto))
                     Text(
-                        text = stringResource(R.string.card_byline, app.owner, versionLine(row)),
+                        text = stringResource(R.string.card_byline, origin(app), versionLine(row)),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -778,6 +779,7 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             Spacer(Modifier.height(8.dp))
         }
         DetailLine(stringResource(R.string.detail_developer), app.owner)
+        DetailLine(stringResource(R.string.detail_repository), app.fullName)
         DetailLine(stringResource(R.string.detail_category), stringResource(categoryLabel(app.category)))
         if (app.license.isNotBlank()) {
             DetailLine(stringResource(R.string.detail_license), app.license)
@@ -1439,6 +1441,13 @@ private fun InstallHaptics(installs: Map<String, InstallState>) {
         previous = installs
     }
 }
+
+/**
+ * Where an app comes from, for its card. An app can call itself anything, so one whose name
+ * is not that of its repository is shown with the repository as well as the owner.
+ */
+private fun origin(app: StoreApp): String =
+    if (app.title.equals(app.repo, ignoreCase = true)) app.owner else app.fullName
 
 private fun matches(row: AppRow, query: String): Boolean {
     val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }

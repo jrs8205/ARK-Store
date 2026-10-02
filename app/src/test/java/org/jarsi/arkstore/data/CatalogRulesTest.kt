@@ -89,6 +89,19 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun nameIsInheritedOnlyWithinAPackage() {
+        val stable = app().copy(label = "Example")
+        val beta = app(prerelease = true).copy(label = "Example Beta")
+        val before = listOf(stable, beta)
+        assertEquals("Example", CatalogRules.inheritedLabel(before, stable.packageName, prerelease = false))
+        assertEquals("Example Beta", CatalogRules.inheritedLabel(before, stable.packageName, prerelease = true))
+        // The other kind of release will do when its own has no name.
+        assertEquals("Example", CatalogRules.inheritedLabel(listOf(stable), stable.packageName, prerelease = true))
+        assertNull(CatalogRules.inheritedLabel(before, "org.another", prerelease = false))
+        assertNull(CatalogRules.inheritedLabel(before, null, prerelease = false))
+    }
+
+    @Test
     fun fullReleasesAndPrereleasesCountTheirOwnDownloads() {
         assertEquals(30L, CatalogRules.downloads(all = 35, beta = 5, prerelease = false))
         assertEquals(5L, CatalogRules.downloads(all = 35, beta = 5, prerelease = true))
