@@ -800,7 +800,7 @@ def is_upgrade(beta_info, stable_info):
     return False
 
 
-def build_app(repo, previous_apks, not_before=None, with_prerelease=True):
+def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None):
     """Returns the index entry of a repository, or None when it has nothing to install.
 
     With not_before, a repository whose newest full release was published earlier than that
@@ -812,12 +812,18 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True):
     not examined again on the next run. A repository with nothing but a prerelease gets an
     entry marked "betaOnly", built from it. Without with_prerelease, prereleases are not
     looked at.
+
+    list_releases gives the releases of a repository that is not on GitHub, newest first and
+    described the way GitHub describes them.
     """
     full_name = repo["full_name"]
-    page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
+    if list_releases is not None:
+        page = list_releases(repo)
+    else:
+        page = api("/repos/%s/releases?per_page=%d" % (full_name, PAGE_SIZE))
     releases = [r for r in page if not r.get("draft")]
     stable = next((r for r in releases if not r.get("prerelease")), None)
-    if stable is None and len(page) == PAGE_SIZE:
+    if stable is None and list_releases is None and len(page) == PAGE_SIZE:
         try:
             stable = api("/repos/%s/releases/latest" % full_name)
         except urllib.error.HTTPError as error:
