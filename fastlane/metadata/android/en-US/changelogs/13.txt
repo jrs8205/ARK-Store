@@ -1,0 +1,1 @@
+New in the settings: switches for the IzzyOnDroid and F-Droid catalogues, next to the apps found on GitHub. An app offered by several places is listed once, and an installed app keeps being updated from the place it was installed from.

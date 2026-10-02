@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.4.0-beta.3
+
+- Two more places to get apps from, each with a switch of its own in the settings: the
+  catalogues of IzzyOnDroid and F-Droid. Their apps carry the catalogue's name as a label,
+  show what the catalogue warns about, and are checked against the catalogue's checksum
+  before they are installed
+- The settings now say where apps come from: published to ARK-Store (always shown), found on
+  GitHub, IzzyOnDroid and F-Droid
+- An app offered by several places is listed once, from its developer when possible; an
+  installed app stays with the place whose files are signed the way it is, and the details
+  name the other places
+- The installed apps are read in one go, which keeps a list of thousands quick
+
 ## 1.4.0-beta.2
 
 - An app whose name differs from its repository's is shown with the repository as well as
