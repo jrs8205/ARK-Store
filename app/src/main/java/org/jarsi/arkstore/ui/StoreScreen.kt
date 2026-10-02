@@ -519,10 +519,10 @@ private fun AppCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app.repo, app.packageName, row.installed != null)
+                AppIcon(app.title, app.packageName, row.installed != null)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = app.repo, style = MaterialTheme.typography.titleMedium)
+                    Text(text = app.title, style = MaterialTheme.typography.titleMedium)
                     if (app.prerelease) Badge(stringResource(R.string.badge_beta))
                     if (app.auto) Badge(stringResource(R.string.badge_auto))
                     Text(
@@ -756,7 +756,7 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
     ) {
         Text(
-            text = app.repo,
+            text = app.title,
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
@@ -1220,24 +1220,24 @@ private const val PREF_SORT = "sort"
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
-    NAME(R.string.sort_name, compareBy { it.app.repo.lowercase() }),
+    NAME(R.string.sort_name, compareBy { it.app.title.lowercase() }),
     DOWNLOADS(
         R.string.sort_downloads,
-        compareByDescending<AppRow> { it.app.downloads }.thenBy { it.app.repo.lowercase() }
+        compareByDescending<AppRow> { it.app.downloads }.thenBy { it.app.title.lowercase() }
     ),
     STARS(
         R.string.sort_stars,
-        compareByDescending<AppRow> { it.app.stars }.thenBy { it.app.repo.lowercase() }
+        compareByDescending<AppRow> { it.app.stars }.thenBy { it.app.title.lowercase() }
     ),
 
     // Release dates are ISO 8601 in UTC, which sort correctly as text.
     NEWEST(
         R.string.sort_newest,
-        compareByDescending<AppRow> { it.app.publishedAt }.thenBy { it.app.repo.lowercase() }
+        compareByDescending<AppRow> { it.app.publishedAt }.thenBy { it.app.title.lowercase() }
     ),
     OLDEST(
         R.string.sort_oldest,
-        compareBy<AppRow> { it.app.publishedAt }.thenBy { it.app.repo.lowercase() }
+        compareBy<AppRow> { it.app.publishedAt }.thenBy { it.app.title.lowercase() }
     )
 }
 
@@ -1444,7 +1444,7 @@ private fun matches(row: AppRow, query: String): Boolean {
     val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (words.isEmpty()) return true
     val app = row.app
-    val text = listOf(app.repo, app.owner, app.description, app.packageName.orEmpty())
+    val text = listOf(app.title, app.repo, app.owner, app.description, app.packageName.orEmpty())
         .joinToString(" ")
     return words.all { text.contains(it, ignoreCase = true) }
 }

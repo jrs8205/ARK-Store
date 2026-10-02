@@ -89,6 +89,15 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun fullReleasesAndPrereleasesCountTheirOwnDownloads() {
+        assertEquals(30L, CatalogRules.downloads(all = 35, beta = 5, prerelease = false))
+        assertEquals(5L, CatalogRules.downloads(all = 35, beta = 5, prerelease = true))
+        // Numbers that do not add up never go below zero.
+        assertEquals(0L, CatalogRules.downloads(all = 3, beta = 9, prerelease = false))
+        assertEquals(3L, CatalogRules.downloads(all = 3, beta = 9, prerelease = true))
+    }
+
+    @Test
     fun sourceCoversAnAccountOrASingleRepository() {
         assertTrue(CatalogRules.belongsTo("Owner/app", "owner"))
         assertTrue(CatalogRules.belongsTo("owner/App", "owner/app"))

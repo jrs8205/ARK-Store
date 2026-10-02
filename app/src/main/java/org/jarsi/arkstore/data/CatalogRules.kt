@@ -39,6 +39,16 @@ internal object CatalogRules {
         else -> null
     }
 
+    /**
+     * The downloads to show for one version of an app: those of the prereleases for a
+     * [prerelease], and the rest, which the full releases account for, otherwise. [all] counts
+     * every release and [beta] the prereleases among them.
+     */
+    fun downloads(all: Long, beta: Long, prerelease: Boolean): Long {
+        val ofPrereleases = beta.coerceIn(0, maxOf(all, 0))
+        return if (prerelease) ofPrereleases else maxOf(all, 0) - ofPrereleases
+    }
+
     fun belongsTo(fullName: String, source: String): Boolean =
         if (SourceStore.isRepository(source)) {
             fullName.equals(source, ignoreCase = true)

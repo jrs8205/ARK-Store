@@ -103,6 +103,11 @@ class CatalogRepository private constructor(context: Context) {
     private val _catalog = MutableStateFlow(Catalog.EMPTY)
     val catalog: StateFlow<Catalog> = _catalog.asStateFlow()
 
+    /** What the app of the repository [fullName] is called in the store. */
+    fun titleOf(fullName: String): String =
+        _catalog.value.apps.firstOrNull { it.fullName == fullName }?.title
+            ?: fullName.substringAfter('/')
+
     init {
         load()
     }
@@ -233,7 +238,12 @@ class CatalogRepository private constructor(context: Context) {
                         }
                         try {
                             val (app, beta) = limiter.withPermit {
-                                fetchApp(repo, listOfNotNull(old?.app, old?.beta), auto)
+                                val listed = indexed?.get(fullName)
+                                fetchApp(
+                                    repo,
+                                    listOfNotNull(old?.app, old?.beta, listed?.app, listed?.beta),
+                                    auto
+                                )
                             }
                             fullName to Entry(stamp, now, app, beta, isDiscovered)
                         } catch (e: IOException) {
@@ -289,7 +299,7 @@ class CatalogRepository private constructor(context: Context) {
             .firstOrNull { it.key.equals(BuildConfig.STORE_REPO, ignoreCase = true) }?.value
             ?.let { it.app ?: it.beta }
         if (listed != null) {
-            storeDownloads = listed.downloads
+            storeDownloads = listed.allDownloads
             storeDownloadsAt = now
             return
         }
@@ -441,13 +451,20 @@ class CatalogRepository private constructor(context: Context) {
         val topics = json.optJSONArray("topics")
             ?.let { array -> List(array.length()) { array.getString(it) } }
             .orEmpty()
+        val allDownloads = json.optLong("downloads")
         return StoreApp(
             fullName = json.getString("fullName"),
             description = json.optStringOrEmpty("description"),
             stars = json.optInt("stars"),
             category = Categories.of(topics),
             license = json.optStringOrEmpty("license"),
-            downloads = json.optLong("downloads"),
+            // An entry written before the index told the two apart counts every download for
+            // both.
+            downloads = if (json.has("betaDownloads")) {
+                CatalogRules.downloads(allDownloads, json.optLong("betaDownloads"), prerelease)
+            } else {
+                allDownloads
+            },
             repoUrl = json.getString("repoUrl"),
             prerelease = prerelease,
             auto = auto,
@@ -462,7 +479,9 @@ class CatalogRepository private constructor(context: Context) {
             assetId = apk.getLong("id"),
             packageName = apk.getString("packageName"),
             versionCode = apk.getLong("versionCode"),
-            versionName = if (apk.isNull("versionName")) null else apk.getString("versionName")
+            versionName = if (apk.isNull("versionName")) null else apk.getString("versionName"),
+            label = if (apk.isNull("label")) null else apk.getString("label"),
+            allDownloads = allDownloads
         )
     }
 
@@ -538,6 +557,8 @@ class CatalogRepository private constructor(context: Context) {
                 .filter { it.getString("name").endsWith(".apk", ignoreCase = true) }
         }
         val downloads = releases.sumOf { r -> apkAssets(r).sumOf { it.optLong("download_count") } }
+        val betaDownloads = releases.filter { it.optBoolean("prerelease") }
+            .sumOf { r -> apkAssets(r).sumOf { it.optLong("download_count") } }
 
         fun build(release: JSONObject, prerelease: Boolean): StoreApp? {
             val candidates = apkAssets(release)
@@ -567,7 +588,7 @@ class CatalogRepository private constructor(context: Context) {
                 stars = repo.optInt("stargazers_count"),
                 category = Categories.of(topics(repo)),
                 license = licenseOf(repo).orEmpty(),
-                downloads = downloads,
+                downloads = CatalogRules.downloads(downloads, betaDownloads, prerelease),
                 repoUrl = repo.getString("html_url"),
                 prerelease = prerelease,
                 auto = auto,
@@ -582,7 +603,11 @@ class CatalogRepository private constructor(context: Context) {
                 assetId = assetId,
                 packageName = info?.packageName,
                 versionCode = info?.versionCode ?: 0,
-                versionName = info?.versionName
+                versionName = info?.versionName,
+                // Only the index reads an app's name. A release newer than the index is
+                // taken to be called what the one before it was.
+                label = known?.label ?: previous.firstNotNullOfOrNull { it.label },
+                allDownloads = downloads
             )
         }
 

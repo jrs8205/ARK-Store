@@ -167,8 +167,10 @@ its source is one tap away; install apps from developers you trust.
    archived repositories and repositories without a recognised license are dropped.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
-3. The package name and version are read from each APK's own manifest. Only the zip directory
-   and the manifest are fetched, a few kilobytes instead of the whole file.
+3. The package name and version are read from each APK's own manifest, and the app's name
+   from its resource table. Only the zip directory and those two files are fetched, not the
+   whole APK. An app is listed under that name; if it cannot be read, the repository's name
+   is shown instead.
 4. The result is written to one file, `index.json` on the `index` branch.
 5. The app downloads that file and compares it with what is installed on the device.
 

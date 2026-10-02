@@ -12,7 +12,10 @@ data class StoreApp(
     val category: String,
     /** SPDX identifier of the repository's licence, e.g. "GPL-3.0". */
     val license: String,
-    /** Downloads of APK files summed over the repository's recent releases. */
+    /**
+     * Downloads of APK files summed over the repository's recent full releases or, for a
+     * prerelease, over its recent prereleases.
+     */
     val downloads: Long,
     val repoUrl: String,
     /** True when this is a prerelease, offered because beta versions are wanted. */
@@ -35,8 +38,19 @@ data class StoreApp(
     /** Null when the APK's manifest could not be read remotely. */
     val packageName: String?,
     val versionCode: Long,
-    val versionName: String?
+    val versionName: String?,
+    /**
+     * The name the app gives itself, read from the APK by the store index. Null when the
+     * index has not told it; the repository's name then stands in.
+     */
+    val label: String? = null,
+    /** Downloads of APK files summed over all of the repository's recent releases. */
+    val allDownloads: Long = downloads
 ) {
+    /** What the app is called in the store. */
+    val title: String
+        get() = label ?: repo
+
     val owner: String
         get() = fullName.substringBefore('/')
 
@@ -69,6 +83,8 @@ data class StoreApp(
         .put("packageName", packageName ?: JSONObject.NULL)
         .put("versionCode", versionCode)
         .put("versionName", versionName ?: JSONObject.NULL)
+        .put("label", label ?: JSONObject.NULL)
+        .put("allDownloads", allDownloads)
 
     companion object {
         fun fromJson(json: JSONObject) = StoreApp(
@@ -92,7 +108,9 @@ data class StoreApp(
             assetId = json.getLong("assetId"),
             packageName = if (json.isNull("packageName")) null else json.getString("packageName"),
             versionCode = json.optLong("versionCode"),
-            versionName = if (json.isNull("versionName")) null else json.getString("versionName")
+            versionName = if (json.isNull("versionName")) null else json.getString("versionName"),
+            label = if (json.isNull("label")) null else json.getString("label"),
+            allDownloads = json.optLong("allDownloads", json.optLong("downloads"))
         )
     }
 }

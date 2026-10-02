@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.ui.MainActivity
 
 /**
@@ -126,7 +127,10 @@ class InstallService : Service() {
         val downloading = states.filterValues { it is InstallState.Downloading }
         val single = downloading.entries.singleOrNull()
         val title = when {
-            single != null -> getString(R.string.download_notification_one, single.key.substringAfter('/'))
+            single != null -> getString(
+                R.string.download_notification_one,
+                CatalogRepository.get(this).titleOf(single.key)
+            )
             downloading.size > 1 -> resources.getQuantityString(
                 R.plurals.download_notification_many,
                 downloading.size,
@@ -212,7 +216,10 @@ class InstallService : Service() {
             val notification = NotificationCompat.Builder(context, READY_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_ark)
                 .setContentTitle(
-                    context.getString(R.string.install_ready_title, repo.substringAfter('/'))
+                    context.getString(
+                        R.string.install_ready_title,
+                        CatalogRepository.get(context).titleOf(repo)
+                    )
                 )
                 .setContentText(context.getString(R.string.install_ready_text))
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
