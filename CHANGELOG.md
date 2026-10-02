@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0-beta.4
+
+- Apps released on Codeberg: developers can publish from there with the `arkstore` topic,
+  just as on GitHub, and a new switch in the settings, Found on Codeberg, lists apps found
+  by searching it
+- The same app on GitHub and on Codeberg is listed once, from the one with the newer version
+
 ## 1.4.0-beta.3
 
 - Two more places to get apps from, each with a switch of its own in the settings: the

@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 13
-        versionName = "1.4.0-beta.3"
+        versionCode = 14
+        versionName = "1.4.0-beta.4"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
@@ -38,6 +38,18 @@ android {
             "String",
             "AUTO_INDEX_URL",
             "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/auto.json\""
+        )
+        // Apps published to the store from somewhere else than GitHub, shown to everyone.
+        buildConfigField(
+            "String",
+            "FORGE_INDEX_URL",
+            "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/forge.json\""
+        )
+        // Apps found by searching Codeberg, downloaded only by users who ask for them.
+        buildConfigField(
+            "String",
+            "CODEBERG_INDEX_URL",
+            "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/codeberg.json\""
         )
         // The lists of the other catalogues, each downloaded only by users who turn it on.
         buildConfigField(
