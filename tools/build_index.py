@@ -826,6 +826,11 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True):
         "repoUrl": repo["html_url"],
         "pushedAt": repo.get("pushed_at") or "",
         "downloads": sum(a.get("download_count", 0) for r in releases for a in apk_assets(r)),
+        # The part of the downloads that prereleases account for, so that the app can tell
+        # how often the full releases and the beta versions have each been downloaded.
+        "betaDownloads": sum(
+            a.get("download_count", 0) for r in releases if r.get("prerelease") for a in apk_assets(r)
+        ),
     }
     if stable_info is not None:
         app.update(stable_info)

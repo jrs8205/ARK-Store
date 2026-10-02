@@ -90,6 +90,17 @@ class BuildAppTest(unittest.TestCase):
         read_manifest.assert_not_called()
         self.assertIsNone(app["apks"][0]["label"])
 
+    def test_downloads_of_prereleases_are_also_counted_apart(self):
+        releases = [
+            {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("b.apk", 2)]},
+            dict(release()[0]),
+        ]
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 1, "1", None)):
+            app = build_index.build_app(REPO, {})
+        self.assertEqual((app["downloads"], app["betaDownloads"]), (6, 1))
+
     def test_malformed_apk_is_left_out(self):
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest",
