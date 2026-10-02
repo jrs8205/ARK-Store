@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0-beta.2
+
+- An app whose name differs from its repository's is shown with the repository as well as
+  the owner, and the details of every app name the repository
+- A release newer than the index takes its name only from an earlier version of the same
+  package, not from another app of the same repository
+- The index builder refuses a resource table whose entry counts do not fit, treats a file
+  placed outside the APK as a broken file rather than a network failure, and stops examining
+  repositories once a run has made 600 API requests
+
 ## 1.4.0-beta.1
 
 - Apps are listed under the name they give themselves instead of the name of their

@@ -1,0 +1,1 @@
+Sovellus, jonka nimi poikkeaa GitHub-repon nimestä, näytetään nyt repon kanssa, ja sovelluksen tiedoissa näkyy aina repo. Uusi julkaisu ei enää lainaa nimeään saman repon toiselta sovellukselta.
