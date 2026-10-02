@@ -3,6 +3,7 @@ package org.jarsi.arkstore.data
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
 import java.security.MessageDigest
@@ -114,10 +115,29 @@ object InstalledApps {
      * The certificates the installed [packageName] is signed with, as digests, or null when it
      * is not installed or they cannot be read.
      */
-    @Suppress("DEPRECATION")
-    fun signers(context: Context, packageName: String): Set<String>? = try {
-        context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
-            .signatures?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
+    fun signers(context: Context, packageName: String): Set<String>? =
+        signers(context.packageManager, packageName)
+
+    /**
+     * An app whose signing key has been replaced along the way is told with every key it has
+     * had, the present one among them. The older way of asking gives only the first of them,
+     * and a file signed with the present key would then pass for one signed otherwise.
+     */
+    fun signers(packages: PackageManager, packageName: String): Set<String>? = try {
+        val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signing = packages
+                .getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo
+            if (signing?.hasMultipleSigners() == true) {
+                signing.apkContentsSigners
+            } else {
+                signing?.signingCertificateHistory
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            packages.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+        }
+        certificates?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
     } catch (_: PackageManager.NameNotFoundException) {
         null
     }

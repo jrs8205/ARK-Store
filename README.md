@@ -197,9 +197,11 @@ The index workflow reads each catalogue's own index, checks it against the check
 catalogue publishes, and boils it down to one file per catalogue (`izzy.json`, `fdroid.json`
 next to the index), which the app downloads only while that switch is on. The APKs are
 downloaded from the catalogue itself, and the app checks every file against the checksum the
-catalogue gives for it before installing. Apps of a catalogue carry its name as a label, and
-their details show what the catalogue warns about, such as tracking or non-free network
-services. Stars and download counts are not shown for them, since the catalogues do not tell.
+catalogue gives for it before installing. Of an app's versions the newest one the device
+can run is offered, and for an app that is already installed the newest one signed with the
+same key. Apps of a catalogue carry its name as a label, and their details show what the
+catalogue warns about in that version, such as tracking or non-free network services. Stars
+and download counts are not shown for them, since the catalogues do not tell.
 
 ### The same app from several places
 

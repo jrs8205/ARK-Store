@@ -2,6 +2,7 @@ package org.jarsi.arkstore.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -221,6 +222,36 @@ class CatalogRulesTest {
             1,
             CatalogRules.pickCatalogueApk(listOf(apk(9, minSdk = 35), apk(8)), arm, sdk = 34)
         )
+    }
+
+    @Test
+    fun installedAppIsOfferedTheNewestFileSignedLikeIt() {
+        fun apk(code: Long, signer: String?) =
+            CatalogRules.CatalogueApk(code, emptyList(), 23, signer)
+        val abis = listOf("arm64-v8a")
+        val files = listOf(apk(9, "new"), apk(8, "old"), apk(7, "old"))
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34))
+        assertEquals(1, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("old")))
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("new")))
+        // A key that has been replaced: the app counts as signed with both.
+        assertEquals(
+            0,
+            CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("old", "new"))
+        )
+        // Nothing is signed like the installed app; the newest is shown, as one that will not do.
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("other")))
+        // A file whose signature is not known may still turn out to fit.
+        val unknown = listOf(apk(9, null), apk(8, "old"))
+        assertEquals(0, CatalogRules.pickCatalogueApk(unknown, abis, sdk = 34, installedSigners = setOf("old")))
+    }
+
+    @Test
+    fun everyAppDownloadsToAFileOfItsOwn() {
+        val name = CatalogRules.downloadName("gitlab:group/sub/app")
+        assertEquals(name, CatalogRules.downloadName("gitlab:group/sub/app"))
+        assertNotEquals(name, CatalogRules.downloadName("gitlab:group/sub_app"))
+        assertNotEquals(name, CatalogRules.downloadName("gitlab_group/sub/app"))
+        assertTrue(Regex("[0-9a-f]{32}[.]apk").matches(name))
     }
 
     @Test

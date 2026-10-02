@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
+import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Http
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.StoreApp
@@ -80,7 +81,7 @@ object InstallManager {
         InstallService.start(appContext)
 
         scope.launch {
-            val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_').replace(':', '_')}.apk")
+            val target = File(File(appContext.cacheDir, "apk"), CatalogRules.downloadName(app.fullName))
             try {
                 downloadAndInstall(appContext, app, target)
             } catch (e: CancellationException) {

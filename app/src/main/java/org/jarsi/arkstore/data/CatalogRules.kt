@@ -1,5 +1,7 @@
 package org.jarsi.arkstore.data
 
+import java.security.MessageDigest
+
 /** What the catalogue offers and shows, decided without any I/O so that it can be tested. */
 internal object CatalogRules {
 
@@ -48,20 +50,50 @@ internal object CatalogRules {
     }
 
     /** One file a catalogue offers of an app, as far as choosing between them goes. */
-    data class CatalogueApk(val versionCode: Long, val abis: List<String>, val minSdk: Int)
+    data class CatalogueApk(
+        val versionCode: Long,
+        val abis: List<String>,
+        val minSdk: Int,
+        /** SHA-256 of the certificate the file is signed with, when the catalogue tells it. */
+        val signer: String? = null
+    )
 
     /**
      * The index of the file in [apks] to offer a device that runs the CPU architectures
      * [deviceAbis] and Android [sdk], or null when none suits it: the highest version among
      * those the device can run. A file that names no architecture runs on all of them.
+     *
+     * [installedSigners] are the certificates the app is installed with, or null when it is
+     * not installed. Android updates an app only with a file signed like the installed one,
+     * so such a file, or one whose signature is not known, goes before a newer one that is
+     * signed otherwise.
      */
-    fun pickCatalogueApk(apks: List<CatalogueApk>, deviceAbis: List<String>, sdk: Int): Int? =
-        apks.withIndex()
-            .filter { (_, apk) ->
-                apk.minSdk <= sdk && (apk.abis.isEmpty() || apk.abis.any { it in deviceAbis })
-            }
+    fun pickCatalogueApk(
+        apks: List<CatalogueApk>,
+        deviceAbis: List<String>,
+        sdk: Int,
+        installedSigners: Set<String>? = null
+    ): Int? {
+        val runnable = apks.withIndex().filter { (_, apk) ->
+            apk.minSdk <= sdk && (apk.abis.isEmpty() || apk.abis.any { it in deviceAbis })
+        }
+        val updating = installedSigners?.let { signers ->
+            runnable.filter { (_, apk) -> apk.signer == null || apk.signer in signers }
+        }
+        return (updating?.takeIf { it.isNotEmpty() } ?: runnable)
             .maxByOrNull { (_, apk) -> apk.versionCode }
             ?.index
+    }
+
+    /**
+     * The name of the file an app's download is kept in until it is installed. Every
+     * [fullName] has a name of its own, whatever characters it is made of: two downloads
+     * running at once must never write to the same file.
+     */
+    fun downloadName(fullName: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(fullName.toByteArray())
+        return digest.take(16).joinToString("") { "%02x".format(it) } + ".apk"
+    }
 
     /** One app of the list, with the other places that offer the same package. */
     data class Merged(val app: StoreApp, val alsoFrom: List<String>)
