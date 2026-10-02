@@ -55,6 +55,11 @@ AUTO_SEARCH_PAGES = 10
 # only this many are examined per run. Repositories that have not changed since they were
 # last examined cost nothing, so the list fills up over a few runs and then stays current.
 AUTO_MAX_LOOKUPS = 500
+# A repository whose first page of releases holds nothing but prereleases costs a second
+# request. The token of a workflow run is allowed 1000 requests an hour, which the published
+# apps and a run started soon after this one need a share of, so a run stops examining once
+# it has made this many requests; what is left over is examined by the next run.
+AUTO_MAX_REQUESTS = 600
 AUTO_MAX_NOTES = 800
 # A repository that has not been pushed to is still examined again now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
@@ -130,7 +135,12 @@ ARCHITECTURE_MARKERS = (
 )
 
 
+api_requests = 0
+
+
 def api(path):
+    global api_requests  # pylint: disable=global-statement
+    api_requests += 1
     request = urllib.request.Request(
         API + path,
         headers={
@@ -260,6 +270,10 @@ def read_entry(url, size, entry, limit):
     # not known yet. Android aligns uncompressed files with it, so it is short; the rest
     # is fetched separately in the rare case that the guess falls short.
     guess = 30 + name_length + 4096
+    # Where the directory says the file is must lie inside the APK. Asking the server for
+    # anything else would fail in a way that looks like a network problem.
+    if local_offset + 30 + name_length + compressed > size:
+        raise ManifestError("file outside the archive")
     wanted = min(size - local_offset, guess + compressed)
     local = read_range(url, local_offset, wanted)
     if local[:4] != b"PK\x03\x04":
@@ -401,11 +415,11 @@ def resource_value(table, packages, resource_id):
             kind, header_size, chunk_size = struct.unpack_from("<HHI", table, position)
             if chunk_size < 8 or header_size < 8 or position + chunk_size > end:
                 break
-            if kind == 0x0201 and table[position + 8] == type_id:
+            if kind == 0x0201 and header_size >= 24 and table[position + 8] == type_id:
                 value = entry_value(table, position, header_size, chunk_size, entry)
                 if value is not None:
                     config_size, = struct.unpack_from("<I", table, position + 20)
-                    config = table[position + 24:position + 20 + config_size]
+                    config = table[position + 24:position + min(20 + config_size, header_size)]
                     if not any(config):
                         return value
                     rank = 1 if config[4:6] == b"en" else 2
@@ -421,6 +435,12 @@ def entry_value(table, chunk, header_size, chunk_size, entry):
     flags = table[chunk + 9]
     entry_count, entries_start = struct.unpack_from("<II", table, chunk + 12)
     offsets = chunk + header_size
+    # The offsets must fit between the header and the entries of this very chunk. A count
+    # that claims more would have every chunk read on into the ones after it, which takes a
+    # crafted table of a few kilobytes a very long time.
+    width = 2 if flags & 0x02 and not flags & 0x01 else 4
+    if not header_size <= entries_start <= chunk_size or entry_count > (entries_start - header_size) // width:
+        raise ManifestError("resource type out of range")
     offset = None
     if flags & 0x01:
         # Sparse: pairs of entry index and offset, for the entries that exist.
@@ -618,12 +638,13 @@ def build_auto_apps(published, previous_auto, state, today):
     apps = []
     new_state = {}
     lookups = 0
+    requests_before = api_requests
     for repo in candidates:
         full_name = repo["full_name"]
         pushed_at = repo.get("pushed_at") or ""
         previous = previous_auto.get(full_name)
         looked = False
-        if full_name not in examine:
+        if full_name not in examine or api_requests - requests_before >= AUTO_MAX_REQUESTS:
             # Unchanged, or out of budget for this run: keep what is known.
             app = previous
             if app:
