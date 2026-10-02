@@ -137,8 +137,10 @@ What the list does not promise:
   library that attaches a sample or demo APK to its releases, so some of those are listed
   too.
 - **It follows releases more slowly.** A repository is looked at again when it has been
-  pushed to, and otherwise once a day, so a new version whose APK was attached without a
-  push can take a day longer to show up.
+  pushed to, and otherwise becomes due for another look after a day. Each run examines a
+  limited number of repositories, those that have changed first, so a new version whose
+  APK was attached without a push shows up a day later at the earliest, and later still
+  while many repositories are changing.
 
 Nobody has chosen a category for these apps, so the index guesses one from the words of the
 repository's topics and description. The guess can be wrong, and an app it cannot place goes

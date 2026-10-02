@@ -235,6 +235,15 @@ class ResourceStringTest(unittest.TestCase):
         table = resource_table(self.STRINGS, type_chunk(2, [compact]))
         self.assertEqual(build_index.resource_string(table, 0x7F020000), "English")
 
+    def test_entry_count_beyond_the_chunk_is_refused(self):
+        for flags in (0x00, 0x01, 0x02):
+            table = bytearray(resource_table(self.STRINGS, type_chunk(2, [simple_entry(0x03, 0)], flags=flags)))
+            # The count is the second field of the only type chunk's header.
+            at = table.index(struct.pack("<HH", 0x0201, 36)) + 12
+            struct.pack_into("<I", table, at, 1 << 30)
+            with self.assertRaises(build_index.ManifestError):
+                build_index.resource_string(bytes(table), 0x7F020000)
+
     def test_missing_resource_is_none(self):
         table = resource_table(self.STRINGS, type_chunk(2, [simple_entry(0x03, 0)]))
         self.assertIsNone(build_index.resource_string(table, 0x7F020005))
@@ -284,6 +293,22 @@ class ReadManifestTest(unittest.TestCase):
         self.assertEqual(self.read(files), ("org.example", 3, None, None))
         files.pop(b"resources.arsc")
         self.assertEqual(self.read(files), ("org.example", 3, None, None))
+
+    def test_resource_table_placed_outside_the_archive_costs_only_the_label(self):
+        files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
+        apk = bytearray(zip_file(files))
+        # The offset of the local header is the last field before the name in the directory.
+        at = apk.rindex(b"resources.arsc") - 4
+        struct.pack_into("<I", apk, at, len(apk) + 1)
+
+        def read_range(url, start, length):
+            self.assertGreater(length, 0)
+            self.assertLessEqual(start + length, len(apk))
+            return bytes(apk[start:start + length])
+
+        with mock.patch.object(build_index, "read_range", side_effect=read_range):
+            result = build_index.read_manifest("https://example.invalid/a.apk", len(apk))
+        self.assertEqual(result, ("org.example", 3, None, None))
 
     def test_label_is_tidied(self):
         self.assertEqual(build_index.tidy_label("  Two\n words "), "Two words")
@@ -605,6 +630,18 @@ class AutoAppsTest(unittest.TestCase):
         apps, state, build_app = self.run_auto(candidates, built)
         self.assertEqual(build_app.call_count, build_index.AUTO_MAX_LOOKUPS)
         self.assertEqual(len(state), build_index.AUTO_MAX_LOOKUPS)
+
+    def test_examining_stops_when_the_requests_are_used_up(self):
+        candidates = [self.candidate("o/app%d" % i) for i in range(5)]
+        cost = build_index.AUTO_MAX_REQUESTS // 2
+
+        def build_app(repo, *args, **kwargs):
+            build_index.api_requests += cost
+            return self.entry(repo["full_name"])
+
+        apps, state, mocked = self.run_auto(candidates, build_app)
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(sorted(state), ["o/app0", "o/app1"])
 
 
 class MainTest(unittest.TestCase):
