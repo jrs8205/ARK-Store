@@ -23,6 +23,8 @@ import urllib.request
 import zlib
 
 API = "https://api.github.com"
+MANIFEST_FILE = b"AndroidManifest.xml"
+RESOURCES_FILE = b"resources.arsc"
 TOPIC = "arkstore"
 PAGE_SIZE = 100
 # GitHub's search returns at most 1000 results for a query.
@@ -30,6 +32,9 @@ MAX_SEARCH_PAGES = 10
 MAX_NOTES = 4000
 MAX_DIRECTORY = 8 * 1024 * 1024
 MAX_MANIFEST = 4 * 1024 * 1024
+# An app's name is looked up in the APK's resource table, which is fetched whole.
+MAX_RESOURCES = 32 * 1024 * 1024
+MAX_LABEL = 60
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -169,20 +174,54 @@ def inflate(data, limit):
     inflater = zlib.decompressobj(-15)
     result = inflater.decompress(data, limit + 1)
     if len(result) > limit or inflater.unconsumed_tail:
-        raise ManifestError("manifest too large")
+        raise ManifestError("file too large")
     return result
 
 
-def read_manifest(url, size):
-    """Returns (package, versionCode, versionName) from the APK at url, fetching only its
-    zip directory and the compressed AndroidManifest.xml."""
+def read_manifest(url, size, labels=None):
+    """Returns (package, versionCode, versionName, label) from the APK at url, fetching only
+    its zip directory, the compressed AndroidManifest.xml and, when the app's name is kept
+    there, its resource table. label is None when the APK does not tell it.
+
+    labels maps a package to the label already read from another APK of the same release.
+    The files of one release differ in the CPU architecture they are built for, not in what
+    the app is called, so the resource table is fetched for the first of them only.
+    """
     try:
-        return parse_manifest(read_manifest_bytes(url, size))
+        entries = read_directory(url, size, (MANIFEST_FILE, RESOURCES_FILE))
+        if MANIFEST_FILE not in entries:
+            raise ManifestError("manifest not found")
+        manifest = read_entry(url, size, entries[MANIFEST_FILE], MAX_MANIFEST)
+        package, version_code, version_name, label = parse_manifest(manifest)
     except (struct.error, IndexError, ValueError, zlib.error, UnicodeDecodeError) as error:
         raise ManifestError(str(error)) from error
+    if isinstance(label, int):
+        if labels is not None and package in labels:
+            label = labels[package]
+        else:
+            label = read_label(url, size, entries.get(RESOURCES_FILE), label)
+    return package, version_code, version_name, tidy_label(label)
 
 
-def read_manifest_bytes(url, size):
+def read_label(url, size, entry, resource_id):
+    """The string the APK's resource table gives for resource_id, or None. A table that is
+    missing, too large or malformed costs the app its name, not its place in the store."""
+    if entry is None:
+        return None
+    try:
+        return resource_string(read_entry(url, size, entry, MAX_RESOURCES), resource_id)
+    except (ManifestError, struct.error, IndexError, ValueError, zlib.error) as error:
+        print("  no name from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
+        return None
+
+
+def tidy_label(label):
+    label = " ".join((label or "").split())
+    return label[:MAX_LABEL] or None
+
+
+def read_directory(url, size, wanted):
+    """The zip directory's entries for the file names in wanted, by name."""
     tail_length = min(size, 22 + 65535)
     tail_start = size - tail_length
     tail = read_range(url, tail_start, tail_length)
@@ -198,6 +237,7 @@ def read_manifest_bytes(url, size):
     else:
         directory = read_range(url, directory_offset, directory_size)
 
+    entries = {}
     position = 0
     while position + 46 <= len(directory) and directory[position:position + 4] == b"PK\x01\x02":
         method, = struct.unpack_from("<H", directory, position + 10)
@@ -205,30 +245,46 @@ def read_manifest_bytes(url, size):
         name_length, extra_length, comment_length = struct.unpack_from("<HHH", directory, position + 28)
         local_offset, = struct.unpack_from("<I", directory, position + 42)
         name = directory[position + 46:position + 46 + name_length]
-        if name == b"AndroidManifest.xml":
-            if compressed > MAX_MANIFEST or uncompressed > MAX_MANIFEST:
-                raise ManifestError("manifest too large")
-            wanted = min(size - local_offset, 30 + len(name) + 65535 + compressed)
-            local = read_range(url, local_offset, wanted)
-            if local[:4] != b"PK\x03\x04":
-                raise ManifestError("bad local header")
-            local_name, local_extra = struct.unpack_from("<HH", local, 26)
-            start = 30 + local_name + local_extra
-            data = local[start:start + compressed]
-            if len(data) != compressed:
-                raise ManifestError("truncated entry")
-            if method == 0:
-                return data
-            if method == 8:
-                return inflate(data, MAX_MANIFEST)
-            raise ManifestError("unsupported compression")
+        if name in wanted and name not in entries:
+            entries[name] = (method, compressed, uncompressed, local_offset, name_length)
         position += 46 + name_length + extra_length + comment_length
-    raise ManifestError("manifest not found")
+    return entries
+
+
+def read_entry(url, size, entry, limit):
+    """The contents of one file of the zip at url, refusing more than limit bytes."""
+    method, compressed, uncompressed, local_offset, name_length = entry
+    if compressed > limit or uncompressed > limit:
+        raise ManifestError("file too large")
+    # The local header repeats the name and has an extra field of its own, whose length is
+    # not known yet. Android aligns uncompressed files with it, so it is short; the rest
+    # is fetched separately in the rare case that the guess falls short.
+    guess = 30 + name_length + 4096
+    wanted = min(size - local_offset, guess + compressed)
+    local = read_range(url, local_offset, wanted)
+    if local[:4] != b"PK\x03\x04":
+        raise ManifestError("bad local header")
+    local_name, local_extra = struct.unpack_from("<HH", local, 26)
+    start = 30 + local_name + local_extra
+    missing = start + compressed - len(local)
+    if missing > 0:
+        if local_offset + len(local) + missing > size:
+            raise ManifestError("truncated entry")
+        local += read_range(url, local_offset + len(local), missing)
+    data = local[start:start + compressed]
+    if method == 0:
+        return data
+    if method == 8:
+        return inflate(data, limit)
+    raise ManifestError("unsupported compression")
 
 
 def parse_manifest(data):
+    """Returns (package, versionCode, versionName, label) from a binary AndroidManifest.xml.
+    label is the application's name as text, the id of the resource that holds it, or None."""
     strings = None
     resource_ids = []
+    manifest = None
     position = 8
     while position + 8 <= len(data):
         kind, header_size, chunk_size = struct.unpack_from("<HHI", data, position)
@@ -244,8 +300,12 @@ def parse_manifest(data):
                 raise ManifestError("string pool missing")
             body = position + header_size
             name_index, = struct.unpack_from("<i", data, body + 4)
-            if strings.get(name_index) != "manifest":
+            element = strings.get(name_index)
+            if manifest is None and element != "manifest":
                 raise ManifestError("unexpected root element")
+            if manifest is not None and element != "application":
+                position += chunk_size
+                continue
             attribute_start, attribute_size, attribute_count = struct.unpack_from("<HHH", data, body + 8)
             if attribute_size < 20:
                 raise ManifestError("bad attribute size")
@@ -253,6 +313,7 @@ def parse_manifest(data):
             version_code = 0
             version_code_major = 0
             version_name = None
+            label = None
             for index in range(attribute_count):
                 attribute = body + attribute_start + index * attribute_size
                 _, name, raw = struct.unpack_from("<iii", data, attribute)
@@ -271,13 +332,122 @@ def parse_manifest(data):
                     version_code_major = value
                 elif resource == 0x0101021C:
                     version_name = text
+                elif resource == 0x01010001:
+                    # A reference to a string resource, or the name itself.
+                    label = value if data_type in (0x01, 0x07) else text
                 elif strings.get(name) == "package":
                     package = text
+            if manifest is not None:
+                return manifest + (label,)
             if not package:
                 raise ManifestError("package name missing")
-            return package, (version_code_major << 32) | version_code, version_name
+            manifest = (package, (version_code_major << 32) | version_code, version_name)
         position += chunk_size
-    raise ManifestError("manifest element not found")
+    if manifest is None:
+        raise ManifestError("manifest element not found")
+    return manifest + (None,)
+
+
+def resource_string(table, resource_id):
+    """The string a resource table (resources.arsc) holds for resource_id, or None.
+
+    A resource has a value for each configuration it is defined in. The one without any
+    qualifier is what a device falls back to, so that is taken; failing it, English, and
+    failing that too, whichever comes first.
+    """
+    kind, header_size, _ = struct.unpack_from("<HHI", table, 0)
+    if kind != 0x0002:
+        raise ManifestError("not a resource table")
+    strings = None
+    packages = []
+    position = header_size
+    while position + 8 <= len(table):
+        kind, chunk_header, chunk_size = struct.unpack_from("<HHI", table, position)
+        if chunk_size < 8 or chunk_header < 8 or position + chunk_size > len(table):
+            break
+        if kind == 0x0001 and strings is None:
+            strings = StringPool(table, position, chunk_header, chunk_size)
+        elif kind == 0x0200:
+            packages.append((position, chunk_header, chunk_size))
+        position += chunk_size
+    if strings is None:
+        raise ManifestError("string pool missing")
+    # A resource may point at another one; a few steps are plenty for any honest table.
+    for _ in range(8):
+        value = resource_value(table, packages, resource_id)
+        if value is None:
+            return None
+        data_type, data = value
+        if data_type == 0x03:
+            return strings.get(data)
+        if data_type not in (0x01, 0x07) or not data:
+            return None
+        resource_id = data
+    return None
+
+
+def resource_value(table, packages, resource_id):
+    """(type, data) of the value resource_id has in the best configuration, or None."""
+    package_id = resource_id >> 24
+    type_id = (resource_id >> 16) & 0xFF
+    entry = resource_id & 0xFFFF
+    best = None
+    for package, package_header, package_size in packages:
+        if struct.unpack_from("<I", table, package + 8)[0] != package_id:
+            continue
+        position = package + package_header
+        end = package + package_size
+        while position + 8 <= end:
+            kind, header_size, chunk_size = struct.unpack_from("<HHI", table, position)
+            if chunk_size < 8 or header_size < 8 or position + chunk_size > end:
+                break
+            if kind == 0x0201 and table[position + 8] == type_id:
+                value = entry_value(table, position, header_size, chunk_size, entry)
+                if value is not None:
+                    config_size, = struct.unpack_from("<I", table, position + 20)
+                    config = table[position + 24:position + 20 + config_size]
+                    if not any(config):
+                        return value
+                    rank = 1 if config[4:6] == b"en" else 2
+                    if best is None or rank < best[0]:
+                        best = (rank, value)
+            position += chunk_size
+    return best[1] if best else None
+
+
+def entry_value(table, chunk, header_size, chunk_size, entry):
+    """(type, data) of one entry of a type chunk, or None when the chunk has no simple value
+    for it."""
+    flags = table[chunk + 9]
+    entry_count, entries_start = struct.unpack_from("<II", table, chunk + 12)
+    offsets = chunk + header_size
+    offset = None
+    if flags & 0x01:
+        # Sparse: pairs of entry index and offset, for the entries that exist.
+        for index in range(entry_count):
+            found, quarter = struct.unpack_from("<HH", table, offsets + index * 4)
+            if found == entry:
+                offset = quarter * 4
+                break
+    elif entry < entry_count:
+        if flags & 0x02:
+            quarter, = struct.unpack_from("<H", table, offsets + entry * 2)
+            offset = None if quarter == 0xFFFF else quarter * 4
+        else:
+            offset, = struct.unpack_from("<I", table, offsets + entry * 4)
+            offset = None if offset == 0xFFFFFFFF else offset
+    if offset is None:
+        return None
+    at = chunk + entries_start + offset
+    if at + 8 > chunk + chunk_size:
+        return None
+    size, entry_flags = struct.unpack_from("<HH", table, at)
+    if entry_flags & 0x0008:
+        # Compact: the type sits in the flags and the data where the key would be.
+        return entry_flags >> 8, struct.unpack_from("<I", table, at + 4)[0]
+    if entry_flags & 0x0001 or at + size + 8 > chunk + chunk_size:
+        return None
+    return table[at + size + 3], struct.unpack_from("<I", table, at + size + 4)[0]
 
 
 class StringPool:
@@ -513,15 +683,18 @@ def apk_assets(release):
 def release_info(release, previous_apks):
     """Describes one release and its usable APKs, or returns None when it has none."""
     apks = []
+    labels = {}
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
-        if known:
+        if known and "label" in known:
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
-            manifest = (known["packageName"], known["versionCode"], known["versionName"])
+            # An entry written before names were read has no label, and is read again.
+            manifest = (known["packageName"], known["versionCode"], known["versionName"],
+                        known["label"])
         else:
             try:
-                manifest = read_manifest(asset["browser_download_url"], asset["size"])
+                manifest = read_manifest(asset["browser_download_url"], asset["size"], labels)
             except ManifestError as error:
                 # The file is broken; leave it out. A network failure, on the other hand,
                 # propagates so that the caller keeps what it knew about the app.
@@ -535,7 +708,9 @@ def release_info(release, previous_apks):
             "packageName": manifest[0],
             "versionCode": manifest[1],
             "versionName": manifest[2],
+            "label": manifest[3],
         })
+        labels[manifest[0]] = manifest[3]
     if not apks:
         return None
     return {

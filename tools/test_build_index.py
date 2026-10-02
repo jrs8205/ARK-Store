@@ -2,6 +2,7 @@
 
 import json
 import os
+import struct
 import tempfile
 import unittest
 import urllib.error
@@ -54,7 +55,7 @@ class BuildAppTest(unittest.TestCase):
     def test_renamed_asset_keeps_manifest_but_takes_the_new_address(self):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
-            "packageName": "org.example", "versionCode": 4, "versionName": "1.4",
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -64,6 +65,30 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual(apk["name"], "new.apk")
         self.assertEqual(apk["url"], "https://example.invalid/new.apk")
         self.assertEqual((apk["packageName"], apk["versionCode"]), ("org.example", 4))
+        self.assertEqual(apk["label"], "Example")
+
+    def test_apk_known_without_a_label_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4",
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example")) as read_manifest:
+            app = build_index.build_app(REPO, previous)
+        read_manifest.assert_called_once()
+        self.assertEqual(app["apks"][0]["label"], "Example")
+
+    def test_apk_known_to_have_no_label_is_not_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest") as read_manifest:
+            app = build_index.build_app(REPO, previous)
+        read_manifest.assert_not_called()
+        self.assertIsNone(app["apks"][0]["label"])
 
     def test_malformed_apk_is_left_out(self):
         with mock.patch.object(build_index, "api", return_value=release()), \
@@ -79,6 +104,182 @@ class BuildAppTest(unittest.TestCase):
                 build_index.build_app(REPO, {})
 
 
+def chunk(kind, header, body=b""):
+    """A chunk of Android's binary resource formats: type, header size, total size."""
+    return struct.pack("<HHI", kind, 8 + len(header), 8 + len(header) + len(body)) + header + body
+
+
+def string_pool(strings):
+    """A UTF-16 string pool."""
+    offsets = b""
+    data = b""
+    for text in strings:
+        offsets += struct.pack("<I", len(data))
+        data += struct.pack("<H", len(text)) + text.encode("utf-16-le") + b"\0\0"
+    header = struct.pack("<IIIII", len(strings), 0, 0, 28 + len(offsets), 0)
+    return chunk(0x0001, header, offsets + data)
+
+
+def simple_entry(data_type, data):
+    return struct.pack("<HHI", 8, 0, 0) + struct.pack("<HBBI", 8, 0, data_type, data)
+
+
+def type_chunk(type_id, entries, language=b"\0\0", flags=0):
+    """A type chunk holding entries, a list of encoded entries or None, for one language."""
+    config = struct.pack("<I", 16) + b"\0" * 4 + language + b"\0" * 6
+    offsets = b""
+    body = b""
+    for index, entry in enumerate(entries):
+        if flags & 0x01:
+            if entry is not None:
+                offsets += struct.pack("<HH", index, len(body) // 4)
+        elif flags & 0x02:
+            offsets += struct.pack("<H", 0xFFFF if entry is None else len(body) // 4)
+        else:
+            offsets += struct.pack("<I", 0xFFFFFFFF if entry is None else len(body))
+        body += entry or b""
+    count = sum(e is not None for e in entries) if flags & 0x01 else len(entries)
+    offsets += b"\0" * (-len(offsets) % 4)
+    header = struct.pack("<BBHII", type_id, flags, 0, count, 20 + len(config) + len(offsets))
+    return chunk(0x0201, header + config, offsets + body)
+
+
+def resource_table(strings, *types):
+    package = chunk(0x0200, struct.pack("<I", 0x7F) + b"\0" * 276, b"".join(types))
+    return chunk(0x0002, struct.pack("<I", 1), string_pool(strings) + package)
+
+
+def manifest_element(name, attributes):
+    """A start tag; attributes are (name index, type, data) with the name's index doubling as
+    its place in the resource map."""
+    body = struct.pack("<iiHHHHHH", -1, name, 20, 20, len(attributes), 0, 0, 0)
+    for attribute, data_type, data in attributes:
+        raw = data if data_type == 0x03 else -1
+        body += struct.pack("<iiiHBBI", -1, attribute, raw, 8, 0, data_type, data)
+    return chunk(0x0102, struct.pack("<Ii", 1, -1), body)
+
+
+def manifest(label):
+    """A binary manifest of org.example, version 3, whose application has the given label
+    attribute as (type, data), or none."""
+    strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain"]
+    resource_map = chunk(0x0180, b"", struct.pack("<II", 0x0101021B, 0x01010001))
+    elements = manifest_element(3, [(0, 0x10, 3), (2, 0x03, 5)])
+    elements += manifest_element(4, [(1,) + label] if label else [])
+    return chunk(0x0003, b"", string_pool(strings) + resource_map + elements)
+
+
+class ManifestTest(unittest.TestCase):
+    def test_label_written_out_is_returned_as_text(self):
+        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6))), ("org.example", 3, None, "Plain"))
+
+    def test_label_kept_in_a_resource_is_returned_as_its_id(self):
+        self.assertEqual(build_index.parse_manifest(manifest((0x01, 0x7F020001)))[3], 0x7F020001)
+
+    def test_application_without_a_label_has_none(self):
+        self.assertEqual(build_index.parse_manifest(manifest(None)), ("org.example", 3, None, None))
+
+
+class ResourceStringTest(unittest.TestCase):
+    STRINGS = ["Default", "English", "Suomi"]
+
+    def test_value_without_qualifiers_is_preferred(self):
+        table = resource_table(
+            self.STRINGS,
+            type_chunk(2, [None, simple_entry(0x03, 2)], language=b"fi"),
+            type_chunk(2, [None, simple_entry(0x03, 0)]),
+            type_chunk(2, [None, simple_entry(0x03, 1)], language=b"en"),
+        )
+        self.assertEqual(build_index.resource_string(table, 0x7F020001), "Default")
+
+    def test_english_is_taken_when_there_is_no_default(self):
+        table = resource_table(
+            self.STRINGS,
+            type_chunk(2, [simple_entry(0x03, 2)], language=b"fi"),
+            type_chunk(2, [simple_entry(0x03, 1)], language=b"en"),
+        )
+        self.assertEqual(build_index.resource_string(table, 0x7F020000), "English")
+
+    def test_reference_is_followed(self):
+        table = resource_table(
+            self.STRINGS,
+            type_chunk(2, [simple_entry(0x01, 0x7F030000)]),
+            type_chunk(3, [simple_entry(0x03, 1)]),
+        )
+        self.assertEqual(build_index.resource_string(table, 0x7F020000), "English")
+
+    def test_reference_to_itself_ends(self):
+        table = resource_table(self.STRINGS, type_chunk(2, [simple_entry(0x01, 0x7F020000)]))
+        self.assertIsNone(build_index.resource_string(table, 0x7F020000))
+
+    def test_sparse_and_short_offsets_are_read(self):
+        entries = [None, None, simple_entry(0x03, 2)]
+        for flags in (0x01, 0x02):
+            table = resource_table(self.STRINGS, type_chunk(2, entries, flags=flags))
+            self.assertEqual(build_index.resource_string(table, 0x7F020002), "Suomi")
+            self.assertIsNone(build_index.resource_string(table, 0x7F020001))
+
+    def test_compact_entry_is_read(self):
+        compact = struct.pack("<HHI", 0, 0x0008 | (0x03 << 8), 1)
+        table = resource_table(self.STRINGS, type_chunk(2, [compact]))
+        self.assertEqual(build_index.resource_string(table, 0x7F020000), "English")
+
+    def test_missing_resource_is_none(self):
+        table = resource_table(self.STRINGS, type_chunk(2, [simple_entry(0x03, 0)]))
+        self.assertIsNone(build_index.resource_string(table, 0x7F020005))
+        self.assertIsNone(build_index.resource_string(table, 0x7F040000))
+        self.assertIsNone(build_index.resource_string(table, 0x01020000))
+
+
+def zip_file(files):
+    """A zip of stored files, as bytes."""
+    data = b""
+    directory = b""
+    for name, content in files.items():
+        offset = len(data)
+        common = struct.pack("<HHHHHIII", 20, 0, 0, 0, 0, 0, len(content), len(content))
+        data += b"PK\x03\x04" + common + struct.pack("<HH", len(name), 0) + name + content
+        directory += b"PK\x01\x02" + struct.pack("<H", 20) + common
+        directory += struct.pack("<HHHHHII", len(name), 0, 0, 0, 0, 0, offset) + name
+    end = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, len(files), len(files), len(directory), len(data), 0)
+    return data + directory + end
+
+
+class ReadManifestTest(unittest.TestCase):
+    TABLE = resource_table(["Example App"], type_chunk(2, [simple_entry(0x03, 0)]))
+
+    def read(self, files, labels=None):
+        apk = zip_file(files)
+        self.ranges = []
+
+        def read_range(url, start, length):
+            self.ranges.append((start, length))
+            return apk[start:start + length]
+
+        with mock.patch.object(build_index, "read_range", side_effect=read_range):
+            return build_index.read_manifest("https://example.invalid/a.apk", len(apk), labels)
+
+    def test_label_is_looked_up_in_the_resource_table(self):
+        files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
+        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App"))
+
+    def test_label_read_from_another_apk_of_the_release_is_reused(self):
+        files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
+        self.assertEqual(self.read(files, {"org.example": "Known"})[3], "Known")
+        self.assertEqual(len(self.ranges), 2)
+
+    def test_unreadable_resource_table_costs_only_the_label(self):
+        files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": b"junk" * 8}
+        self.assertEqual(self.read(files), ("org.example", 3, None, None))
+        files.pop(b"resources.arsc")
+        self.assertEqual(self.read(files), ("org.example", 3, None, None))
+
+    def test_label_is_tidied(self):
+        self.assertEqual(build_index.tidy_label("  Two\n words "), "Two words")
+        self.assertEqual(len(build_index.tidy_label("x" * 100)), build_index.MAX_LABEL)
+        self.assertIsNone(build_index.tidy_label("  "))
+
+
 def asset(name, asset_id):
     return {"id": asset_id, "name": name, "browser_download_url": "https://example.invalid/" + name,
             "size": 100, "download_count": 1}
@@ -90,9 +291,9 @@ class PrereleaseTest(unittest.TestCase):
         b.apk an upgrade of a.apk."""
         manifests = manifests or {"a.apk": ("org.example", 1), "b.apk": ("org.example", 2)}
 
-        def read_manifest(url, size):
+        def read_manifest(url, size, labels=None):
             package, code = manifests[url.rsplit("/", 1)[1]]
-            return package, code, str(code)
+            return package, code, str(code), None
 
         with mock.patch.object(build_index, "api", return_value=releases), \
                 mock.patch.object(build_index, "read_manifest", side_effect=read_manifest) as reader:
@@ -199,7 +400,7 @@ class PrereleaseTest(unittest.TestCase):
     def test_prerelease_is_left_alone_when_not_wanted(self):
         with mock.patch.object(build_index, "api", return_value=self.PRERELEASE_FIRST), \
                 mock.patch.object(build_index, "read_manifest",
-                                  return_value=("org.example", 1, "1")) as reader:
+                                  return_value=("org.example", 1, "1", None)) as reader:
             app = build_index.build_app(REPO, {}, with_prerelease=False)
         self.assertEqual(app["tag"], "v1")
         self.assertNotIn("beta", app)
@@ -225,7 +426,7 @@ class NotBeforeTest(unittest.TestCase):
     def test_recent_release_is_examined(self):
         releases = [{"tag_name": "v1", "published_at": "2026-09-01T00:00:00Z", "assets": [asset("a.apk", 1)]}]
         with mock.patch.object(build_index, "api", return_value=releases), \
-                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 1, "1")):
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 1, "1", None)):
             self.assertEqual(build_index.build_app(REPO, {}, not_before=1700000000)["tag"], "v1")
 
 
