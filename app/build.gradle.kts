@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 14
-        versionName = "1.4.0-beta.4"
+        versionCode = 15
+        versionName = "1.4.0-beta.5"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
@@ -50,6 +50,12 @@ android {
             "String",
             "CODEBERG_INDEX_URL",
             "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/codeberg.json\""
+        )
+        // Likewise for GitLab.
+        buildConfigField(
+            "String",
+            "GITLAB_INDEX_URL",
+            "\"https://raw.githubusercontent.com/jrs8205/ARK-Store/index/gitlab.json\""
         )
         // The lists of the other catalogues, each downloaded only by users who turn it on.
         buildConfigField(

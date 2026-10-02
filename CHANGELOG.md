@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0-beta.5
+
+- Apps released on GitLab: developers can publish from gitlab.com with the `arkstore` topic,
+  and a new switch in the settings, Found on GitLab, lists the few apps found by searching it
+
 ## 1.4.0-beta.4
 
 - Apps released on Codeberg: developers can publish from there with the `arkstore` topic,
