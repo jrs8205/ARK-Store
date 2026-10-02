@@ -1,6 +1,8 @@
 """Tests for the builder of the Codeberg lists. Run with: python3 -m unittest discover tools"""
 
+import hashlib
 import http.client
+import re
 import unittest
 import urllib.error
 from unittest import mock
@@ -134,13 +136,48 @@ class LicenseTest(unittest.TestCase):
         self.assertIsNone(build_forge.identify_license(
             "\"Commons Clause\" License Condition v1.0\n\nThe Software is provided to you under the "
             "License, as defined below, subject to the following condition.\n\n" + MIT))
-        self.assertIsNone(build_forge.identify_license(MIT + "\nThe software may not be sold.\n"))
-        self.assertIsNone(build_forge.identify_license(MIT + "\nFor non-commercial use only.\n"))
         self.assertIsNone(build_forge.identify_license("Our own terms come first. " * 60 + MIT))
+        self.assertIsNone(build_forge.identify_license("Commercial redistribution is forbidden.\n\n" + MIT))
+        for added in ("The software may not be sold.", "For non-commercial use only.",
+                      "The Software shall be used for Good, not Evil.", "Redistribution is forbidden.",
+                      "Use is limited to educational institutions."):
+            self.assertIsNone(build_forge.identify_license(MIT + "\n" + added + "\n"))
 
-    def test_licenses_of_included_parts_may_follow(self):
-        text = MIT + "\n----\nThis app includes a library under the following license:\n\n" + ISC
-        self.assertEqual(build_forge.identify_license(text), "MIT")
+    def test_only_further_licenses_may_follow_terms_that_are_not_closed(self):
+        self.assertEqual(build_forge.identify_license(MIT + "\n----\n\nISC License\n\n" + ISC), "MIT")
+        told = MIT + "\n----\nThis app includes a library under the following license:\n\n" + ISC
+        self.assertIsNone(build_forge.identify_license(told))
+
+    def test_names_filled_in_do_not_change_the_terms(self):
+        isc = ISC.replace("THE AUTHOR", "EXAMPLE CORP")
+        self.assertNotEqual(isc, ISC)
+        self.assertEqual(build_forge.identify_license(isc), "ISC")
+        disclaimer = BSD_DISCLAIMER.replace("THE COPYRIGHT HOLDERS AND CONTRIBUTORS", "EXAMPLE CORP") \
+            .replace("THE COPYRIGHT HOLDER OR CONTRIBUTORS", "EXAMPLE CORP")
+        self.assertNotIn("COPYRIGHT HOLDER", disclaimer)
+        self.assertEqual(build_forge.identify_license(BSD_CONDITIONS + disclaimer), "BSD-2-Clause")
+        self.assertEqual(build_forge.identify_license(BSD_CONDITIONS + BSD_NAME + disclaimer), "BSD-3-Clause")
+        mit = MIT.replace("THE\nAUTHORS OR COPYRIGHT HOLDERS", "EXAMPLE CORP")
+        self.assertNotEqual(mit, MIT)
+        self.assertEqual(build_forge.identify_license(mit), "MIT")
+
+    def test_name_cannot_carry_a_condition(self):
+        limited = BSD_DISCLAIMER.replace("THE COPYRIGHT HOLDERS AND CONTRIBUTORS",
+                                         "EXAMPLE CORP FOR NON-COMMERCIAL USE ONLY")
+        self.assertIsNone(build_forge.identify_license(BSD_CONDITIONS + limited))
+
+    def test_file_may_go_on_after_closed_terms(self):
+        terms = "Everyone may do as they like.\n\nEND OF TERMS AND CONDITIONS\n"
+        letters = re.sub(r"[^a-z]+", "", terms.lower())
+        known = (("everyonemaydoastheylike", "endoftermsandconditions",
+                  {hashlib.sha256(letters.encode()).hexdigest()[:32]: "Example-1.0"}),)
+        with mock.patch.object(build_forge, "LICENSE_TEXTS", known + build_forge.LICENSE_TEXTS):
+            title = "# The General Public License, version 1\n\nCopyright (c) 2026 Owner\n\n"
+            notice = "\nHow to apply these terms\n\nThis program is free software: share it.\n"
+            self.assertEqual(build_forge.identify_license(title + terms + notice), "Example-1.0")
+            self.assertEqual(build_forge.identify_license(title + terms + notice + MIT), "Example-1.0")
+            self.assertIsNone(build_forge.identify_license(title + terms + "Non-commercial use only.\n"))
+            self.assertIsNone(build_forge.identify_license("Not for resale.\n" + terms))
 
     def test_unknown_text_is_no_license(self):
         self.assertIsNone(build_forge.identify_license("All rights reserved."))
@@ -241,7 +278,8 @@ class GitLabTest(unittest.TestCase):
     APK = "https://gitlab.com/group/sub/app/-/package_files/5/download"
     DIRECT = "https://gitlab.com/group/sub/app/-/releases/v1/downloads/app.apk"
 
-    def examine(self, releases, previous=None, license_key="gpl-3.0+", found=True, forked=False, size=4321):
+    def examine(self, releases, previous=None, license_key="gpl-3.0+", found=True, forked=False, size=4321,
+                mark="one"):
         def gitlab(path):
             self.asked.append(path)
             if "/releases" in path:
@@ -251,14 +289,14 @@ class GitLabTest(unittest.TestCase):
                 detail["forked_from_project"] = {"id": 1}
             return detail
 
-        def remote_size(url):
+        def remote_file(url):
             self.sized.append(url)
-            return size
+            return size, mark
 
         self.asked = []
         self.sized = []
         with mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
-                mock.patch.object(build_forge, "remote_size", side_effect=remote_size), \
+                mock.patch.object(build_forge, "remote_file", side_effect=remote_file), \
                 mock.patch.object(build_index, "read_manifest",
                                   return_value=("org.example", 3, "1.0", "Example")) as read_manifest:
             self.read_manifest = read_manifest
@@ -272,7 +310,7 @@ class GitLabTest(unittest.TestCase):
         self.assertEqual(app["publishedAt"], "2026-09-01T08:00:00Z")
         self.assertEqual(app["pushedAt"], "2026-09-20T10:00:00Z")
         self.assertEqual(app["apks"], [{
-            "id": build_forge.file_id(7, self.APK, 4321), "name": "app.apk", "url": self.APK,
+            "id": build_forge.file_id(7, self.APK, 4321, "one"), "name": "app.apk", "url": self.APK,
             "size": 4321, "packageName": "org.example", "versionCode": 3, "versionName": "1.0",
             "label": "Example",
         }])
@@ -290,11 +328,29 @@ class GitLabTest(unittest.TestCase):
         self.assertEqual(self.sized, [])
 
     def test_address_that_only_passes_the_request_on_is_not_a_file_on_gitlab(self):
+        upload = "uploads/0123456789abcdef0123456789abcdef/app.apk"
         passed_on = [link(7, "app.apk", "https://example.com/app.apk", direct=self.DIRECT),
                      link(8, "app.apk", self.DIRECT),
-                     link(9, "app.apk", "https://gitlab.com/group/sub/app/-/%72eleases/v1/downloads/app.apk")]
+                     link(9, "app.apk", "https://gitlab.com/group/sub/app/-/%72eleases/v1/downloads/app.apk"),
+                     link(10, "app.apk", "https://gitlab.com/api/v4/projects/12/releases/v1/downloads/app.apk"),
+                     # A release link is free to name its own path, and so to look like a file.
+                     link(11, "app.apk", "https://gitlab.com/group/sub/app/-/releases/v1/downloads/" + upload),
+                     link(12, "app.apk", "https://gitlab.com/api/v4/projects/12/releases/v1/downloads/" + upload),
+                     link(13, "app.apk", "https://gitlab.com/group/app/-/raw/main/../../-/releases/v1/downloads/a.apk"),
+                     link(14, "app.apk", "https://gitlab.com/group/app/-/raw/main/%2e%2e/x/app.apk"),
+                     link(15, "app.apk", "https://gitlab.com/group/app/-/blob/main/app.apk")]
         self.assertIsNone(self.examine([gitlab_release(passed_on)]))
         self.assertEqual(self.sized, [])
+
+    def test_files_gitlab_keeps_itself_are_offered(self):
+        kept = ["https://gitlab.com/api/v4/projects/12/packages/generic/app/1.0/app.apk",
+                "https://gitlab.com/-/project/12/uploads/0123456789abcdef0123456789abcdef/app.apk",
+                "https://gitlab.com/group/sub/app/uploads/0123456789abcdef0123456789abcdef/app.apk",
+                "https://gitlab.com/group/releases/-/raw/main/out/app.apk",
+                "https://gitlab.com/group/sub/app/-/jobs/123/artifacts/raw/out/app.apk",
+                "https://gitlab.com/group/sub/app/-/jobs/artifacts/main/raw/out/app.apk?job=build"]
+        app = self.examine([gitlab_release([link(index, "app.apk", url) for index, url in enumerate(kept)])])
+        self.assertEqual([apk["url"] for apk in app["apks"]], kept)
 
     def test_link_is_followed_to_the_file_itself(self):
         app = self.examine([gitlab_release([link(7, "app.apk", self.APK, direct=self.DIRECT)])])
@@ -318,6 +374,15 @@ class GitLabTest(unittest.TestCase):
         replaced = self.examine([gitlab_release([link(7, "app.apk", self.APK)])], previous=old, size=5000)
         self.assertEqual(self.read_manifest.call_count, 1)
         self.assertEqual(replaced["apks"][0]["size"], 5000)
+        # The same address and size can still hold another file; the server's mark tells.
+        self.examine([gitlab_release([link(7, "app.apk", self.APK)])], previous=old, mark="two")
+        self.assertEqual(self.read_manifest.call_count, 1)
+
+    def test_file_the_server_gives_no_mark_for_is_read_every_time(self):
+        releases = [gitlab_release([link(7, "app.apk", self.APK)])]
+        first = self.examine(releases, mark="")
+        self.examine(releases, previous=dict(first, examinedAt=NOW - 25 * 3600), mark="")
+        self.assertEqual(self.read_manifest.call_count, 1)
 
     def test_only_the_newest_release_with_files_has_them_sized(self):
         releases = [gitlab_release([link(9, "new.apk", self.APK)], tag="v2"),
@@ -335,20 +400,22 @@ class GitLabTest(unittest.TestCase):
         self.assertEqual(self.sized, [self.APK])
 
     def test_size_is_told_by_the_headers_without_reading_the_file(self):
-        def response(status, content_range):
+        def response(status, content_range, **headers):
             answer = mock.MagicMock()
             answer.__enter__.return_value = answer
             answer.status = status
-            answer.headers = {"Content-Range": content_range} if content_range else {}
+            answer.headers = dict(headers, **({"Content-Range": content_range} if content_range else {}))
             answer.read.side_effect = AssertionError("the file must not be read")
             return answer
 
+        with mock.patch("urllib.request.urlopen", return_value=response(206, "bytes 0-0/4321", ETag='"abc"')):
+            self.assertEqual(build_forge.remote_file(self.APK), (4321, '"abc"'))
         with mock.patch("urllib.request.urlopen", return_value=response(206, "bytes 0-0/4321")):
-            self.assertEqual(build_forge.remote_size(self.APK), 4321)
+            self.assertEqual(build_forge.remote_file(self.APK), (4321, ""))
         for status, content_range in ((200, None), (206, "bytes 0-0/*"), (200, "bytes 0-0/4321")):
             with mock.patch("urllib.request.urlopen", return_value=response(status, content_range)):
                 with self.assertRaises(OSError):
-                    build_forge.remote_size(self.APK)
+                    build_forge.remote_file(self.APK)
 
     def test_unrecognised_license_or_fork_is_not_listed(self):
         releases = [gitlab_release([link(7, "app.apk", self.APK)])]
