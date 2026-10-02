@@ -40,6 +40,8 @@ internal object CatalogRules {
     ): StoreApp? = when {
         !app.fromRepository -> app.takeIf { it.source in catalogues }
         !app.auto -> app
+        // Found by searching somewhere else than GitHub, which has a switch of its own.
+        app.source != StoreApp.SOURCE_GITHUB -> app.takeIf { it.source in catalogues }
         sources.any { belongsTo(app.fullName, it) } -> app.copy(auto = false)
         includeAuto -> app
         else -> null
@@ -85,8 +87,11 @@ internal object CatalogRules {
      * known before any that is known to differ. [installedSigners] gives the certificates of
      * an installed package, or null.
      *
-     * Repositories are never folded into one another: two of them releasing the same package
-     * are two developers' builds, and stay two rows as long as a repository is what is chosen.
+     * Repositories of one place are never folded into one another: two of them releasing the
+     * same package are two developers' builds, and stay two rows as long as a repository is
+     * what is chosen. The same package on GitHub and on Codeberg, on the other hand, is
+     * usually one project and its mirror; of two that are level in line the one with the
+     * newer version is taken, since the mirror is the one that falls behind.
      */
     fun merged(apps: List<StoreApp>, installedSigners: (String) -> Set<String>?): List<Merged> {
         val result = ArrayList<Merged>(apps.size)
@@ -104,7 +109,11 @@ internal object CatalogRules {
                 result += Merged(offers[0], emptyList())
                 continue
             }
-            val inLine = offers.sortedBy(::rank)
+            val inLine = offers.sortedWith(
+                compareBy<StoreApp>(::rank)
+                    .thenByDescending { if (it.fromRepository) it.versionCode else 0 }
+                    .thenBy { it.source != StoreApp.SOURCE_GITHUB }
+            )
             val signers = installedSigners(packageName)
             val chosen = if (signers == null) {
                 inLine[0]
@@ -113,7 +122,11 @@ internal object CatalogRules {
                     ?: inLine.firstOrNull { it.signer == null }
                     ?: inLine[0]
             }
-            val kept = if (chosen.fromRepository) inLine.filter { it.fromRepository } else listOf(chosen)
+            val kept = if (chosen.fromRepository) {
+                inLine.filter { it.fromRepository && it.source == chosen.source }
+            } else {
+                listOf(chosen)
+            }
             val others = inLine.filter { it !in kept }.map { it.source }.distinct()
             kept.forEach { result += Merged(it, others) }
         }

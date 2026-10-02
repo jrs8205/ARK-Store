@@ -162,6 +162,39 @@ class CatalogRulesTest {
         assertEquals(2, merged(listOf(unknown, unknown)).size)
     }
 
+    private fun codeberg(versionCode: Long, auto: Boolean = true) =
+        app(fullName = "codeberg:owner/app", versionCode = versionCode, auto = auto)
+            .copy(source = StoreApp.SOURCE_CODEBERG)
+
+    @Test
+    fun repositoryElsewhereIsReadLikeOneOnGitHub() {
+        val found = codeberg(1)
+        assertEquals("owner/app", found.repoPath)
+        assertEquals("owner", found.owner)
+        assertEquals("app", found.repo)
+        assertTrue(found.fromRepository)
+        // It is not covered by a source on this device, which names GitHub accounts.
+        assertNull(CatalogRules.shown(found, listOf("owner"), includeAuto = true))
+        assertSame(
+            found,
+            CatalogRules.shown(found, emptyList(), includeAuto = false, setOf(StoreApp.SOURCE_CODEBERG))
+        )
+        val published = codeberg(1, auto = false)
+        assertSame(published, CatalogRules.shown(published, emptyList(), includeAuto = false))
+    }
+
+    @Test
+    fun mirrorOnAnotherPlaceIsFoldedIntoTheNewerOne() {
+        val github = app(auto = true, versionCode = 5)
+        assertSame(github, merged(listOf(codeberg(5), github)).single().app)
+        val moved = merged(listOf(github, codeberg(6))).single()
+        assertEquals(StoreApp.SOURCE_CODEBERG, moved.app.source)
+        assertEquals(listOf(StoreApp.SOURCE_GITHUB), moved.alsoFrom)
+        // The developer's own publication goes first however old it is.
+        val published = app(versionCode = 4)
+        assertSame(published, merged(listOf(codeberg(6), published)).single().app)
+    }
+
     @Test
     fun newestFileTheDeviceCanRunIsPicked() {
         fun apk(code: Long, vararg abis: String, minSdk: Int = 23) =

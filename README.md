@@ -35,6 +35,16 @@ whenever you publish a release. To take the app out of the store, remove the top
 The first two points are requirements: a repository that is private or has no recognised
 license is never listed, with or without the topic.
 
+### Publishing from Codeberg
+
+The same four steps work for a repository on [Codeberg](https://codeberg.org): make it
+public, give it a license file, attach the APK to a release and add the topic `arkstore`.
+Two things differ. Codeberg does not say which license a repository has, so the store
+recognises it from the text of the `LICENSE` or `COPYING` file in the repository's root; the
+common licenses (GPL, AGPL, LGPL, Apache, MIT, BSD, MPL, ISC, EUPL, Unlicense, CC0) are
+recognised, and a repository whose license is not is left out. And apps published from
+Codeberg are shown by ARK-Store 1.4 and later, not by older versions.
+
 ### How quickly it shows up
 
 - **A newly tagged app**: usually within a few hours. The list of published apps is rebuilt
@@ -103,10 +113,10 @@ None of these are required, but they make your app look better in the store.
   different key.
 - **Beta versions**: optionally get a developer's prereleases as updates.
 - **More apps when you want them**: switches in the settings add apps found by searching
-  GitHub and the catalogues of IzzyOnDroid and F-Droid. An app offered by several of them is
-  listed once.
-- **No account**: nothing to sign in to. The app talks to GitHub and, when their switches are
-  on, to IzzyOnDroid and F-Droid for the files of their apps.
+  GitHub and Codeberg, and the catalogues of IzzyOnDroid and F-Droid. An app offered by
+  several of them is listed once.
+- **No account**: nothing to sign in to. The app talks to GitHub and, for the files of
+  their apps, to Codeberg, IzzyOnDroid and F-Droid.
 - **Accessible**: screen reader labels, text that scales, text contrast of at least 7:1
   (WCAG AAA), and haptic feedback that follows the system setting.
 - **English and Finnish.**
@@ -154,6 +164,15 @@ under Other.
 The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
 only while the setting is on. Beta versions of these apps are not offered.
 
+### Found on Codeberg
+
+A second switch, **Found on Codeberg**, does the same for Codeberg, a code hosting service
+like GitHub. Codeberg is far smaller, so less is asked: the repository carries the topic
+`android` or `android-app`, has at least 5 stars, has been active within the last 30 days,
+has a license the store recognises from its license file, and has a full release, at most
+180 days old, with an APK attached. These apps are listed in `codeberg.json` next to the
+index. A repository there that only mirrors another one is skipped.
+
 ## Other catalogues
 
 Two established catalogues of open-source Android apps can be turned on in the settings, each
@@ -175,7 +194,8 @@ services. Stars and download counts are not shown for them, since the catalogues
 Many apps are in more than one of these places. The store lists a package once:
 
 1. from its developer, when they have published it with the `arkstore` topic,
-2. else from the developer's releases as found by searching GitHub,
+2. else from the developer's releases as found by searching GitHub or Codeberg; when both
+   have it, as with a project and its mirror, the one with the newer version,
 3. else from IzzyOnDroid,
 4. else from F-Droid.
 
@@ -237,7 +257,9 @@ and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER
 automatically found apps are listed. The index is built with
 `python3 tools/build_index.py --output index.json --auto-output auto.json`, and the lists of
 the other catalogues, whose addresses are `IZZY_INDEX_URL` and `FDROID_INDEX_URL`, with
-`python3 tools/build_repos.py --output-dir .`.
+`python3 tools/build_repos.py --output-dir .`. The lists of apps on Codeberg
+(`FORGE_INDEX_URL` for those published with the topic, `CODEBERG_INDEX_URL` for those found by
+searching) are built with `python3 tools/build_forge.py --output-dir .`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:

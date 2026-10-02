@@ -9,8 +9,9 @@ import org.json.JSONObject
  */
 data class StoreApp(
     /**
-     * Identifies the app throughout the store: "owner/repo" for a repository, and the
-     * catalogue and package, such as "fdroid:org.example", for an app of another catalogue.
+     * Identifies the app throughout the store: "owner/repo" for a repository on GitHub, the
+     * same after the name of the place, such as "codeberg:owner/repo", for one elsewhere, and
+     * the catalogue and package, such as "fdroid:org.example", for an app of a catalogue.
      */
     val fullName: String,
     val description: String,
@@ -66,17 +67,21 @@ data class StoreApp(
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
-        get() = source == SOURCE_GITHUB
+        get() = source == SOURCE_GITHUB || source == SOURCE_CODEBERG
+
+    /** "owner/repo" of a repository, wherever it is; only meaningful with [fromRepository]. */
+    val repoPath: String
+        get() = if (source == SOURCE_GITHUB) fullName else fullName.substringAfter(':')
 
     /** What the app is called in the store. */
     val title: String
         get() = label ?: repo
 
     val owner: String
-        get() = fullName.substringBefore('/')
+        get() = repoPath.substringBefore('/')
 
     val repo: String
-        get() = if (fromRepository) fullName.substringAfter('/') else fullName.substringAfter(':')
+        get() = if (fromRepository) repoPath.substringAfter('/') else fullName.substringAfter(':')
 
     /** Who the app is by: its author as a catalogue tells it, else the repository's owner. */
     val developer: String
@@ -118,6 +123,7 @@ data class StoreApp(
 
     companion object {
         const val SOURCE_GITHUB = "github"
+        const val SOURCE_CODEBERG = "codeberg"
         const val SOURCE_IZZY = "izzy"
         const val SOURCE_FDROID = "fdroid"
 

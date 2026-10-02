@@ -776,6 +776,8 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
         val origin = when {
             !app.fromRepository ->
                 stringResource(R.string.catalogue_detail, stringResource(sourceName(app.source)))
+            app.auto && app.source == StoreApp.SOURCE_CODEBERG ->
+                stringResource(R.string.auto_detail_codeberg)
             app.auto -> stringResource(R.string.auto_detail)
             else -> null
         }
@@ -796,7 +798,7 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             DetailLine(stringResource(R.string.detail_also_from), others)
         }
         if (app.fromRepository) {
-            DetailLine(stringResource(R.string.detail_repository), app.fullName)
+            DetailLine(stringResource(R.string.detail_repository), app.repoPath)
         }
         DetailLine(stringResource(R.string.detail_category), stringResource(categoryLabel(app.category)))
         if (app.license.isNotBlank()) {
@@ -1096,6 +1098,13 @@ private fun OriginSettings(viewModel: StoreViewModel) {
         description = stringResource(R.string.auto_description),
         checked = includeAuto,
         onCheckedChange = viewModel::setIncludeAuto
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.codeberg_switch),
+        description = stringResource(R.string.codeberg_description),
+        checked = StoreApp.SOURCE_CODEBERG in catalogues,
+        onCheckedChange = { viewModel.setCatalogue(StoreApp.SOURCE_CODEBERG, it) }
     )
     SettingSwitch(
         heading = null,
@@ -1517,19 +1526,21 @@ private fun InstallHaptics(installs: Map<String, InstallState>) {
 private fun origin(app: StoreApp): String = when {
     !app.fromRepository -> app.developer.ifBlank { app.packageName.orEmpty() }
     app.title.equals(app.repo, ignoreCase = true) -> app.owner
-    else -> app.fullName
+    else -> app.repoPath
 }
 
 /** The name of the place an app is offered from. */
 private fun sourceName(source: String): Int = when (source) {
     StoreApp.SOURCE_IZZY -> R.string.source_izzy
     StoreApp.SOURCE_FDROID -> R.string.source_fdroid
+    StoreApp.SOURCE_CODEBERG -> R.string.source_codeberg
     else -> R.string.source_github
 }
 
 /** The badge that tells an app was not published to the store by its developer, if any. */
 private fun sourceBadge(app: StoreApp): Int? = when {
     !app.fromRepository -> sourceName(app.source)
+    app.auto && app.source == StoreApp.SOURCE_CODEBERG -> R.string.codeberg_switch
     app.auto -> R.string.badge_auto
     else -> null
 }

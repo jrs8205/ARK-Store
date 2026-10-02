@@ -96,6 +96,7 @@ class CatalogRepository private constructor(context: Context) {
     private val indexCache = File(context.filesDir, "index.json")
     private val autoCache = File(context.filesDir, "auto.json")
     private val catalogueCaches = CATALOGUES.keys.associateWith { File(context.filesDir, "$it.json") }
+    private val forgeCache = File(context.filesDir, "forge.json")
 
     /** Each catalogue as last parsed, with the ETag of the file it was parsed from. */
     private val parsedCatalogues = HashMap<String, Pair<String, Map<String, Entry>>>()
@@ -274,6 +275,7 @@ class CatalogRepository private constructor(context: Context) {
             // for an entry of the same name, which there cannot be, and are listed whatever
             // became of the store's own index.
             for ((fullName, entry) in catalogueEntries(now)) updated.putIfAbsent(fullName, entry)
+            for ((fullName, entry) in forgeEntries(now)) updated.putIfAbsent(fullName, entry)
 
             refreshStoreDownloads(updated, now)
             val error = failure.get()
@@ -462,7 +464,13 @@ class CatalogRepository private constructor(context: Context) {
             }
             try {
                 val parsed = objects(JSONObject(text), "apps").mapNotNull { app ->
-                    catalogueApp(source, app)?.let {
+                    val read = if (source == StoreApp.SOURCE_CODEBERG) {
+                        // Repositories found by searching, described like those of GitHub.
+                        indexedApp(app, app, auto = true)?.copy(source = source)
+                    } else {
+                        catalogueApp(source, app)
+                    }
+                    read?.let {
                         it.fullName to Entry("", now, it, null, discovered = true, stored = false)
                     }
                 }.toMap()
@@ -473,6 +481,54 @@ class CatalogRepository private constructor(context: Context) {
             }
         }
         return result
+    }
+
+    /**
+     * The apps developers have published to the store from somewhere else than GitHub, which
+     * are shown to everyone. They are in a file of their own, laid out like the store index.
+     * When it cannot be had, the last copy is used.
+     */
+    private fun forgeEntries(now: Long): Map<String, Entry> {
+        val text = try {
+            cachedText(BuildConfig.FORGE_INDEX_URL, forgeCache, PREF_FORGE_ETAG)
+        } catch (e: IOException) {
+            Log.w(TAG, "List of apps published elsewhere unavailable", e)
+            try {
+                forgeCache.takeIf { it.exists() }?.readText()
+            } catch (_: IOException) {
+                null
+            }
+        } ?: return emptyMap()
+        return try {
+            val root = JSONObject(text)
+            fun StoreApp.elsewhere(app: JSONObject) =
+                copy(source = app.optString("source", StoreApp.SOURCE_CODEBERG))
+            val stable = objects(root, "apps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = indexedApp(app, app)?.elsewhere(app),
+                    beta = app.optJSONObject("beta")
+                        ?.let { indexedApp(app, it, prerelease = true) }?.elsewhere(app),
+                    discovered = true,
+                    stored = false
+                )
+            }
+            val betaOnly = objects(root, "betaApps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = null,
+                    beta = indexedApp(app, app, prerelease = true)?.elsewhere(app),
+                    discovered = true,
+                    stored = false
+                )
+            }
+            betaOnly + stable
+        } catch (e: JSONException) {
+            Log.w(TAG, "List of apps published elsewhere unreadable", e)
+            emptyMap()
+        }
     }
 
     /**
@@ -893,9 +949,11 @@ class CatalogRepository private constructor(context: Context) {
         private const val PREF_AUTO_ETAG = "auto_etag"
         private const val PREF_CATALOGUE = "include_"
         private const val PREF_CATALOGUE_ETAG = "etag_"
+        private const val PREF_FORGE_ETAG = "forge_etag"
 
         /** The other catalogues the store can show, and where the list of each is. */
         private val CATALOGUES = mapOf(
+            StoreApp.SOURCE_CODEBERG to BuildConfig.CODEBERG_INDEX_URL,
             StoreApp.SOURCE_IZZY to BuildConfig.IZZY_INDEX_URL,
             StoreApp.SOURCE_FDROID to BuildConfig.FDROID_INDEX_URL
         )

@@ -149,9 +149,13 @@
     <string name="auto_detail">This app was found by searching GitHub. Its developer has not published it to ARK-Store.</string>
     <string name="origins_title">Where apps come from</string>
     <string name="origin_published">Published to ARK-Store</string>
-    <string name="origin_published_description">Apps their developers have added to ARK-Store themselves. Always shown.</string>
+    <string name="origin_published_description">Apps their developers have added to ARK-Store themselves, on GitHub or Codeberg. Always shown.</string>
     <string name="source_github" translatable="false">GitHub</string>
+    <string name="source_codeberg" translatable="false">Codeberg</string>
     <string name="source_izzy" translatable="false">IzzyOnDroid</string>
+    <string name="codeberg_switch">Found on Codeberg</string>
+    <string name="codeberg_description">Open-source apps found by searching Codeberg, a code hosting service like GitHub. Their developers have not published them to ARK-Store, and nobody has checked them.</string>
+    <string name="auto_detail_codeberg">This app was found by searching Codeberg. Its developer has not published it to ARK-Store.</string>
     <string name="source_fdroid" translatable="false">F-Droid</string>
     <string name="izzy_description">A separately maintained catalogue of open-source apps. It passes on the developers\' own files after scanning them.</string>
     <string name="fdroid_description">The best-known catalogue of open-source apps. F-Droid builds the apps from their source itself and signs most of them with its own key, so an app installed from F-Droid is also updated from F-Droid.</string>
