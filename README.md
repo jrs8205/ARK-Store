@@ -5,7 +5,8 @@
 # ARK-Store
 
 <p align="center">
-  <a href="https://github.com/jrs8205/ARK-Store/releases"><img src="https://img.shields.io/github/v/release/jrs8205/ARK-Store?include_prereleases&label=version" alt="Latest version"></a>
+  <a href="https://github.com/jrs8205/ARK-Store/releases/latest"><img src="https://img.shields.io/github/v/release/jrs8205/ARK-Store?label=stable" alt="Latest stable version"></a>
+  <a href="https://github.com/jrs8205/ARK-Store/releases"><img src="https://img.shields.io/github/v/release/jrs8205/ARK-Store?include_prereleases&label=beta" alt="Latest beta version"></a>
   <a href="https://github.com/jrs8205/ARK-Store/releases"><img src="https://img.shields.io/github/downloads/jrs8205/ARK-Store/total?label=downloads" alt="Total downloads"></a>
   <a href="https://github.com/jrs8205/ARK-Store/stargazers"><img src="https://img.shields.io/github/stars/jrs8205/ARK-Store?label=stars" alt="Stars"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/jrs8205/ARK-Store?label=license" alt="License"></a>
