@@ -7,10 +7,12 @@ import androidx.core.content.edit
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -140,6 +142,32 @@ class CatalogRepository private constructor(context: Context) {
 
     init {
         load()
+        // The lists of the other catalogues are large, so they are read off the calling
+        // thread. What was last downloaded of them is shown before anything is asked from the
+        // network: the lock is taken here, ahead of any refresh, and let go once that is done.
+        mutex.tryLock()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                showStoredLists()
+            } finally {
+                mutex.unlock()
+            }
+        }
+    }
+
+    /**
+     * Adds what the last downloaded copies of the other lists hold to the catalogue read from
+     * storage. A catalogue the user has turned on is then there as soon as the app starts,
+     * not only once the network has answered.
+     */
+    private fun showStoredLists() {
+        try {
+            val now = System.currentTimeMillis()
+            val stored = catalogueEntries(now, storedOnly = true) + forgeEntries(now, storedOnly = true)
+            if (stored.isNotEmpty()) publish(stored + entries, _catalog.value.checkedAt)
+        } catch (e: Exception) {
+            Log.w(TAG, "Stored lists unreadable", e)
+        }
     }
 
     /**
@@ -455,9 +483,10 @@ class CatalogRepository private constructor(context: Context) {
      * workflow boils that catalogue down to. A file is parsed again only when it has changed.
      * Like the automatically found apps these are an extra: a catalogue that cannot be had
      * is read from its last copy, and failing that left out. An entry that is not what it
-     * should be is left out by itself and costs the others nothing.
+     * should be is left out by itself and costs the others nothing. With [storedOnly] nothing
+     * is downloaded and only the last copies are read.
      */
-    private fun catalogueEntries(now: Long): Map<String, Entry> {
+    private fun catalogueEntries(now: Long, storedOnly: Boolean = false): Map<String, Entry> {
         val result = HashMap<String, Entry>()
         fun entryOf(app: StoreApp) = Entry("", now, app, null, discovered = true, stored = false)
         for (source in _catalogues.value) {
@@ -475,14 +504,14 @@ class CatalogRepository private constructor(context: Context) {
             val url = CATALOGUES[source] ?: continue
             val cache = catalogueCaches.getValue(source)
             val etagKey = PREF_CATALOGUE_ETAG + source
-            val text = try {
-                cachedText(url, cache, etagKey)
-            } catch (e: IOException) {
-                Log.w(TAG, "Catalogue $source unavailable", e)
+            val text = if (storedOnly) {
+                storedText(cache)
+            } else {
                 try {
-                    cache.takeIf { it.exists() }?.readText()
-                } catch (_: IOException) {
-                    null
+                    cachedText(url, cache, etagKey)
+                } catch (e: IOException) {
+                    Log.w(TAG, "Catalogue $source unavailable", e)
+                    storedText(cache)
                 }
             } ?: continue
             val etag = preferences.getString(etagKey, null)
@@ -518,17 +547,17 @@ class CatalogRepository private constructor(context: Context) {
     /**
      * The apps developers have published to the store from somewhere else than GitHub, which
      * are shown to everyone. They are in a file of their own, laid out like the store index.
-     * When it cannot be had, the last copy is used.
+     * When it cannot be had, or with [storedOnly], the last copy is used.
      */
-    private fun forgeEntries(now: Long): Map<String, Entry> {
-        val text = try {
-            cachedText(BuildConfig.FORGE_INDEX_URL, forgeCache, PREF_FORGE_ETAG)
-        } catch (e: IOException) {
-            Log.w(TAG, "List of apps published elsewhere unavailable", e)
+    private fun forgeEntries(now: Long, storedOnly: Boolean = false): Map<String, Entry> {
+        val text = if (storedOnly) {
+            storedText(forgeCache)
+        } else {
             try {
-                forgeCache.takeIf { it.exists() }?.readText()
-            } catch (_: IOException) {
-                null
+                cachedText(BuildConfig.FORGE_INDEX_URL, forgeCache, PREF_FORGE_ETAG)
+            } catch (e: IOException) {
+                Log.w(TAG, "List of apps published elsewhere unavailable", e)
+                storedText(forgeCache)
             }
         } ?: return emptyMap()
         return try {
@@ -638,6 +667,13 @@ class CatalogRepository private constructor(context: Context) {
             // the newest version only.
             antiFeatures = list(if (apk.has("antiFeatures")) apk else json, "antiFeatures")
         )
+    }
+
+    /** The copy kept in [cache] from the last download, or null when there is none. */
+    private fun storedText(cache: File): String? = try {
+        cache.takeIf { it.exists() }?.readText()
+    } catch (_: IOException) {
+        null
     }
 
     /**
