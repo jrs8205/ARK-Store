@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.4.0-beta.1
+
+- Apps are listed under the name they give themselves instead of the name of their
+  repository: the store index reads it from the APK, so that for example `bitwarden/android`
+  is shown as Bitwarden. The name is used in the list, the details, sorting, search and
+  notifications; an app whose name is not known yet keeps its repository's name
+- A beta version shows how often the prereleases have been downloaded and the stable version
+  how often the full releases have, instead of both showing the sum
+
 ## 1.3.0
 
 The work of the 1.3.0 beta versions, now for everyone:

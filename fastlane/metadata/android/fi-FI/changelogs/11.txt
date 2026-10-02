@@ -1,0 +1,1 @@
+Sovellukset näkyvät nyt omalla nimellään GitHub-repon nimen sijaan: luettelossa, haussa, lajittelussa ja ilmoituksissa. Beta-versiot ja vakaat versiot näyttävät kumpikin omat latausmääränsä.

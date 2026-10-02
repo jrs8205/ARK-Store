@@ -1,0 +1,1 @@
+Apps are now listed under their own name instead of the name of their GitHub repository, in the list, search, sorting and notifications. Beta versions and stable versions each show their own download count.
