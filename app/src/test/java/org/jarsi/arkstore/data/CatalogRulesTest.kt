@@ -184,6 +184,17 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun projectInASubgroupKeepsItsWholePath() {
+        val project = app(fullName = "gitlab:group/sub/app", auto = true)
+            .copy(source = StoreApp.SOURCE_GITLAB)
+        assertTrue(project.fromRepository)
+        assertEquals("group/sub/app", project.repoPath)
+        assertEquals("group", project.owner)
+        assertEquals("sub/app", project.repo)
+        assertNull(CatalogRules.shown(project, emptyList(), includeAuto = true))
+    }
+
+    @Test
     fun mirrorOnAnotherPlaceIsFoldedIntoTheNewerOne() {
         val github = app(auto = true, versionCode = 5)
         assertSame(github, merged(listOf(codeberg(5), github)).single().app)

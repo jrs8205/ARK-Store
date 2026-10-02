@@ -464,7 +464,7 @@ class CatalogRepository private constructor(context: Context) {
             }
             try {
                 val parsed = objects(JSONObject(text), "apps").mapNotNull { app ->
-                    val read = if (source == StoreApp.SOURCE_CODEBERG) {
+                    val read = if (source in StoreApp.ELSEWHERE) {
                         // Repositories found by searching, described like those of GitHub.
                         indexedApp(app, app, auto = true)?.copy(source = source)
                     } else {
@@ -954,6 +954,7 @@ class CatalogRepository private constructor(context: Context) {
         /** The other catalogues the store can show, and where the list of each is. */
         private val CATALOGUES = mapOf(
             StoreApp.SOURCE_CODEBERG to BuildConfig.CODEBERG_INDEX_URL,
+            StoreApp.SOURCE_GITLAB to BuildConfig.GITLAB_INDEX_URL,
             StoreApp.SOURCE_IZZY to BuildConfig.IZZY_INDEX_URL,
             StoreApp.SOURCE_FDROID to BuildConfig.FDROID_INDEX_URL
         )

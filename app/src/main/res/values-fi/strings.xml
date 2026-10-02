@@ -143,10 +143,13 @@
     <string name="auto_detail">Tämä sovellus löytyi GitHubista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
     <string name="origins_title">Mistä sovellukset tulevat</string>
     <string name="origin_published">ARK-Storeen julkaistut</string>
-    <string name="origin_published_description">Sovellukset, jotka kehittäjä on itse tuonut ARK-Storeen GitHubissa tai Codebergissä. Näkyvät aina.</string>
+    <string name="origin_published_description">Sovellukset, jotka kehittäjä on itse tuonut ARK-Storeen GitHubissa, Codebergissä tai GitLabissa. Näkyvät aina.</string>
     <string name="codeberg_switch">Codebergistä löydetyt</string>
     <string name="codeberg_description">Codebergistä haulla löydetyt avoimen lähdekoodin sovellukset. Codeberg on GitHubin kaltainen koodipalvelu. Sovellusten kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä.</string>
     <string name="auto_detail_codeberg">Tämä sovellus löytyi Codebergistä haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="gitlab_switch">GitLabista löydetyt</string>
+    <string name="gitlab_description">GitLabista haulla löydetyt avoimen lähdekoodin sovellukset. GitLab on toinen koodipalvelu. Harva projekti liittää siellä sovelluksensa julkaisuihin, joten lista on lyhyt. Kukaan ei ole tarkistanut näitä sovelluksia.</string>
+    <string name="auto_detail_gitlab">Tämä sovellus löytyi GitLabista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
     <string name="izzy_description">Erikseen ylläpidetty avoimen lähdekoodin sovellusten luettelo. Se välittää kehittäjien omat tiedostot tarkistettuaan ne.</string>
     <string name="fdroid_description">Tunnetuin avoimen lähdekoodin sovellusten luettelo. F-Droid kääntää sovellukset itse lähdekoodista ja allekirjoittaa useimmat omalla avaimellaan, joten F-Droidista asennettu sovellus myös päivittyy F-Droidista.</string>
     <string name="origins_note">Usean lähteen tarjoama sovellus näkyy listalla kerran: ensisijaisesti kehittäjältä, sitten IzzyOnDroidista, sitten F-Droidista. Asennettu sovellus pysyy siinä lähteessä, jonka tiedostot on allekirjoitettu samoin kuin se.</string>

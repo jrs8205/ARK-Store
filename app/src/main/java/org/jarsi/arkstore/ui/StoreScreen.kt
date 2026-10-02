@@ -778,6 +778,8 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
                 stringResource(R.string.catalogue_detail, stringResource(sourceName(app.source)))
             app.auto && app.source == StoreApp.SOURCE_CODEBERG ->
                 stringResource(R.string.auto_detail_codeberg)
+            app.auto && app.source == StoreApp.SOURCE_GITLAB ->
+                stringResource(R.string.auto_detail_gitlab)
             app.auto -> stringResource(R.string.auto_detail)
             else -> null
         }
@@ -1105,6 +1107,13 @@ private fun OriginSettings(viewModel: StoreViewModel) {
         description = stringResource(R.string.codeberg_description),
         checked = StoreApp.SOURCE_CODEBERG in catalogues,
         onCheckedChange = { viewModel.setCatalogue(StoreApp.SOURCE_CODEBERG, it) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.gitlab_switch),
+        description = stringResource(R.string.gitlab_description),
+        checked = StoreApp.SOURCE_GITLAB in catalogues,
+        onCheckedChange = { viewModel.setCatalogue(StoreApp.SOURCE_GITLAB, it) }
     )
     SettingSwitch(
         heading = null,
@@ -1534,6 +1543,7 @@ private fun sourceName(source: String): Int = when (source) {
     StoreApp.SOURCE_IZZY -> R.string.source_izzy
     StoreApp.SOURCE_FDROID -> R.string.source_fdroid
     StoreApp.SOURCE_CODEBERG -> R.string.source_codeberg
+    StoreApp.SOURCE_GITLAB -> R.string.source_gitlab
     else -> R.string.source_github
 }
 
@@ -1541,6 +1551,7 @@ private fun sourceName(source: String): Int = when (source) {
 private fun sourceBadge(app: StoreApp): Int? = when {
     !app.fromRepository -> sourceName(app.source)
     app.auto && app.source == StoreApp.SOURCE_CODEBERG -> R.string.codeberg_switch
+    app.auto && app.source == StoreApp.SOURCE_GITLAB -> R.string.gitlab_switch
     app.auto -> R.string.badge_auto
     else -> null
 }

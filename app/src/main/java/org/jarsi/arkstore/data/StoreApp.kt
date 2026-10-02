@@ -10,7 +10,8 @@ import org.json.JSONObject
 data class StoreApp(
     /**
      * Identifies the app throughout the store: "owner/repo" for a repository on GitHub, the
-     * same after the name of the place, such as "codeberg:owner/repo", for one elsewhere, and
+     * same after the name of the place, such as "codeberg:owner/repo", for one elsewhere (on
+     * GitLab the path can have more parts, as in "gitlab:group/subgroup/project"), and
      * the catalogue and package, such as "fdroid:org.example", for an app of a catalogue.
      */
     val fullName: String,
@@ -67,7 +68,7 @@ data class StoreApp(
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
-        get() = source == SOURCE_GITHUB || source == SOURCE_CODEBERG
+        get() = source == SOURCE_GITHUB || source in ELSEWHERE
 
     /** "owner/repo" of a repository, wherever it is; only meaningful with [fromRepository]. */
     val repoPath: String
@@ -124,6 +125,10 @@ data class StoreApp(
     companion object {
         const val SOURCE_GITHUB = "github"
         const val SOURCE_CODEBERG = "codeberg"
+        const val SOURCE_GITLAB = "gitlab"
+
+        /** The places besides GitHub whose repositories are read for their releases. */
+        val ELSEWHERE = setOf(SOURCE_CODEBERG, SOURCE_GITLAB)
         const val SOURCE_IZZY = "izzy"
         const val SOURCE_FDROID = "fdroid"
 
