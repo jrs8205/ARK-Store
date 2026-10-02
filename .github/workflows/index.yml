@@ -66,15 +66,37 @@ jobs:
             --previous-auto previous/auto.json --state out/state.json \
             --output out/index.json --auto-output out/auto.json
 
+      # The two steps below are an extra beside the index built above. Whatever becomes of
+      # them, even a script that stops halfway or does not finish in time, the index is
+      # published.
+
       # F-Droid and IzzyOnDroid, each boiled down to a list of its own. A catalogue that has
       # not changed is not downloaded again, and one that cannot be reached keeps its list.
       - name: Build the lists of the other catalogues
+        continue-on-error: true
+        timeout-minutes: 8
         run: python3 tools/build_repos.py --previous-dir previous --output-dir out
 
       # Apps released on Codeberg and GitLab: those published with the store topic, and those
       # found by searching. Whatever cannot be read keeps its previous entry.
       - name: Build the lists of apps on Codeberg and GitLab
+        continue-on-error: true
+        timeout-minutes: 12
         run: python3 tools/build_forge.py --previous-dir previous --output-dir out
+
+      # A list that was not written, or not written whole, gives way to the one published
+      # before, and failing that to an empty one.
+      - name: Keep the previous list where a new one is missing
+        run: |
+          for name in fdroid izzy forge codeberg gitlab; do
+            if python3 -m json.tool "out/$name.json" > /dev/null 2>&1; then continue; fi
+            echo "::warning::$name.json was not built; the previous one is kept"
+            if python3 -m json.tool "previous/$name.json" > /dev/null 2>&1; then
+              cp "previous/$name.json" "out/$name.json"
+            else
+              echo '{"version":1,"apps":[]}' > "out/$name.json"
+            fi
+          done
 
       - name: Publish to the index branch
         run: |

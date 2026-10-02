@@ -1,6 +1,7 @@
 """Tests for the builder of the other catalogues' lists. Run with: python3 -m unittest discover tools"""
 
 import hashlib
+import http.client
 import json
 import os
 import tempfile
@@ -13,7 +14,7 @@ import build_repos
 SHA = "ab" * 32
 
 
-def version(code, nativecode=None, channels=None, name=None, anti=None):
+def version(code, nativecode=None, channels=None, name=None, anti=None, min_sdk=23, signer="cd" * 32):
     return {
         "added": 1790000000000,
         "file": {"name": "/org.example_%d.apk" % code, "sha256": SHA, "size": 1000 + code},
@@ -21,8 +22,8 @@ def version(code, nativecode=None, channels=None, name=None, anti=None):
             "versionCode": code,
             "versionName": name or "1.%d" % code,
             "nativecode": nativecode or [],
-            "usesSdk": {"minSdkVersion": 23},
-            "signer": {"sha256": ["cd" * 32]},
+            "usesSdk": {"minSdkVersion": min_sdk},
+            "signer": {"sha256": [signer]},
         },
         "releaseChannels": channels or [],
         "antiFeatures": anti or {},
@@ -94,6 +95,15 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual([(a["versionCode"], a["abis"]) for a in app["apks"]],
                          [(10, ["arm64-v8a"]), (9, ["armeabi-v7a"])])
 
+    def test_older_version_for_an_older_android_is_offered_too(self):
+        app = build(package([version(9, min_sdk=35), version(8), version(7), version(6, min_sdk=21)]))
+        self.assertEqual([(a["versionCode"], a["minSdk"]) for a in app["apks"]], [(9, 35), (8, 23), (6, 21)])
+
+    def test_version_signed_with_another_key_is_offered_too(self):
+        app = build(package([version(9, signer="aa" * 32), version(8), version(7)]))
+        self.assertEqual([(a["versionCode"], a["signer"]) for a in app["apks"]],
+                         [(9, "aa" * 32), (8, "cd" * 32)])
+
     def test_beta_channel_is_left_out(self):
         app = build(package([version(8, channels=["Beta"]), version(7)]))
         self.assertEqual([a["versionCode"] for a in app["apks"]], [7])
@@ -102,6 +112,24 @@ class BuildAppTest(unittest.TestCase):
     def test_anti_features_of_the_newest_version_are_named(self):
         app = build(package([version(2, anti={"NonFreeNet": {}, "Tracking": {}}), version(1)]))
         self.assertEqual(app["antiFeatures"], ["Non-Free Network Services", "Tracking"])
+
+    def test_each_file_carries_the_warnings_of_its_own_version(self):
+        app = build(package([version(20, ["arm64-v8a"]), version(19, ["armeabi-v7a"], anti={"Tracking": {}})]))
+        self.assertEqual([a["antiFeatures"] for a in app["apks"]], [[], ["Tracking"]])
+        self.assertEqual(app["antiFeatures"], [])
+
+    def test_oddly_described_file_is_left_out(self):
+        for change in ({"size": {"bytes": 1}}, {"size": "1000"}, {"size": -1}, {"sha256": "ab"}, {"name": "x.apk"}):
+            odd = version(10, ["arm64-v8a"])
+            odd["file"].update(change)
+            app = build(package([odd, version(9, ["armeabi-v7a"])]))
+            self.assertEqual([a["versionCode"] for a in app["apks"]], [9])
+        odd = version(10)
+        odd["manifest"]["usesSdk"] = {"minSdkVersion": "23"}
+        self.assertIsNone(build(package([odd])))
+        odd = version(10)
+        odd["manifest"]["versionCode"] = "10"
+        self.assertIsNone(build(package([odd, version(9)])))
 
     def test_app_without_a_name_or_license_is_left_out(self):
         self.assertIsNone(build(package([version(1)], name={})))
@@ -171,6 +199,21 @@ class UpdateTest(unittest.TestCase):
     def test_unreachable_catalogue_keeps_the_previous_list(self):
         written, _ = self.run_update({"/entry.json": urllib.error.URLError("down")}, self.PREVIOUS)
         self.assertEqual(written, self.PREVIOUS)
+
+    def test_unforeseen_error_keeps_the_previous_list_too(self):
+        written, _ = self.run_update({"/entry.json": http.client.IncompleteRead(b"")}, self.PREVIOUS)
+        self.assertEqual(written, self.PREVIOUS)
+        odd = self.responses(timestamp=6, checksum=hashlib.sha256(b"[]").hexdigest())
+        odd["/index-v2.json"] = b"[]"
+        written, _ = self.run_update(odd, self.PREVIOUS)
+        self.assertEqual(written, self.PREVIOUS)
+
+    def test_catalogue_that_describes_itself_oddly_is_still_read(self):
+        data = json.dumps({"repo": [], "packages": {"org.example": package([version(3)])}}).encode()
+        entry = {"timestamp": 6, "index": {"name": "/index-v2.json", "sha256": hashlib.sha256(data).hexdigest()}}
+        written, _ = self.run_update({"/entry.json": json.dumps(entry).encode(), "/index-v2.json": data},
+                                     self.PREVIOUS)
+        self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
 
     def test_unreachable_catalogue_never_read_gets_an_empty_list(self):
         written, _ = self.run_update({"/entry.json": urllib.error.URLError("down")})

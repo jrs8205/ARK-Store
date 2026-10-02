@@ -166,8 +166,9 @@ def read_range(url, start, length):
         },
     )
     with urllib.request.urlopen(request, timeout=30) as response:
-        data = response.read()
-    if response.status != 206 or len(data) != length:
+        # A server that takes no notice of the range sends the whole file, which is not read.
+        data = response.read(length + 1) if response.status == 206 else b""
+    if len(data) != length:
         # A transport problem, not a property of the file: the caller must not conclude
         # anything about the APK from it.
         raise OSError("range request not honoured")
