@@ -13,6 +13,7 @@ import argparse
 import calendar
 import json
 import os
+import re
 import struct
 import sys
 import time
@@ -56,6 +57,53 @@ AUTO_MAX_NOTES = 800
 # on every run, any other once in AUTO_RECHECK_HOURS.
 AUTO_SETTLE_HOURS = 2
 AUTO_RECHECK_HOURS = 24
+
+# The app files an app under the category named by a topic "arkstore-<category>". Nobody has
+# chosen one for an automatically found app, so its category is guessed from the words of its
+# topics and description and added as such a topic, which every version of the app reads.
+# When two categories do equally well the one listed first wins, so the widest come last.
+CATEGORY_WORDS = {
+    "games": "game games gaming emulator emulation minecraft chess puzzle sudoku",
+    "finance": "finance budget expense expenses wallet crypto bitcoin banking money",
+    "health": "fitness health workout nutrition sleep meditation",
+    "education": "education flashcards anki dictionary",
+    "travel": "maps gps openstreetmap osm transit travel hiking",
+    "news": "weather news rss",
+    "communication": "chat messaging messenger sms mms email mail dialer telegram matrix irc "
+                     "xmpp mastodon fediverse social discord whatsapp contacts lemmy reddit "
+                     "twitter misskey bluesky forum voip sip",
+    "personalization": "launcher keyboard ime wallpaper wallpapers widget widgets",
+    "media": "music audio video player podcast podcasts camera gallery photo photos youtube "
+             "spotify exoplayer media3 mpv jellyfin emby plex kodi subsonic navidrome streaming "
+             "lyrics anime iptv radio tv ffmpeg movie movies bilibili twitch soundcloud mp3 "
+             "media recorder manga comic comics novel novels epub ebook ebooks bangumi",
+    "system": "battery root magisk xposed lsposed shizuku kernelsu firewall adblocker adblock "
+              "dns backup permissions filemanager dhizuku kernel rom grapheneos lineageos "
+              "debloat debloater",
+    "productivity": "notes note todo tasks task calendar productivity habit pdf office markdown "
+                    "timer pomodoro clipboard automation scanner ocr reminder reminders kanban "
+                    "bookmark bookmarks translation translator translate",
+    "tools": "utility utilities tools calculator qr barcode flashlight converter sync webdav "
+             "terminal ssh adb termux installer downloader password passwords totp 2fa "
+             "authenticator encryption vpn proxy wireguard v2ray xray shadowsocks trojan vless "
+             "vmess hysteria2 tor browser torrent bluetooth nfc ftp sftp tunnel clash",
+}
+CATEGORY_PHRASES = {
+    "file manager": "system",
+    "app manager": "system",
+    "package manager": "system",
+    "system monitor": "system",
+    "terminal emulator": "tools",
+    "home assistant": "tools",
+    "smart home": "tools",
+    "remote control": "media",
+    "icon pack": "personalization",
+    "public transport": "travel",
+    "language learning": "education",
+}
+CATEGORY_OF_WORD = {
+    word: category for category, words in CATEGORY_WORDS.items() for word in words.split()
+}
 
 # How file names tell which CPU architecture an APK is built for. This mirrors ApkPicker in
 # the app, which chooses the file for a device. Longer markers come first, so that "x86_64"
@@ -332,6 +380,38 @@ def recheck_due(pushed_at, examined_at, today):
     return settling or today - examined_at >= AUTO_RECHECK_HOURS * 3600
 
 
+def guess_category(topics, description):
+    """The category the words of a repository's topics and description point to, or None.
+
+    A topic says more than a word of the description, and a phrase more than either."""
+    topics = [topic.lower() for topic in topics]
+    words = re.findall(r"[a-z0-9]+", (description or "").lower())
+    text = " %s " % " ".join(words)
+    score = dict.fromkeys(CATEGORY_WORDS, 0)
+    for topic in topics:
+        for part in {topic, *topic.split("-")}:
+            if part in CATEGORY_OF_WORD:
+                score[CATEGORY_OF_WORD[part]] += 2
+    for word in set(words):
+        if word in CATEGORY_OF_WORD:
+            score[CATEGORY_OF_WORD[word]] += 1
+    for phrase, category in CATEGORY_PHRASES.items():
+        if " %s " % phrase in text or phrase.replace(" ", "-") in topics:
+            score[category] += 3
+    best = max(score.values())
+    return next(category for category in score if score[category] == best) if best else None
+
+
+def with_category(topics, description):
+    """topics with the guessed category added as a store topic. A category the developer has
+    chosen that way is left alone."""
+    prefix = TOPIC + "-"
+    if any(topic.lower().startswith(prefix) for topic in topics):
+        return topics
+    category = guess_category(topics, description)
+    return topics + [prefix + category] if category else topics
+
+
 def build_auto_apps(published, previous_auto, state, today):
     """Builds the list of automatically found apps.
 
@@ -396,7 +476,10 @@ def build_auto_apps(published, previous_auto, state, today):
                 app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
         listed = bool(app) and recent_enough(app, today)
         if listed:
-            apps.append(app)
+            # From the topics as GitHub gives them, so the category is added once however
+            # many runs an entry is carried through.
+            topics = with_category(repo.get("topics") or [], repo.get("description"))
+            apps.append(dict(app, topics=topics))
         if looked:
             new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": int(today), "listed": listed}
         elif full_name in state:

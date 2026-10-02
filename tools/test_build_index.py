@@ -229,6 +229,41 @@ class NotBeforeTest(unittest.TestCase):
             self.assertEqual(build_index.build_app(REPO, {}, not_before=1700000000)["tag"], "v1")
 
 
+class CategoryTest(unittest.TestCase):
+    def test_topic_names_the_category(self):
+        self.assertEqual(build_index.guess_category(["android", "music-player"], ""), "media")
+
+    def test_description_decides_when_the_topics_say_nothing(self):
+        self.assertEqual(build_index.guess_category(["android"], "A simple VPN client."), "tools")
+
+    def test_topic_counts_for_more_than_a_word_of_the_description(self):
+        self.assertEqual(build_index.guess_category(["launcher"], "Plays music"), "personalization")
+
+    def test_phrase_counts_for_more_than_its_words(self):
+        self.assertEqual(build_index.guess_category(["music"], "A terminal emulator"), "tools")
+
+    def test_phrase_is_matched_at_word_boundaries(self):
+        self.assertIsNone(build_index.guess_category([], "A profile manager"))
+
+    def test_only_whole_words_count(self):
+        self.assertIsNone(build_index.guess_category(["android"], "Gamepad remapper"))
+
+    def test_nothing_recognised_is_no_category(self):
+        self.assertIsNone(build_index.guess_category(["android", "kotlin"], None))
+
+    def test_category_is_added_as_a_store_topic(self):
+        self.assertEqual(
+            build_index.with_category(["android", "music-player"], ""),
+            ["android", "music-player", "arkstore-media"])
+
+    def test_category_the_developer_chose_is_left_alone(self):
+        topics = ["arkstore-games", "music-player"]
+        self.assertEqual(build_index.with_category(topics, ""), topics)
+
+    def test_topics_stay_as_they_are_without_a_category(self):
+        self.assertEqual(build_index.with_category(["android"], "An app"), ["android"])
+
+
 class AutoAppsTest(unittest.TestCase):
     NOW = 1790000000
 
@@ -339,6 +374,18 @@ class AutoAppsTest(unittest.TestCase):
         candidate = dict(self.candidate(), license=None)
         apps, _, build_app = self.run_auto([candidate], [])
         build_app.assert_not_called()
+
+    def test_examined_app_is_filed_under_a_category(self):
+        candidate = dict(self.candidate(topics=("android",)), description="A podcast player")
+        apps, _, _ = self.run_auto([candidate], [self.entry()])
+        self.assertEqual(apps[0]["topics"], ["android", "arkstore-media"])
+
+    def test_unchanged_app_is_filed_under_its_category_once(self):
+        previous = {"other/app": dict(self.entry(), topics=["keyboard", "arkstore-personalization"])}
+        known = self.examined(self.NOW - self.HOUR, listed=True)
+        apps, _, _ = self.run_auto(
+            [self.candidate(topics=("keyboard",))], [], previous=previous, state={"other/app": known})
+        self.assertEqual(apps[0]["topics"], ["keyboard", "arkstore-personalization"])
 
     def test_lookups_are_capped_per_run(self):
         candidates = [self.candidate("o/app%d" % i) for i in range(build_index.AUTO_MAX_LOOKUPS + 5)]

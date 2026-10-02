@@ -120,6 +120,9 @@ These limits are constants at the top of `tools/build_index.py`. A developer who
 rather not be listed this way can remove the `android` topics the search looks for; one who
 wants to be listed for everyone adds the `arkstore` topic.
 
+Nobody has chosen a category for these apps, so the index guesses one from the words of the
+repository's topics and description. An app it cannot place goes under Other.
+
 The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
 only while the setting is on. Beta versions of these apps are not offered.
 
