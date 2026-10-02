@@ -81,7 +81,7 @@ object InstalledApps {
      */
     private fun signedOtherwise(context: Context, app: StoreApp, packageName: String): Boolean {
         val offered = app.signer ?: return false
-        val installed = signers(context, packageName) ?: return false
+        val installed = presentSigners(context.packageManager, packageName) ?: return false
         return offered !in installed
     }
 
@@ -94,7 +94,7 @@ object InstalledApps {
         apps: List<StoreApp>,
         installed: Map<String, PackageInfo> = snapshot(context)
     ): List<CatalogRules.Merged> = CatalogRules.merged(apps) { packageName ->
-        if (packageName in installed) signers(context, packageName) else null
+        if (packageName in installed) presentSigners(context.packageManager, packageName) else null
     }
 
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
@@ -115,24 +115,27 @@ object InstalledApps {
      * The certificates the installed [packageName] is signed with, as digests, or null when it
      * is not installed or they cannot be read.
      */
-    fun signers(context: Context, packageName: String): Set<String>? =
-        signers(context.packageManager, packageName)
+    @Suppress("DEPRECATION")
+    fun signers(context: Context, packageName: String): Set<String>? = try {
+        // For an app whose signing key has been replaced along the way this is the first key
+        // it had, and the same is read from a downloaded file: the two are compared like
+        // for like, which tells whether they come from the same line of keys.
+        context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+            .signatures?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
 
     /**
-     * An app whose signing key has been replaced along the way is told with every key it has
-     * had, the present one among them. The older way of asking gives only the first of them,
-     * and a file signed with the present key would then pass for one signed otherwise.
+     * The certificates the installed [packageName] is signed with now, as digests, or null
+     * when it is not installed or they cannot be read. A catalogue tells the key each of its
+     * files is signed with, and it is the present key of the installed app that such a file
+     * has to match: a key the app has had before and given up does not update it.
      */
-    fun signers(packages: PackageManager, packageName: String): Set<String>? = try {
+    fun presentSigners(packages: PackageManager, packageName: String): Set<String>? = try {
         val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            val signing = packages
-                .getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
-                .signingInfo
-            if (signing?.hasMultipleSigners() == true) {
-                signing.apkContentsSigners
-            } else {
-                signing?.signingCertificateHistory
-            }
+            packages.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo?.apkContentsSigners
         } else {
             @Suppress("DEPRECATION")
             packages.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures

@@ -626,7 +626,7 @@ class CatalogRepository private constructor(context: Context) {
         // How the app is installed matters only when there is a choice between files signed
         // in different ways; see ParsedCatalogue.
         val installedSigners = if (choices.map { it.signer }.distinct().size > 1) {
-            InstalledApps.signers(packages, apks[0].getString("packageName"))
+            InstalledApps.presentSigners(packages, apks[0].getString("packageName"))
         } else {
             null
         }

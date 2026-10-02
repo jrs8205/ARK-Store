@@ -233,11 +233,6 @@ class CatalogRulesTest {
         assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34))
         assertEquals(1, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("old")))
         assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("new")))
-        // A key that has been replaced: the app counts as signed with both.
-        assertEquals(
-            0,
-            CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("old", "new"))
-        )
         // Nothing is signed like the installed app; the newest is shown, as one that will not do.
         assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("other")))
         // A file whose signature is not known may still turn out to fit.

@@ -83,7 +83,7 @@ class InstallService : Service() {
         } else if (observer?.isActive != true) {
             // Started only once it is stored: on this dispatcher the body would otherwise run
             // at once, and a stop() from inside it would find nothing to cancel.
-            observer = scope.launch(start = CoroutineStart.LAZY) {
+            val watching = scope.launch(start = CoroutineStart.LAZY) {
                 launch {
                     InstallManager.activeJobs.first { it == 0 }
                     stop()
@@ -95,7 +95,9 @@ class InstallService : Service() {
                         .notify(NOTIFICATION_ID, notification(it))
                     delay(UPDATE_INTERVAL_MS)
                 }
-            }.also { it.start() }
+            }
+            observer = watching
+            watching.start()
         }
         return START_NOT_STICKY
     }
