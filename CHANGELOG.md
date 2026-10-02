@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.4.0-beta.6
+
+- The apps of the other catalogues are in the list as soon as the store starts, read from the
+  lists last downloaded, instead of only once the network has answered
+- From IzzyOnDroid and F-Droid the newest version the device can run is offered, also when
+  the very newest needs a newer Android, and an installed app is offered the newest version
+  signed with its key
+- The warnings shown for a catalogue's app are those of the version offered
+- An app whose signing key has been replaced is no longer taken for one signed otherwise
+- One faulty entry no longer costs a whole list its apps, and a list just downloaded always
+  replaces an older copy
+- Two downloads running at once never write to the same file, and the download notification
+  goes away when the last download is done
+- The index: a list that cannot be built no longer holds up the store's own index. On
+  Codeberg a license is recognised only from its full, unchanged text. On GitLab only files
+  kept on gitlab.com itself are offered, and a file replaced behind the same link is noticed
+
 ## 1.4.0-beta.5
 
 - Apps released on GitLab: developers can publish from gitlab.com with the `arkstore` topic,
