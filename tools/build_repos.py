@@ -7,6 +7,10 @@ describing every app and version. For each catalogue this script boils the index
 small file holding what the store shows and needs for installing, which the app downloads
 only when the user has turned that catalogue on.
 
+These lists are an extra beside the store's own index, which is built first and published
+in the same run. Nothing that goes wrong here may cost that its update, so a catalogue that
+cannot be read keeps the list it had.
+
 Only the standard library is used.
 """
 
@@ -17,7 +21,6 @@ import os
 import shutil
 import sys
 import time
-import urllib.error
 import urllib.request
 
 from build_index import guess_category, write_json
@@ -113,16 +116,41 @@ def category_of(names, summary):
     return guess_category([name.lower().replace(" ", "-") for name in names], summary)
 
 
+def whole(value):
+    """value, which has to be a whole number that is not negative."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("not a whole number: %r" % (value,))
+    return value
+
+
+def min_sdk(manifest):
+    return whole((manifest.get("usesSdk") or {}).get("minSdkVersion", 1))
+
+
+def signers(manifest):
+    return tuple((manifest.get("signer") or {}).get("sha256") or [])
+
+
 def offered_versions(versions):
-    """The versions of an app worth offering: for each set of CPU architectures the newest
-    version built for it, newest first. Versions of a beta channel are left out."""
+    """The versions of an app worth offering, newest first. Versions of a beta channel are
+    left out.
+
+    Which file a device can take depends on its CPU architecture, on its Android version
+    and, once the app is installed, on the key it was signed with. So for each set of
+    architectures and each signing key the newest version is offered, and besides it every
+    older one that runs on an older Android than the newer ones do."""
     stable = [v for v in versions.values() if not v.get("releaseChannels")]
-    stable.sort(key=lambda v: -v["manifest"]["versionCode"])
-    chosen = {}
+    stable.sort(key=lambda v: -whole(v["manifest"]["versionCode"]))
+    lowest = {}
+    chosen = []
     for version in stable[:MAX_VERSIONS]:
-        built_for = tuple(sorted(version["manifest"].get("nativecode") or []))
-        chosen.setdefault(built_for, version)
-    return list(chosen.values())
+        manifest = version["manifest"]
+        kind = (tuple(sorted(manifest.get("nativecode") or [])), signers(manifest))
+        runs_from = min_sdk(manifest)
+        if kind not in lowest or runs_from < lowest[kind]:
+            lowest[kind] = runs_from
+            chosen.append(version)
+    return chosen
 
 
 def build_app(source, address, page, package, entry, anti_feature_names):
@@ -136,34 +164,17 @@ def build_app(source, address, page, package, entry, anti_feature_names):
         return None
     apks = []
     for version in versions:
-        manifest = version["manifest"]
-        file = version["file"]
-        signers = (manifest.get("signer") or {}).get("sha256") or []
-        if len(file["sha256"]) != 64 or not file["name"].startswith("/"):
-            continue
-        apks.append({
-            # A number that stands for this very file, the way an asset id does on GitHub.
-            "id": int(file["sha256"][:13], 16),
-            "name": file["name"][1:],
-            "url": address + file["name"],
-            "size": file["size"],
-            "packageName": package,
-            "versionCode": manifest["versionCode"],
-            "versionName": manifest.get("versionName"),
-            "label": name,
-            "sha256": file["sha256"],
-            "signer": signers[0] if len(signers) == 1 else None,
-            "abis": sorted(manifest.get("nativecode") or []),
-            "minSdk": (manifest.get("usesSdk") or {}).get("minSdkVersion", 1),
-        })
+        try:
+            apks.append(build_apk(address, package, name, version, anti_feature_names))
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            # The app reads every file of an entry, so one that is described oddly is left
+            # out rather than passed on.
+            print("%s: skipping a file of %s: %r" % (source, package, error), file=sys.stderr)
     if not apks:
         return None
     newest = versions[0]
     summary = tidy(localized(metadata.get("summary")), MAX_SUMMARY)
     category = category_of(metadata.get("categories") or [], summary)
-    anti_features = sorted(
-        anti_feature_names.get(key, key) for key in (newest.get("antiFeatures") or {})
-    )
     return {
         "fullName": "%s:%s" % (source, package),
         "source": source,
@@ -176,8 +187,50 @@ def build_app(source, address, page, package, entry, anti_feature_names):
         "releaseNotes": localized(newest.get("whatsNew"))[:MAX_NOTES],
         "releaseUrl": page % package,
         "publishedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest.get("added", 0) / 1000)),
-        "antiFeatures": anti_features,
+        # What the newest version is warned about, for versions of the store that do not look
+        # at the file they picked.
+        "antiFeatures": apks[0]["antiFeatures"],
         "apks": apks,
+    }
+
+
+def build_apk(address, package, label, version, anti_feature_names):
+    """The store's description of one version's file. Raises an error for a file that is not
+    described the way the store needs it."""
+    manifest = version["manifest"]
+    file = version["file"]
+    name = file["name"]
+    checksum = file["sha256"]
+    signed_by = signers(manifest)
+    abis = sorted(manifest.get("nativecode") or [])
+    version_name = manifest.get("versionName")
+    if not isinstance(name, str) or not name.startswith("/"):
+        raise ValueError("odd file name")
+    if not isinstance(checksum, str) or len(checksum) != 64:
+        raise ValueError("odd checksum")
+    if not all(isinstance(text, str) for text in signed_by + tuple(abis)):
+        raise ValueError("odd signer or architecture")
+    if version_name is not None and not isinstance(version_name, str):
+        raise ValueError("odd version name")
+    return {
+        # A number that stands for this very file, the way an asset id does on GitHub.
+        "id": int(checksum[:13], 16),
+        "name": name[1:],
+        "url": address + name,
+        "size": whole(file["size"]),
+        "packageName": package,
+        "versionCode": whole(manifest["versionCode"]),
+        "versionName": version_name,
+        "label": label,
+        "sha256": checksum,
+        "signer": signed_by[0] if len(signed_by) == 1 else None,
+        "abis": abis,
+        "minSdk": min_sdk(manifest),
+        # What this version is warned about. Versions differ in it, and a device is offered
+        # the one that suits it, which need not be the newest.
+        "antiFeatures": sorted(
+            anti_feature_names.get(key, key) for key in (version.get("antiFeatures") or {})
+        ),
     }
 
 
@@ -185,9 +238,9 @@ def build_catalogue(source, index, timestamp, now):
     """The file the app downloads for one catalogue, from its full index."""
     address = CATALOGUES[source]["address"]
     page = CATALOGUES[source]["page"]
+    described = (index.get("repo") or {}).get("antiFeatures") or {}
     anti_feature_names = {
-        key: localized(value.get("name")) or key
-        for key, value in (index.get("repo", {}).get("antiFeatures") or {}).items()
+        key: localized((value or {}).get("name")) or key for key, value in described.items()
     }
     apps = []
     for package, entry in (index.get("packages") or {}).items():
@@ -233,8 +286,8 @@ def update(source, previous, output, now):
             raise CatalogueError("index lists no apps")
         write_json(output, catalogue, ensure_ascii=False)
         print("%s: %d apps" % (source, len(catalogue["apps"])))
-    except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError, CatalogueError) as error:
-        print("%s: %s" % (source, error), file=sys.stderr)
+    except Exception as error:  # pylint: disable=broad-except
+        print("%s: %r" % (source, error), file=sys.stderr)
         if previous and os.path.exists(previous):
             shutil.copyfile(previous, output)
         else:
