@@ -525,7 +525,7 @@ private fun AppCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.title, style = MaterialTheme.typography.titleMedium)
                     if (app.prerelease) Badge(stringResource(R.string.badge_beta))
-                    if (app.auto) Badge(stringResource(R.string.badge_auto))
+                    sourceBadge(app)?.let { Badge(stringResource(it)) }
                     Text(
                         text = stringResource(R.string.card_byline, origin(app), versionLine(row)),
                         style = MaterialTheme.typography.bodyMedium,
@@ -589,7 +589,10 @@ private fun AppCard(
                 )
             }
 
-            Stats(app.stars, app.downloads, modifier = Modifier.padding(top = 12.dp))
+            // A catalogue tells neither stars nor downloads.
+            if (app.fromRepository) {
+                Stats(app.stars, app.downloads, modifier = Modifier.padding(top = 12.dp))
+            }
 
             if (install is InstallState.Failed) {
                 FailureRow(install, app.packageName, onRetry = startInstall, onDismiss = onDismissFailure)
@@ -770,22 +773,42 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
         }
 
         Spacer(Modifier.height(16.dp))
-        if (app.auto) {
+        val origin = when {
+            !app.fromRepository ->
+                stringResource(R.string.catalogue_detail, stringResource(sourceName(app.source)))
+            app.auto -> stringResource(R.string.auto_detail)
+            else -> null
+        }
+        if (origin != null) {
             Text(
-                text = stringResource(R.string.auto_detail),
+                text = origin,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
         }
-        DetailLine(stringResource(R.string.detail_developer), app.owner)
-        DetailLine(stringResource(R.string.detail_repository), app.fullName)
+        if (app.developer.isNotBlank()) {
+            DetailLine(stringResource(R.string.detail_developer), app.developer)
+        }
+        DetailLine(stringResource(R.string.detail_source), stringResource(sourceName(app.source)))
+        if (row.alsoFrom.isNotEmpty()) {
+            val others = row.alsoFrom.map { stringResource(sourceName(it)) }.joinToString(", ")
+            DetailLine(stringResource(R.string.detail_also_from), others)
+        }
+        if (app.fromRepository) {
+            DetailLine(stringResource(R.string.detail_repository), app.fullName)
+        }
         DetailLine(stringResource(R.string.detail_category), stringResource(categoryLabel(app.category)))
         if (app.license.isNotBlank()) {
             DetailLine(stringResource(R.string.detail_license), app.license)
         }
-        DetailLine(stringResource(R.string.detail_stars), fullNumber(app.stars.toLong()))
-        DetailLine(stringResource(R.string.detail_downloads), fullNumber(app.downloads))
+        if (app.antiFeatures.isNotEmpty()) {
+            DetailLine(stringResource(R.string.detail_warnings), app.antiFeatures.joinToString(", "))
+        }
+        if (app.fromRepository) {
+            DetailLine(stringResource(R.string.detail_stars), fullNumber(app.stars.toLong()))
+            DetailLine(stringResource(R.string.detail_downloads), fullNumber(app.downloads))
+        }
         DetailLine(
             stringResource(R.string.detail_latest),
             if (app.prerelease) {
@@ -972,7 +995,7 @@ private fun SettingsSheet(viewModel: StoreViewModel) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 4.dp)
         )
-        AutoSwitch(viewModel)
+        OriginSettings(viewModel)
         NotificationSetting()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
@@ -1041,34 +1064,79 @@ private fun BetaSwitch(viewModel: StoreViewModel) {
     )
 }
 
+/**
+ * Where the listed apps come from: what developers have published to the store, which is
+ * always shown, and a switch for each further place the store can list apps from.
+ */
 @Composable
-private fun AutoSwitch(viewModel: StoreViewModel) {
+private fun OriginSettings(viewModel: StoreViewModel) {
     val includeAuto by viewModel.includeAuto.collectAsStateWithLifecycle()
+    val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
+    Text(
+        text = stringResource(R.string.origins_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 16.dp)
+            .semantics { heading() }
+    )
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            text = stringResource(R.string.origin_published),
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Text(
+            text = stringResource(R.string.origin_published_description),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
     SettingSwitch(
-        heading = stringResource(R.string.auto_title),
+        heading = null,
         label = stringResource(R.string.auto_switch),
         description = stringResource(R.string.auto_description),
         checked = includeAuto,
         onCheckedChange = viewModel::setIncludeAuto
     )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.source_izzy),
+        description = stringResource(R.string.izzy_description),
+        checked = StoreApp.SOURCE_IZZY in catalogues,
+        onCheckedChange = { viewModel.setCatalogue(StoreApp.SOURCE_IZZY, it) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.source_fdroid),
+        description = stringResource(R.string.fdroid_description),
+        checked = StoreApp.SOURCE_FDROID in catalogues,
+        onCheckedChange = { viewModel.setCatalogue(StoreApp.SOURCE_FDROID, it) }
+    )
+    Text(
+        text = stringResource(R.string.origins_note),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
 }
 
 @Composable
 private fun SettingSwitch(
-    heading: String,
+    heading: String?,
     label: String,
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
     val haptics = LocalHapticFeedback.current
-    Text(
-        text = heading,
-        style = MaterialTheme.typography.titleMedium,
-        modifier = Modifier
-            .padding(top = 16.dp)
-            .semantics { heading() }
-    )
+    if (heading != null) {
+        Text(
+            text = heading,
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier
+                .padding(top = 16.dp)
+                .semantics { heading() }
+        )
+    }
     // The whole row is the switch, so the label is part of what gets announced and tapped.
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -1446,14 +1514,33 @@ private fun InstallHaptics(installs: Map<String, InstallState>) {
  * Where an app comes from, for its card. An app can call itself anything, so one whose name
  * is not that of its repository is shown with the repository as well as the owner.
  */
-private fun origin(app: StoreApp): String =
-    if (app.title.equals(app.repo, ignoreCase = true)) app.owner else app.fullName
+private fun origin(app: StoreApp): String = when {
+    !app.fromRepository -> app.developer.ifBlank { app.packageName.orEmpty() }
+    app.title.equals(app.repo, ignoreCase = true) -> app.owner
+    else -> app.fullName
+}
+
+/** The name of the place an app is offered from. */
+private fun sourceName(source: String): Int = when (source) {
+    StoreApp.SOURCE_IZZY -> R.string.source_izzy
+    StoreApp.SOURCE_FDROID -> R.string.source_fdroid
+    else -> R.string.source_github
+}
+
+/** The badge that tells an app was not published to the store by its developer, if any. */
+private fun sourceBadge(app: StoreApp): Int? = when {
+    !app.fromRepository -> sourceName(app.source)
+    app.auto -> R.string.badge_auto
+    else -> null
+}
 
 private fun matches(row: AppRow, query: String): Boolean {
     val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (words.isEmpty()) return true
     val app = row.app
-    val text = listOf(app.title, app.repo, app.owner, app.description, app.packageName.orEmpty())
+    val text = listOf(
+        app.title, app.repo, app.developer, app.description, app.packageName.orEmpty()
+    )
         .joinToString(" ")
     return words.all { text.contains(it, ignoreCase = true) }
 }

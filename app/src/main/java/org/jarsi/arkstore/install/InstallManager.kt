@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
@@ -79,7 +80,7 @@ object InstallManager {
         InstallService.start(appContext)
 
         scope.launch {
-            val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_')}.apk")
+            val target = File(File(appContext.cacheDir, "apk"), "${app.fullName.replace('/', '_').replace(':', '_')}.apk")
             try {
                 downloadAndInstall(appContext, app, target)
             } catch (e: CancellationException) {
@@ -94,6 +95,19 @@ object InstallManager {
                 _activeJobs.update { it - 1 }
             }
         }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                digest.update(buffer, 0, n)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File) {
@@ -113,6 +127,14 @@ object InstallManager {
         } catch (e: IOException) {
             Log.w(TAG, "Download failed for ${app.fullName}", e)
             setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
+            return
+        }
+
+        // A catalogue says what the file must be. Its files come from mirrors too, so one that
+        // is anything else is not installed.
+        if (app.sha256 != null && !app.sha256.equals(sha256(target), ignoreCase = true)) {
+            Log.w(TAG, "Downloaded file of ${app.fullName} does not match its checksum")
+            setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
             return
         }
 

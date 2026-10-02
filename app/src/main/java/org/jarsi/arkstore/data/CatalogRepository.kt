@@ -48,7 +48,12 @@ class CatalogRepository private constructor(context: Context) {
          */
         val beta: StoreApp?,
         /** Found through the store topic rather than only through a source on this device. */
-        val discovered: Boolean
+        val discovered: Boolean,
+        /**
+         * Whether the entry is kept in the stored catalogue. The apps of another catalogue are
+         * not: they are thousands, and their own downloaded file already holds them.
+         */
+        val stored: Boolean = true
     ) {
         val hasApp: Boolean get() = app != null || beta != null
 
@@ -56,7 +61,7 @@ class CatalogRepository private constructor(context: Context) {
         val auto: Boolean get() = (app ?: beta)?.auto == true
 
         fun mapApps(transform: (StoreApp) -> StoreApp) =
-            Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered)
+            Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered, stored)
 
         /** This entry marked the way the store index lists its repository. */
         fun listedAs(auto: Boolean) = Entry(
@@ -82,8 +87,18 @@ class CatalogRepository private constructor(context: Context) {
     /** Whether apps found by searching GitHub, which nobody published here, are shown. */
     val includeAuto: StateFlow<Boolean> = _includeAuto.asStateFlow()
 
+    private val _catalogues = MutableStateFlow(
+        CATALOGUES.keys.filter { preferences.getBoolean(PREF_CATALOGUE + it, false) }.toSet()
+    )
+    /** The other catalogues whose apps are shown, by their source names. */
+    val catalogues: StateFlow<Set<String>> = _catalogues.asStateFlow()
+
     private val indexCache = File(context.filesDir, "index.json")
     private val autoCache = File(context.filesDir, "auto.json")
+    private val catalogueCaches = CATALOGUES.keys.associateWith { File(context.filesDir, "$it.json") }
+
+    /** Each catalogue as last parsed, with the ETag of the file it was parsed from. */
+    private val parsedCatalogues = HashMap<String, Pair<String, Map<String, Entry>>>()
 
     private val file = File(context.filesDir, "catalog.json")
 
@@ -106,7 +121,7 @@ class CatalogRepository private constructor(context: Context) {
     /** What the app of the repository [fullName] is called in the store. */
     fun titleOf(fullName: String): String =
         _catalog.value.apps.firstOrNull { it.fullName == fullName }?.title
-            ?: fullName.substringAfter('/')
+            ?: fullName.substringAfter('/').substringAfter(':')
 
     init {
         load()
@@ -254,6 +269,11 @@ class CatalogRepository private constructor(context: Context) {
                     }
                 }.awaitAll().filterNotNull()
             }
+
+            // The apps of the other catalogues the user has turned on. They never stand in
+            // for an entry of the same name, which there cannot be, and are listed whatever
+            // became of the store's own index.
+            for ((fullName, entry) in catalogueEntries(now)) updated.putIfAbsent(fullName, entry)
 
             refreshStoreDownloads(updated, now)
             val error = failure.get()
@@ -410,6 +430,98 @@ class CatalogRepository private constructor(context: Context) {
             Log.w(TAG, "List of automatically found apps unreadable", e)
             emptyMap()
         }
+    }
+
+    /**
+     * The apps of the catalogues that are turned on, each read from the file the index
+     * workflow boils that catalogue down to. A file is parsed again only when it has changed.
+     * Like the automatically found apps these are an extra: a catalogue that cannot be had
+     * is read from its last copy, and failing that left out.
+     */
+    private fun catalogueEntries(now: Long): Map<String, Entry> {
+        val result = HashMap<String, Entry>()
+        for (source in _catalogues.value) {
+            val url = CATALOGUES[source] ?: continue
+            val cache = catalogueCaches.getValue(source)
+            val etagKey = PREF_CATALOGUE_ETAG + source
+            val text = try {
+                cachedText(url, cache, etagKey)
+            } catch (e: IOException) {
+                Log.w(TAG, "Catalogue $source unavailable", e)
+                try {
+                    cache.takeIf { it.exists() }?.readText()
+                } catch (_: IOException) {
+                    null
+                }
+            } ?: continue
+            val etag = preferences.getString(etagKey, null)
+            val known = parsedCatalogues[source]
+            if (etag != null && known?.first == etag) {
+                result += known.second
+                continue
+            }
+            try {
+                val parsed = objects(JSONObject(text), "apps").mapNotNull { app ->
+                    catalogueApp(source, app)?.let {
+                        it.fullName to Entry("", now, it, null, discovered = true, stored = false)
+                    }
+                }.toMap()
+                if (etag != null) parsedCatalogues[source] = etag to parsed
+                result += parsed
+            } catch (e: JSONException) {
+                Log.w(TAG, "Catalogue $source unreadable", e)
+            }
+        }
+        return result
+    }
+
+    /**
+     * Builds an app from the entry [json] of the catalogue [source], or returns null when
+     * none of its files suits this device.
+     */
+    private fun catalogueApp(source: String, json: JSONObject): StoreApp? {
+        val apks = json.getJSONArray("apks").let { array ->
+            (0 until array.length()).map { array.getJSONObject(it) }
+        }
+        val choices = apks.map { apk ->
+            val abis = apk.optJSONArray("abis")
+                ?.let { array -> List(array.length()) { array.getString(it) } }
+                .orEmpty()
+            CatalogRules.CatalogueApk(apk.getLong("versionCode"), abis, apk.optInt("minSdk", 1))
+        }
+        val apk = CatalogRules.pickCatalogueApk(choices, deviceAbis, Build.VERSION.SDK_INT)
+            ?.let { apks[it] }
+            ?: return null
+        fun list(key: String) = json.optJSONArray(key)
+            ?.let { array -> List(array.length()) { array.getString(it) } }
+            .orEmpty()
+        return StoreApp(
+            fullName = json.getString("fullName"),
+            description = json.optStringOrEmpty("description"),
+            stars = 0,
+            category = Categories.of(list("topics")),
+            license = json.optStringOrEmpty("license"),
+            downloads = 0,
+            repoUrl = json.getString("repoUrl"),
+            tag = json.optStringOrEmpty("tag"),
+            releaseName = "",
+            releaseNotes = json.optStringOrEmpty("releaseNotes"),
+            releaseUrl = json.optStringOrEmpty("releaseUrl"),
+            publishedAt = json.optStringOrEmpty("publishedAt"),
+            apkName = apk.getString("name"),
+            apkUrl = apk.getString("url"),
+            apkSize = apk.getLong("size"),
+            assetId = apk.getLong("id"),
+            packageName = apk.getString("packageName"),
+            versionCode = apk.getLong("versionCode"),
+            versionName = if (apk.isNull("versionName")) null else apk.getString("versionName"),
+            label = if (apk.isNull("label")) null else apk.getString("label"),
+            source = source,
+            author = json.optStringOrEmpty("author").takeIf { it.isNotBlank() },
+            signer = if (apk.isNull("signer")) null else apk.getString("signer"),
+            sha256 = apk.getString("sha256"),
+            antiFeatures = list("antiFeatures")
+        )
     }
 
     /**
@@ -668,6 +780,19 @@ class CatalogRepository private constructor(context: Context) {
         }
     }
 
+    /**
+     * Shows or hides the apps of the catalogue [source] and republishes accordingly. Like the
+     * automatically found apps, a catalogue's list is downloaded only while it is shown.
+     */
+    fun setCatalogue(source: String, include: Boolean) {
+        if (source !in CATALOGUES) return
+        preferences.edit { putBoolean(PREF_CATALOGUE + source, include) }
+        synchronized(publishLock) {
+            _catalogues.value = if (include) _catalogues.value + source else _catalogues.value - source
+            _catalog.value = _catalog.value.copy(apps = sorted(entries.values))
+        }
+    }
+
     /** Turns beta versions on or off and republishes the catalogue accordingly. */
     fun setIncludeBeta(include: Boolean) {
         preferences.edit { putBoolean(PREF_BETA, include) }
@@ -694,9 +819,10 @@ class CatalogRepository private constructor(context: Context) {
         val includeBeta = _includeBeta.value
         val includeAuto = _includeAuto.value
         val own = sources.list()
+        val shownCatalogues = _catalogues.value
         return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta) }
-            .mapNotNull { CatalogRules.shown(it, own, includeAuto) }
-            .sortedBy { it.repo.lowercase() }
+            .mapNotNull { CatalogRules.shown(it, own, includeAuto, shownCatalogues) }
+            .sortedBy { it.title.lowercase() }
     }
 
     private fun betaVersions(entries: Collection<Entry>): Map<String, Long> =
@@ -733,6 +859,7 @@ class CatalogRepository private constructor(context: Context) {
     private fun save(checkedAt: Long) {
         val repos = JSONObject()
         entries.forEach { (name, entry) ->
+            if (!entry.stored) return@forEach
             repos.put(
                 name,
                 JSONObject()
@@ -764,6 +891,14 @@ class CatalogRepository private constructor(context: Context) {
         private const val PREF_AUTO = "include_auto"
         private const val PREF_INDEX_ETAG = "index_etag"
         private const val PREF_AUTO_ETAG = "auto_etag"
+        private const val PREF_CATALOGUE = "include_"
+        private const val PREF_CATALOGUE_ETAG = "etag_"
+
+        /** The other catalogues the store can show, and where the list of each is. */
+        private val CATALOGUES = mapOf(
+            StoreApp.SOURCE_IZZY to BuildConfig.IZZY_INDEX_URL,
+            StoreApp.SOURCE_FDROID to BuildConfig.FDROID_INDEX_URL
+        )
         private const val API = "https://api.github.com"
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100

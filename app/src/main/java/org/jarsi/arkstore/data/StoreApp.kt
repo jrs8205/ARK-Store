@@ -1,10 +1,17 @@
 package org.jarsi.arkstore.data
 
+import org.json.JSONArray
 import org.json.JSONObject
 
-/** One repository's latest release that carries an installable APK. */
+/**
+ * One app as one place offers it: a repository's latest release that carries an installable
+ * APK, or a package of another catalogue.
+ */
 data class StoreApp(
-    /** "owner/repo"; identifies the app throughout the store. */
+    /**
+     * Identifies the app throughout the store: "owner/repo" for a repository, and the
+     * catalogue and package, such as "fdroid:org.example", for an app of another catalogue.
+     */
     val fullName: String,
     val description: String,
     val stars: Int,
@@ -45,8 +52,22 @@ data class StoreApp(
      */
     val label: String? = null,
     /** Downloads of APK files summed over all of the repository's recent releases. */
-    val allDownloads: Long = downloads
+    val allDownloads: Long = downloads,
+    /** Where the app is offered from: one of the SOURCE constants. */
+    val source: String = SOURCE_GITHUB,
+    /** Who made the app, as a catalogue tells it. */
+    val author: String? = null,
+    /** SHA-256 of the certificate the APK is signed with, in hex, when the catalogue tells it. */
+    val signer: String? = null,
+    /** SHA-256 the APK file must have, in hex, when the catalogue tells it. */
+    val sha256: String? = null,
+    /** What a catalogue warns about in the app, such as tracking, in its own words. */
+    val antiFeatures: List<String> = emptyList()
 ) {
+    /** Whether the app comes from a repository's releases rather than from a catalogue. */
+    val fromRepository: Boolean
+        get() = source == SOURCE_GITHUB
+
     /** What the app is called in the store. */
     val title: String
         get() = label ?: repo
@@ -55,7 +76,11 @@ data class StoreApp(
         get() = fullName.substringBefore('/')
 
     val repo: String
-        get() = fullName.substringAfter('/')
+        get() = if (fromRepository) fullName.substringAfter('/') else fullName.substringAfter(':')
+
+    /** Who the app is by: its author as a catalogue tells it, else the repository's owner. */
+    val developer: String
+        get() = author?.takeIf { it.isNotBlank() } ?: if (fromRepository) owner else ""
 
     /** Version shown to the user: the manifest's name when known, else the release tag. */
     val displayVersion: String
@@ -85,8 +110,17 @@ data class StoreApp(
         .put("versionName", versionName ?: JSONObject.NULL)
         .put("label", label ?: JSONObject.NULL)
         .put("allDownloads", allDownloads)
+        .put("source", source)
+        .put("author", author ?: JSONObject.NULL)
+        .put("signer", signer ?: JSONObject.NULL)
+        .put("sha256", sha256 ?: JSONObject.NULL)
+        .put("antiFeatures", JSONArray(antiFeatures))
 
     companion object {
+        const val SOURCE_GITHUB = "github"
+        const val SOURCE_IZZY = "izzy"
+        const val SOURCE_FDROID = "fdroid"
+
         fun fromJson(json: JSONObject) = StoreApp(
             fullName = json.getString("fullName"),
             description = json.optString("description"),
@@ -110,7 +144,14 @@ data class StoreApp(
             versionCode = json.optLong("versionCode"),
             versionName = if (json.isNull("versionName")) null else json.getString("versionName"),
             label = if (json.isNull("label")) null else json.getString("label"),
-            allDownloads = json.optLong("allDownloads", json.optLong("downloads"))
+            allDownloads = json.optLong("allDownloads", json.optLong("downloads")),
+            source = json.optString("source", SOURCE_GITHUB),
+            author = if (json.isNull("author")) null else json.getString("author"),
+            signer = if (json.isNull("signer")) null else json.getString("signer"),
+            sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
+            antiFeatures = json.optJSONArray("antiFeatures")
+                ?.let { array -> List(array.length()) { array.getString(it) } }
+                .orEmpty()
         )
     }
 }

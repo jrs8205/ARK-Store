@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.data
 
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
@@ -32,21 +33,67 @@ object InstalledApps {
     private const val PREFS_CONFLICTS = "signature_conflicts"
     private const val PREFS_BETAS = "installed_betas"
 
-    /** The installed version of [app], seen against the release the store offers of it. */
-    fun find(context: Context, app: StoreApp): InstalledVersion? {
+    /**
+     * Every installed package, read in one go. Asking the system about each app of a
+     * catalogue of thousands, one by one, takes seconds.
+     */
+    fun snapshot(context: Context): Map<String, PackageInfo> = try {
+        context.packageManager.getInstalledPackages(0).associateBy { it.packageName }
+    } catch (_: RuntimeException) {
+        // The list can be too large to hand over at once; then nothing shows as installed
+        // until the next look.
+        emptyMap()
+    }
+
+    /**
+     * The installed version of [app], seen against the release the store offers of it.
+     * [installed] is a [snapshot] to look the package up in rather than asking the system.
+     */
+    fun find(
+        context: Context,
+        app: StoreApp,
+        installed: Map<String, PackageInfo>? = null
+    ): InstalledVersion? {
         val packageName = app.packageName ?: return null
-        return try {
-            val info = context.packageManager.getPackageInfo(packageName, 0)
-            val versionCode = PackageInfoCompat.getLongVersionCode(info)
-            InstalledVersion(
-                versionCode,
-                info.versionName,
-                otherSigner = hasConflict(context, app, packageName),
-                beta = betas(context).getLong(packageName, -1) == versionCode
-            )
-        } catch (_: PackageManager.NameNotFoundException) {
-            null
+        val info = if (installed != null) {
+            installed[packageName] ?: return null
+        } else {
+            try {
+                context.packageManager.getPackageInfo(packageName, 0)
+            } catch (_: PackageManager.NameNotFoundException) {
+                return null
+            }
         }
+        val versionCode = PackageInfoCompat.getLongVersionCode(info)
+        return InstalledVersion(
+            versionCode,
+            info.versionName,
+            otherSigner = hasConflict(context, app, packageName) || signedOtherwise(context, app, packageName),
+            beta = betas(context).getLong(packageName, -1) == versionCode
+        )
+    }
+
+    /**
+     * Whether the installed [packageName] is known to be signed with another key than the
+     * file offered as [app]. A catalogue tells how its files are signed, so this is known
+     * without downloading anything.
+     */
+    private fun signedOtherwise(context: Context, app: StoreApp, packageName: String): Boolean {
+        val offered = app.signer ?: return false
+        val installed = signers(context, packageName) ?: return false
+        return offered !in installed
+    }
+
+    /**
+     * [apps] as the list shows them: the same package offered by several places is listed
+     * once, see [CatalogRules.merged]. [installed] is a [snapshot].
+     */
+    internal fun merged(
+        context: Context,
+        apps: List<StoreApp>,
+        installed: Map<String, PackageInfo> = snapshot(context)
+    ): List<CatalogRules.Merged> = CatalogRules.merged(apps) { packageName ->
+        if (packageName in installed) signers(context, packageName) else null
     }
 
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
@@ -56,8 +103,11 @@ object InstalledApps {
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
-    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> = apps.filter {
-        status(it, find(context, it)) == AppStatus.UPDATE_AVAILABLE
+    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
+        val installed = snapshot(context)
+        return merged(context, apps, installed).map { it.app }.filter {
+            status(it, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
+        }
     }
 
     /**

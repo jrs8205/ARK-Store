@@ -102,7 +102,11 @@ None of these are required, but they make your app look better in the store.
 - **Safe updates**: the app warns before installing when the installed app is signed with a
   different key.
 - **Beta versions**: optionally get a developer's prereleases as updates.
-- **No account**: the app talks only to GitHub, without signing in.
+- **More apps when you want them**: switches in the settings add apps found by searching
+  GitHub and the catalogues of IzzyOnDroid and F-Droid. An app offered by several of them is
+  listed once.
+- **No account**: nothing to sign in to. The app talks to GitHub and, when their switches are
+  on, to IzzyOnDroid and F-Droid for the files of their apps.
 - **Accessible**: screen reader labels, text that scales, text contrast of at least 7:1
   (WCAG AAA), and haptic feedback that follows the system setting.
 - **English and Finnish.**
@@ -110,9 +114,9 @@ None of these are required, but they make your app look better in the store.
 ## Automatically found apps
 
 Besides the apps developers publish with the topic, the index workflow searches GitHub for
-other open-source Android apps. They are shown only to users who turn on **Show automatically
-found apps** in the settings, and each carries a label saying that its developer did not
-publish it to the store. Nobody has checked these apps.
+other open-source Android apps. They are shown only to users who turn on **Found on GitHub**
+in the settings, and each carries a label saying so: its developer did not publish it to
+the store. Nobody has checked these apps.
 
 The search looks for repositories that carry the topic `android` and are written in Kotlin,
 Java or Dart, and for repositories that carry the topic `android-app`. To keep the list
@@ -150,6 +154,37 @@ under Other.
 The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
 only while the setting is on. Beta versions of these apps are not offered.
 
+## Other catalogues
+
+Two established catalogues of open-source Android apps can be turned on in the settings, each
+with a switch of its own:
+
+- **IzzyOnDroid** passes on the APKs developers release themselves, after scanning them.
+- **F-Droid** builds apps from their source and signs most of them with its own key.
+
+The index workflow reads each catalogue's own index, checks it against the checksum the
+catalogue publishes, and boils it down to one file per catalogue (`izzy.json`, `fdroid.json`
+next to the index), which the app downloads only while that switch is on. The APKs are
+downloaded from the catalogue itself, and the app checks every file against the checksum the
+catalogue gives for it before installing. Apps of a catalogue carry its name as a label, and
+their details show what the catalogue warns about, such as tracking or non-free network
+services. Stars and download counts are not shown for them, since the catalogues do not tell.
+
+### The same app from several places
+
+Many apps are in more than one of these places. The store lists a package once:
+
+1. from its developer, when they have published it with the `arkstore` topic,
+2. else from the developer's releases as found by searching GitHub,
+3. else from IzzyOnDroid,
+4. else from F-Droid.
+
+That is also the order in which new versions tend to arrive. An installed app is the
+exception: Android updates an app only with a file signed with the same key, so an installed
+app stays with the place whose files are signed the way it is. An app installed from F-Droid
+keeps being updated from F-Droid, even when its developer also releases it on GitHub. The
+details of an app name the other places that offer it.
+
 ## Why only public and licensed apps
 
 Those two requirements are the store's only gatekeeping, and they are checked automatically
@@ -158,8 +193,9 @@ from. An open-source license means the code may actually be used, studied and sh
 Repositories that are private, or public but unlicensed, are never listed, and a repository
 that loses its license disappears from the store.
 
-ARK-Store does not review, build or host apps. It shows what developers publish on GitHub
-and installs the files they attached to their releases. Every app shows its developer, and
+ARK-Store does not review, build or host apps. It shows what developers publish on GitHub,
+and what the catalogues that are turned on offer, and installs those files. The catalogues
+list only open-source apps as well. Every app shows where it comes from and who made it, and
 its source is one tap away; install apps from developers you trust.
 
 ## How it works
@@ -199,7 +235,9 @@ The store topic, the index location, the account that is a source on every new i
 and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER` and
 `STORE_REPO` build config fields in `app/build.gradle.kts`; `AUTO_INDEX_URL` is where the
 automatically found apps are listed. The index is built with
-`python3 tools/build_index.py --output index.json --auto-output auto.json`.
+`python3 tools/build_index.py --output index.json --auto-output auto.json`, and the lists of
+the other catalogues, whose addresses are `IZZY_INDEX_URL` and `FDROID_INDEX_URL`, with
+`python3 tools/build_repos.py --output-dir .`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:

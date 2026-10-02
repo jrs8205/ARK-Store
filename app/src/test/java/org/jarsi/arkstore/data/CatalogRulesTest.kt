@@ -101,6 +101,84 @@ class CatalogRulesTest {
         assertNull(CatalogRules.inheritedLabel(before, null, prerelease = false))
     }
 
+    private fun catalogue(source: String, signer: String?, packageName: String = "org.example") =
+        app(fullName = "$source:$packageName", packageName = packageName)
+            .copy(source = source, signer = signer)
+
+    private fun merged(apps: List<StoreApp>, installed: Set<String>? = null) =
+        CatalogRules.merged(apps) { installed }
+
+    @Test
+    fun appOfACatalogueIsShownOnlyWhileTheCatalogueIsOn() {
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "f")
+        assertNull(CatalogRules.shown(fdroid, emptyList(), includeAuto = true))
+        assertSame(
+            fdroid,
+            CatalogRules.shown(fdroid, emptyList(), includeAuto = false, setOf(StoreApp.SOURCE_FDROID))
+        )
+    }
+
+    @Test
+    fun samePackageIsListedOnceFromTheFirstInLine() {
+        val published = app()
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "f")
+        val other = catalogue(StoreApp.SOURCE_FDROID, "f", packageName = "org.other")
+
+        val rows = merged(listOf(fdroid, other, izzy, published))
+        assertEquals(listOf(other, published), rows.map { it.app }.sortedBy { it.fullName })
+        val row = rows.single { it.app === published }
+        assertEquals(listOf(StoreApp.SOURCE_IZZY, StoreApp.SOURCE_FDROID), row.alsoFrom)
+
+        assertSame(izzy, merged(listOf(fdroid, izzy)).single().app)
+    }
+
+    @Test
+    fun installedAppStaysWithThePlaceThatSignsItsFilesTheSameWay() {
+        val found = app(auto = true)
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "f")
+        val all = listOf(found, izzy, fdroid)
+
+        val fromFdroid = merged(all, installed = setOf("f")).single()
+        assertSame(fdroid, fromFdroid.app)
+        assertEquals(listOf(StoreApp.SOURCE_GITHUB, StoreApp.SOURCE_IZZY), fromFdroid.alsoFrom)
+        // The developer's key is what both the repository and IzzyOnDroid offer; the
+        // catalogue is the one that is known to.
+        assertSame(izzy, merged(all, installed = setOf("dev")).single().app)
+        // A key nobody is known to use: the repository, whose key is not known, may yet match.
+        assertSame(found, merged(all, installed = setOf("x")).single().app)
+        assertSame(izzy, merged(listOf(izzy, fdroid), installed = setOf("x")).single().app)
+    }
+
+    @Test
+    fun repositoriesReleasingTheSamePackageStayApart() {
+        val one = app(fullName = "one/app")
+        val two = app(fullName = "two/app")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "f")
+        assertEquals(listOf(one, two), merged(listOf(one, two, fdroid)).map { it.app })
+        assertEquals(listOf(fdroid), merged(listOf(one, two, fdroid), installed = setOf("f")).map { it.app })
+        val unknown = app(packageName = null)
+        assertEquals(2, merged(listOf(unknown, unknown)).size)
+    }
+
+    @Test
+    fun newestFileTheDeviceCanRunIsPicked() {
+        fun apk(code: Long, vararg abis: String, minSdk: Int = 23) =
+            CatalogRules.CatalogueApk(code, abis.toList(), minSdk)
+        val perAbi = listOf(apk(4, "x86_64"), apk(3, "arm64-v8a"), apk(2, "armeabi-v7a"))
+        val arm = listOf("arm64-v8a", "armeabi-v7a")
+        assertEquals(1, CatalogRules.pickCatalogueApk(perAbi, arm, sdk = 34))
+        assertEquals(2, CatalogRules.pickCatalogueApk(perAbi, listOf("armeabi-v7a"), sdk = 34))
+        assertNull(CatalogRules.pickCatalogueApk(perAbi, listOf("riscv64"), sdk = 34))
+        assertEquals(0, CatalogRules.pickCatalogueApk(listOf(apk(1)), arm, sdk = 34))
+        assertNull(CatalogRules.pickCatalogueApk(listOf(apk(1, minSdk = 35)), arm, sdk = 34))
+        assertEquals(
+            1,
+            CatalogRules.pickCatalogueApk(listOf(apk(9, minSdk = 35), apk(8)), arm, sdk = 34)
+        )
+    }
+
     @Test
     fun fullReleasesAndPrereleasesCountTheirOwnDownloads() {
         assertEquals(30L, CatalogRules.downloads(all = 35, beta = 5, prerelease = false))
