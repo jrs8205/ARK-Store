@@ -82,34 +82,62 @@ LICENSE_TEXTS = (
      }),
     ("permissionisherebygrantedfreeofchargetoanypersonobtainingacopy",
      "orotherdealingsinthesoftware", {
-         "81a61d35f6891e560d80c95e831624d3": "MIT",
+         "970a18fea597db0b3acc4d40c788a5f3": "MIT",
      }),
     ("permissiontousecopymodifyandordistributethissoftware",
      "useorperformanceofthissoftware", {
-         "2ca2d1ff4c9cab1849313ddab628dd07": "ISC",
+         "0cff2796014693e8691e94eccd6f9b92": "ISC",
      }),
     ("redistributionanduseinsourceandbinaryforms",
      "ifadvisedofthepossibilityofsuchdamage", {
-         "7ef8cd07c85b1bee30ed2f6ab7777c4a": "BSD-3-Clause",
-         "6a8d19497dff72b28e119192a8c0ff8a": "BSD-3-Clause",
-         "1328f1513430d5690e86eb9a63ac9031": "BSD-2-Clause",
-         "04b921d2bc53e319289ef48b43f441a8": "BSD-2-Clause",
+         "a41fa61f21eaa27d785e413c26be9cac": "BSD-3-Clause",
+         "b5338cb0db9bedf1134d3e5fb6552ce9": "BSD-2-Clause",
      }),
     ("thisisfreeandunencumberedsoftwarereleasedintothepublicdomain",
-     "formoreinformationpleasereferto", {
-         "5066157c21f7325c4c1b7734a3683d01": "Unlicense",
+     "formoreinformationpleaserefertohttpsunlicenseorg", {
+         "1506f05d8a52455479d253ae494efbb3": "Unlicense",
+     }),
+    ("thisisfreeandunencumberedsoftwarereleasedintothepublicdomain",
+     "formoreinformationpleaserefertohttpunlicenseorg", {
+         "f7e5acc9ebdbd10d9fe369a7fbd698de": "Unlicense",
+     }),
+    ("creativecommonslegalcode",
+     "withrespecttothisccoruseofthework", {
+         "6d4f8225d25cd68d7a806427f72ad55b": "CC0-1.0",
      }),
     ("statementofpurpose",
      "withrespecttothisccoruseofthework", {
          "102363731e9b0bc4a0330bc55cf09e43": "CC0-1.0",
      }),
 )
-# The one place where the terms of a license name somebody: whose name may not be used to
-# promote things. It is taken out before the terms are compared.
-LICENSE_NAMED = re.compile(r"neitherthenameof[a-z]{1,200}?northenamesofitscontributors")
-# How many letters may come before the terms: a title and whose copyright it is.
+# Where the terms of a license name somebody: who provides the software, who is not liable
+# and whose name may not be used to promote things. The terms are the same whoever is named,
+# so the names are taken out before the terms are compared.
+LICENSE_NAMED = re.compile(
+    r"(?<=neitherthenameof)[a-z]{1,120}?(?=northenamesofitscontributors)"
+    r"|(?<=softwareisprovidedby)[a-z]{1,120}?(?=asisandanyexpress)"
+    r"|(?<=providedasisand)[a-z]{1,120}?(?=disclaimsallwarranties)"
+    r"|(?<=innoeventshall)[a-z]{1,120}?(?=beliablefor)"
+)
+# The words that close the terms of the longer licenses. What a file says after them is not
+# part of the terms: that is where a license tells how to apply it, and where projects put
+# their own notices.
+LICENSE_CLOSED = "endoftermsandconditions"
+# How many letters may come before the terms.
 LICENSE_LEAD = 1000
-# What tells that the text around the terms takes back what they grant.
+# The words a title of a license is made of. Before the terms, and after terms that are not
+# closed as above, a file may hold only titles and lines that say whose copyright it is.
+# Anything else there may be a condition of its own, and the file then is no license the
+# store knows.
+LICENSE_TITLE = frozenset("""
+    the mit isc bsd apache gnu affero lesser library general public license licence licenses
+    version clause new revised simplified modified or mozilla european union eupl creative
+    commons legal code cc universal unlicense zero v x expat style spdx identifier january
+    february june november http https www org fsf software free foundation inc and authors
+    contributors all rights reserved franklin street fifth floor temple place suite mass ave
+    boston cambridge ma usa
+""".split())
+# What tells that words outside the terms take back what the terms grant.
 LICENSE_LIMITS = ("commonsclause", "noncommercial", "notforcommercial", "notlicensed", "notbesold",
                   "additionalrestriction", "personaluseonly")
 
@@ -167,33 +195,60 @@ def license_texts(letters):
             if end < 0:
                 break
             end += len(ends)
-            terms = LICENSE_NAMED.sub("neitherthenameofnorthenamesofitscontributors", letters[start:end])
-            name = known.get(hashlib.sha256(terms.encode()).hexdigest()[:32])
-            if name:
+            terms = letters[start:end]
+            name = known.get(hashlib.sha256(LICENSE_NAMED.sub("", terms).encode()).hexdigest()[:32])
+            named = "".join(LICENSE_NAMED.findall(terms))
+            if name and not any(limit in named for limit in LICENSE_LIMITS):
                 found.append((start, end, name))
             start = letters.find(begins, start + 1)
     return sorted(found)
 
 
+def says_nothing(piece):
+    """Whether a piece of a license file has nothing of its own to say: every line of it is
+    a title or tells whose copyright the work is."""
+    for line in piece.splitlines():
+        line = line.strip(" \t#*=_>|`~-").lower()
+        if re.match(r"(copyright\b|\(c\)|\u00a9)", line):
+            continue
+        if not set(re.findall(r"[a-z]+", line)) <= LICENSE_TITLE:
+            return False
+    return True
+
+
 def identify_license(text):
     """The SPDX name of the license whose text this is, or None.
 
-    The terms have to be there in full and unchanged, at the head of the file. A file that
-    only mentions a license, changes its terms or puts conditions of its own before them is
-    no license the store knows. More may follow the terms, as many projects add the licenses
-    of what they include, but not words that take back what the terms grant."""
-    letters = re.sub(r"[^a-z]+", "", text.lower())
+    The terms have to be there in full and unchanged, with nothing before them but a title
+    and whose copyright the work is. A file that only mentions a license, changes its terms
+    or adds conditions of its own is no license the store knows. After terms that end with
+    "END OF TERMS AND CONDITIONS" a file may go on, as GitHub has it too; after any others
+    only further licenses may follow, those of what the project includes."""
+    lowered = text.lower()
+    where = [index for index, character in enumerate(lowered) if "a" <= character <= "z"]
+    letters = "".join(lowered[index] for index in where)
     found = license_texts(letters)
     if not found or found[0][0] > LICENSE_LEAD:
         return None
     position = 0
     for start, end, _ in found:
-        if any(limit in letters[position:start] for limit in LICENSE_LIMITS):
+        if start < position:
+            continue
+        gap = text[where[position - 1] + 1 if position else 0:where[start]]
+        if not says_nothing(gap) or any(limit in letters[position:start] for limit in LICENSE_LIMITS):
             return None
-        position = max(position, end)
-    if any(limit in letters[position:] for limit in LICENSE_LIMITS):
-        return None
-    return found[0][2]
+        position = end
+        if letters.endswith(LICENSE_CLOSED, 0, end):
+            # Closed terms: what follows is the file's own, as long as it takes nothing back.
+            # The terms of further licenses are not the file's own words.
+            for later_start, later_end, _ in found + [(len(letters), len(letters), None)]:
+                if later_start < position:
+                    continue
+                if any(limit in letters[position:later_start] for limit in LICENSE_LIMITS):
+                    return None
+                position = later_end
+            return found[0][2]
+    return found[0][2] if says_nothing(text[where[position - 1] + 1:]) else None
 
 
 def detect_license(name):
@@ -305,10 +360,11 @@ def gitlab(path):
         return json.load(response)
 
 
-def remote_size(url):
-    """The size of the file at url, asked with a request for its first byte. The answer is
-    judged by its headers alone: a server that takes no notice of the range sends the whole
-    file, which is not read."""
+def remote_file(url):
+    """(size, mark) of the file at url, asked with a request for its first byte. The mark is
+    what the server gives for telling one version of the file from another, or "" when it
+    gives nothing. The answer is judged by its headers alone: a server that takes no notice
+    of the range sends the whole file, which is not read."""
     request = urllib.request.Request(url, headers={
         "Range": "bytes=0-0", "Accept-Encoding": "identity", "User-Agent": USER_AGENT,
     })
@@ -316,34 +372,53 @@ def remote_size(url):
         total = (response.headers.get("Content-Range") or "").rpartition("/")[2]
         if response.status != 206 or not total.isdigit():
             raise OSError("size not told")
-    return int(total)
+        mark = response.headers.get("ETag") or response.headers.get("Last-Modified") or ""
+    return int(total), mark
+
+
+# The addresses at which GitLab hands out a file it keeps itself: a package of a project, a
+# file uploaded to it, a file of a repository and what a pipeline built. From these GitLab
+# passes a request on only to where it stores its files. Everything else is left out, among
+# it the addresses that stand for a release link and pass the request on to wherever that
+# link points.
+GITLAB_FILES = re.compile(
+    r"/api/v4/projects/[^/]+/packages/generic/[^/]+/[^/]+/.+"
+    r"|/-/project/\d+/uploads/[0-9a-f]{32}/[^/]+"
+    r"|/(?!api/)(?:(?!-/)[^/]+/)+(?:"
+    r"uploads/[0-9a-f]{32}/[^/]+"
+    r"|-/raw/.+"
+    r"|-/package_files/\d+/download"
+    r"|-/jobs/(?:\d+/artifacts/raw|artifacts/[^/]+/raw)/.+"
+    r")"
+)
 
 
 def apk_link(link):
     """(name, address) of a release link that is an APK kept on GitLab itself, or None. A
     link can point anywhere; a file on another site is that site's to offer.
 
-    What counts is where the link itself points. The address GitLab gives for downloading a
-    link directly is on GitLab whatever the link points at, and only passes the request on;
-    an address of that kind is not taken for a link's own either. From a file of its own
-    GitLab may still pass the request on to where it keeps its files."""
+    What counts is where the link itself points, not the address GitLab gives for
+    downloading it directly, which is on GitLab whatever the link points at. And the link
+    has to point at one of the places GitLab keeps files in; see GITLAB_FILES."""
     url = link.get("url") or ""
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.netloc != urllib.parse.urlsplit(GITLAB_HOST).netloc:
         return None
-    if "/-/releases/" in urllib.parse.unquote(parsed.path):
+    path = urllib.parse.unquote(parsed.path)
+    if not GITLAB_FILES.fullmatch(path) or any(part in ("", ".", "..") for part in path.split("/")[1:]):
         return None
     name = link.get("name") or ""
     if not name.lower().endswith(".apk"):
-        name = urllib.parse.unquote(parsed.path.rsplit("/", 1)[-1])
+        name = path.rsplit("/", 1)[-1]
     return (name, url) if name.lower().endswith(".apk") else None
 
 
-def file_id(link_id, url, size):
+def file_id(link_id, url, size, mark):
     """A number that stands for the file behind a release link. A link keeps its own id when
-    it is pointed at another file, so the address and the size go into the number too: what
-    was read from a file is then used again only while the link still leads to that file."""
-    described = "%s\n%s\n%d" % (link_id, url, size)
+    it is pointed at another file, and an address can come to hold another file, so the
+    address, the size and the server's mark for the file go into the number too: what was
+    read from a file is then used again only while the link still leads to that file."""
+    described = "%s\n%s\n%d\n%s" % (link_id, url, size, mark)
     return int(hashlib.sha256(described.encode()).hexdigest()[:13], 16)
 
 
@@ -415,8 +490,11 @@ class GitLab:
                 apk = apk_link(link)
                 if apk is None:
                     continue
-                size = remote_size(apk[1])
-                assets.append({"id": file_id(link["id"], apk[1], size), "name": apk[0],
+                size, mark = remote_file(apk[1])
+                # Without a mark nothing tells whether the file is still the same one, so
+                # it is taken for a new one every time and read again.
+                mark = mark or "asked %f" % time.time()
+                assets.append({"id": file_id(link["id"], apk[1], size, mark), "name": apk[0],
                                "browser_download_url": apk[1], "size": size, "download_count": 0})
             sized = sized or bool(assets)
             result.append({

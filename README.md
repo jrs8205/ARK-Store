@@ -43,15 +43,18 @@ release and add the topic `arkstore`. Apps published this way are shown by ARK-S
 later, not by older versions. A few things differ:
 
 - **Codeberg** does not say which license a repository has, so the store recognises it from
-  the `LICENSE` or `COPYING` file in the repository's root. The file has to begin with the
-  full, unchanged text of one of the common licenses (GPL, AGPL, LGPL, Apache, MIT, BSD, MPL,
-  ISC, EUPL, Unlicense, CC0); the licenses of parts the app includes may follow it. A file
-  that only names a license, changes its terms or adds conditions of its own is not
-  recognised, and the repository is left out.
+  the `LICENSE` or `COPYING` file in the repository's root. The file has to hold the full,
+  unchanged text of one of the common licenses (GPL, AGPL, LGPL, Apache, MIT, BSD, MPL, ISC,
+  EUPL, Unlicense, CC0), with nothing before it but a title and copyright lines. After a
+  license that ends with "END OF TERMS AND CONDITIONS" the file may go on, for instance with
+  a notice of its own; after the others only the licenses of parts the app includes may
+  follow. A file that only names a license, changes its terms or adds conditions of its own
+  is not recognised, and the repository is left out.
 - **GitLab** attaches files to a release as links. The APK must be a link that points
-  straight at a file kept on gitlab.com itself, such as a package or an upload of the
-  project; a link to another site is not offered. GitLab has no prereleases, so beta
-  versions cannot be published from there, and it does not count downloads.
+  straight at a file kept on gitlab.com itself: a package or an upload of a project, a file
+  of a repository or a pipeline's artifact. A link to another site, or one that is passed
+  on to another address, is not offered. GitLab has no prereleases, so beta versions cannot
+  be published from there, and it does not count downloads.
 
 ### How quickly it shows up
 
