@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths:
       - tools/build_index.py
+      - tools/build_repos.py
       - .github/workflows/index.yml
 
 permissions:
@@ -64,13 +65,18 @@ jobs:
             --previous-auto previous/auto.json --state out/state.json \
             --output out/index.json --auto-output out/auto.json
 
+      # F-Droid and IzzyOnDroid, each boiled down to a list of its own. A catalogue that has
+      # not changed is not downloaded again, and one that cannot be reached keeps its list.
+      - name: Build the lists of the other catalogues
+        run: python3 tools/build_repos.py --previous-dir previous --output-dir out
+
       - name: Publish to the index branch
         run: |
           cd out
           git init -q -b index
           git config user.name "${GITHUB_REPOSITORY_OWNER}"
           git config user.email "${GITHUB_REPOSITORY_OWNER}@users.noreply.github.com"
-          git add index.json auto.json state.json
+          git add index.json auto.json state.json fdroid.json izzy.json
           git commit -q -m "Update the store index"
           # The branch holds only the newest index, so its history never grows.
           git push -q --force \
