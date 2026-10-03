@@ -189,12 +189,18 @@ class UpdateTest(unittest.TestCase):
                  "index": {"name": "/index-v2.json", "sha256": checksum or hashlib.sha256(data).hexdigest()}}
         return {"/entry.json": json.dumps(entry).encode(), "/index-v2.json": data}
 
-    PREVIOUS = {"version": 1, "source": "fdroid", "timestamp": 5, "apps": [{"fullName": "fdroid:old"}]}
+    PREVIOUS = {"version": 1, "source": "fdroid", "timestamp": 5, "apps": [{"fullName": "fdroid:old", "icon": None}]}
 
     def test_changed_catalogue_is_rebuilt(self):
         written, _ = self.run_update(self.responses(timestamp=6), self.PREVIOUS)
         self.assertEqual(written["timestamp"], 6)
         self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
+
+    def test_list_written_before_icons_is_rebuilt_once(self):
+        before_icons = dict(self.PREVIOUS, apps=[{"fullName": "fdroid:old"}])
+        written, _ = self.run_update(self.responses(timestamp=5), before_icons)
+        self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
+        self.assertIn("icon", written["apps"][0])
 
     def test_unchanged_catalogue_is_not_downloaded_again(self):
         written, asked = self.run_update(self.responses(timestamp=5), self.PREVIOUS)
