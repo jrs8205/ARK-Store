@@ -13,6 +13,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -87,6 +88,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -109,6 +111,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -257,12 +260,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val pullState = rememberPullToRefreshState()
         PullThresholdHaptics(pullState)
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (state.rows.isNotEmpty()) {
+        // The search, the chips, the count and the order: above the list, so that a card
+        // scrolling out goes under them instead of taking them along, or, in a window too
+        // low to leave the list room beside them, at the top of the list.
+        val header: @Composable () -> Unit = {
+            Column(Modifier.fillMaxWidth()) {
                 SearchField(
                     query = query,
                     onQueryChange = { query = it },
@@ -291,8 +293,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         place = chosen
                     }
                 )
-                // The count and the order stay above the list with the filters, so that a
-                // card scrolling out goes under them instead of taking them along.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -329,128 +329,143 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     )
                 }
             }
-            PullToRefreshBox(
-                isRefreshing = state.refreshing,
-                onRefresh = { viewModel.refresh() },
-                state = pullState,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                val installed = visible.filter {
-                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER
-                }
-                val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
-
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+        }
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            val pinned = maxHeight >= PINNED_HEADER_MIN_HEIGHT
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (pinned && state.rows.isNotEmpty()) header()
+                PullToRefreshBox(
+                    isRefreshing = state.refreshing,
+                    onRefresh = { viewModel.refresh() },
+                    state = pullState,
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    state.error?.let { error ->
-                        item(key = "error") { ErrorBanner(error) }
+                    val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
+                    val installed = visible.filter {
+                        it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
+                            it.status == AppStatus.OTHER_BUILD
                     }
+                    val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
 
-                    if (state.rows.isNotEmpty() && visible.isEmpty()) {
-                        item(key = "no-match") {
-                            Text(
-                                text = stringResource(R.string.list_no_match),
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(vertical = 32.dp)
-                            )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!pinned && state.rows.isNotEmpty()) {
+                            // The header keeps its own edges, past the list's side padding.
+                            item(key = "header") { Box(Modifier.pastSidePadding(16.dp)) { header() } }
                         }
-                    }
-
-                    if (state.rows.isEmpty()) {
-                        item(key = "empty") {
-                            Text(
-                                text = stringResource(
-                                    when {
-                                        state.refreshing -> R.string.list_loading
-                                        state.error != null -> R.string.list_empty_error
-                                        else -> R.string.list_empty
-                                    }
-                                ),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(vertical = 48.dp)
-                                    .semantics { liveRegion = LiveRegionMode.Polite }
-                            )
+                        state.error?.let { error ->
+                            item(key = "error") { ErrorBanner(error) }
                         }
-                    }
 
-                    section(
-                        key = "updates",
-                        rows = updates,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = {
-                            SectionHeader(
-                                title = pluralStringResource(
-                                    R.plurals.section_updates,
-                                    updates.size,
-                                    updates.size
-                                ),
-                                action = if (updates.size > 1) {
-                                    stringResource(R.string.action_update_all)
-                                } else {
-                                    null
-                                },
-                                onAction = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    viewModel.installAll(updates.map { it.app })
-                                }
-                            )
-                        }
-                    )
-                    section(
-                        key = "installed",
-                        rows = installed,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = { SectionHeader(stringResource(R.string.section_installed)) }
-                    )
-                    section(
-                        key = "available",
-                        rows = available,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = { SectionHeader(stringResource(R.string.section_available)) }
-                    )
-
-                    if (state.checkedAt > 0) {
-                        item(key = "checked") {
-                            state.storeDownloads?.let { downloads ->
+                        if (state.rows.isNotEmpty() && visible.isEmpty()) {
+                            item(key = "no-match") {
                                 Text(
-                                    text = pluralStringResource(
-                                        R.plurals.footer_store_downloads,
-                                        downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                                        fullNumber(downloads)
+                                    text = stringResource(R.string.list_no_match),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.padding(vertical = 32.dp)
+                                )
+                            }
+                        }
+
+                        if (state.rows.isEmpty()) {
+                            item(key = "empty") {
+                                Text(
+                                    text = stringResource(
+                                        when {
+                                            state.refreshing -> R.string.list_loading
+                                            state.error != null -> R.string.list_empty_error
+                                            else -> R.string.list_empty
+                                        }
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .padding(vertical = 48.dp)
+                                        .semantics { liveRegion = LiveRegionMode.Polite }
+                                )
+                            }
+                        }
+
+                        section(
+                            key = "updates",
+                            rows = updates,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = {
+                                SectionHeader(
+                                    title = pluralStringResource(
+                                        R.plurals.section_updates,
+                                        updates.size,
+                                        updates.size
+                                    ),
+                                    action = if (updates.size > 1) {
+                                        stringResource(R.string.action_update_all)
+                                    } else {
+                                        null
+                                    },
+                                    onAction = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        viewModel.installAll(updates.map { it.app })
+                                    }
+                                )
+                            }
+                        )
+                        section(
+                            key = "installed",
+                            rows = installed,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = { SectionHeader(stringResource(R.string.section_installed)) }
+                        )
+                        section(
+                            key = "available",
+                            rows = available,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = { SectionHeader(stringResource(R.string.section_available)) }
+                        )
+
+                        if (state.checkedAt > 0) {
+                            item(key = "checked") {
+                                state.storeDownloads?.let { downloads ->
+                                    Text(
+                                        text = pluralStringResource(
+                                            R.plurals.footer_store_downloads,
+                                            downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                            fullNumber(downloads)
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(
+                                        R.string.footer_checked,
+                                        DateUtils.getRelativeTimeSpanString(
+                                            state.checkedAt,
+                                            System.currentTimeMillis(),
+                                            DateUtils.MINUTE_IN_MILLIS
+                                        ).toString()
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 16.dp)
+                                    modifier = Modifier.padding(
+                                        top = if (state.storeDownloads == null) 16.dp else 4.dp
+                                    )
                                 )
                             }
-                            Text(
-                                text = stringResource(
-                                    R.string.footer_checked,
-                                    DateUtils.getRelativeTimeSpanString(
-                                        state.checkedAt,
-                                        System.currentTimeMillis(),
-                                        DateUtils.MINUTE_IN_MILLIS
-                                    ).toString()
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(
-                                    top = if (state.storeDownloads == null) 16.dp else 4.dp
-                                )
-                            )
                         }
                     }
                 }
@@ -648,7 +663,7 @@ private fun AppCard(
                         AppStatus.NOT_INSTALLED -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER -> {
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -681,6 +696,7 @@ private fun AppCard(
 
             val note = when {
                 row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
+                row.status == AppStatus.OTHER_BUILD -> R.string.other_build_note
                 row.betaInstalled -> R.string.newer_installed_note
                 row.newerInstalled -> R.string.newer_version_note
                 else -> null
@@ -939,6 +955,17 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             // attempt compares the keys again and forgets the conflict when they match.
             StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(R.string.action_retry))
+            }
+        } else if (row.status == AppStatus.OTHER_BUILD) {
+            // Another project's build, as far as is known: not offered as the update, but
+            // the keys are compared after the download for whoever tries.
+            Text(
+                text = stringResource(R.string.other_build_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_update))
             }
         } else if (row.installed != null && row.status == AppStatus.UPDATE_AVAILABLE) {
             // Whether the update will go through: known from the keys when the place that
@@ -1510,6 +1537,25 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
+
+/**
+ * The height of the list's room below which the search, the chips and the count scroll
+ * with the list instead of staying above it: together they take about 200 dp, and the
+ * list needs room of its own in a low window or with a large font.
+ */
+private val PINNED_HEADER_MIN_HEIGHT = 480.dp
+
+/**
+ * Lays the content out [side] wider on each side than the room given, for a thing in a
+ * list that keeps its own edges past the list's side padding.
+ */
+private fun Modifier.pastSidePadding(side: Dp): Modifier = layout { measurable, constraints ->
+    val extra = (side * 2).roundToPx()
+    val placeable = measurable.measure(
+        constraints.copy(minWidth = constraints.maxWidth + extra, maxWidth = constraints.maxWidth + extra)
+    )
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
+}
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {

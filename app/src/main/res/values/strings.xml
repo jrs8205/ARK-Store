@@ -184,6 +184,8 @@
     <string name="unknown_signer_detail">Whether the installed app is signed with the same key as the version offered here is not known yet. It is checked once the file has been downloaded.</string>
     <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
     <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
+    <string name="other_build_note">Possibly another developer\'s build. Not offered as an update.</string>
+    <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>
     <string name="channel_installs">Ready to install</string>
     <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
 </resources>

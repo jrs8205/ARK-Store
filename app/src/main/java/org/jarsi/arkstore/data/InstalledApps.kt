@@ -22,6 +22,12 @@ data class InstalledVersion(
     /** The installed app is known to be signed with the same key as the one offered here. */
     val sameSigner: Boolean = false,
     /**
+     * The file offered here is another project's build of the package, as far as is known:
+     * the installed app carries a key another place is known to use, and this file's key is
+     * not known. Not a conflict seen, see [otherSigner], but no update to offer either.
+     */
+    val otherBuild: Boolean = false,
+    /**
      * The package that installed the app, such as "com.android.vending" for Google Play, or
      * null when the system does not tell: an app installed by hand, or by a tool.
      */
@@ -34,7 +40,14 @@ enum class AppStatus {
     UP_TO_DATE,
 
     /** A newer version is offered, but the installed app is signed with a different key. */
-    OTHER_SIGNER
+    OTHER_SIGNER,
+
+    /**
+     * A newer version is offered by another project than the one whose key the installed
+     * app carries, as far as is known: not offered as the update, though its key, not known
+     * yet, may turn out to match.
+     */
+    OTHER_BUILD
 }
 
 object InstalledApps {
@@ -129,21 +142,22 @@ object InstalledApps {
 
     /**
      * [find] for a row of the list: a row that is another project's build of the installed
-     * package ([CatalogRules.Merged.otherBuild]) is signed otherwise as far as the store is
-     * concerned, whether or not its key is known yet.
+     * package ([CatalogRules.Merged.otherBuild]) is not offered as its update. A key seen to
+     * differ stays what it is; a key not known is left unknown, not taken for a conflict.
      */
     internal fun find(
         context: Context,
         row: CatalogRules.Merged,
         installed: Map<String, PackageInfo>? = null
     ): InstalledVersion? = find(context, row.app, installed)?.let {
-        if (row.otherBuild) it.copy(otherSigner = true, sameSigner = false) else it
+        if (row.otherBuild && !it.otherSigner && !it.sameSigner) it.copy(otherBuild = true) else it
     }
 
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
         installed.otherSigner -> AppStatus.OTHER_SIGNER
+        installed.otherBuild -> AppStatus.OTHER_BUILD
         else -> AppStatus.UPDATE_AVAILABLE
     }
 

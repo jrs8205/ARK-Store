@@ -25,6 +25,16 @@ class InstalledAppsTest {
     }
 
     @Test
+    fun anotherProjectsBuildIsNotOfferedAsTheUpdateButIsNoConflictEither() {
+        val presumed = InstalledVersion(4, "1.4", otherBuild = true)
+        assertEquals(AppStatus.OTHER_BUILD, InstalledApps.status(offered, presumed))
+        assertEquals(AppStatus.UP_TO_DATE, InstalledApps.status(offered, presumed.copy(versionCode = 5)))
+        // A key seen to differ outranks the presumption.
+        val seen = InstalledVersion(4, "1.4", otherSigner = true, otherBuild = true)
+        assertEquals(AppStatus.OTHER_SIGNER, InstalledApps.status(offered, seen))
+    }
+
+    @Test
     fun conflictBelongsToOneReleaseOfOneRepository() {
         val stable = testApp(fullName = "Owner/App")
         val beta = testApp(fullName = "Owner/App", prerelease = true)
