@@ -73,6 +73,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -143,6 +144,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 ?: SortOrder.NAME
         )
     }
+    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, false)) }
 
     InstallHaptics(installs)
 
@@ -337,6 +339,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = updates,
                         installs = installs,
                         viewModel = viewModel,
+                        material = material,
                         onSelect = { selectedRepo = it },
                         header = {
                             SectionHeader(
@@ -362,6 +365,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = installed,
                         installs = installs,
                         viewModel = viewModel,
+                        material = material,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_installed)) }
                     )
@@ -370,6 +374,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = available,
                         installs = installs,
                         viewModel = viewModel,
+                        material = material,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_available)) }
                     )
@@ -428,7 +433,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
     }
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsSheet(viewModel)
+            SettingsSheet(
+                viewModel = viewModel,
+                material = material,
+                onMaterialChange = {
+                    material = it
+                    preferences.edit { putBoolean(PREF_MATERIAL, it) }
+                }
+            )
         }
     }
 }
@@ -438,6 +450,7 @@ private fun LazyListScope.section(
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
     viewModel: StoreViewModel,
+    material: Boolean,
     onSelect: (String) -> Unit,
     header: @Composable () -> Unit
 ) {
@@ -447,6 +460,7 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
+            material = material,
             onInstall = { viewModel.install(row.app) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -502,10 +516,12 @@ private fun ErrorBanner(error: LoadError) {
     }
 }
 
+/** [material] draws the card as brushed metal where the device can, see [Surfaces]. */
 @Composable
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
+    material: Boolean,
     onInstall: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -517,17 +533,22 @@ private fun AppCard(
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         onInstall()
     }
+    val metal = material && Surfaces.available
+    val surface = MaterialTheme.colorScheme.surfaceContainer
 
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
+            // The metal is drawn behind the card, and shows through a clear container.
+            containerColor = if (metal) Color.Transparent else surface
         ),
         // The fill alone is too close to the background to show where a card ends in bright
-        // light, so the edge is drawn as well.
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
+        border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (metal) 6.dp else 0.dp),
         modifier = Modifier
             .fillMaxWidth()
             .clip(CardDefaults.shape)
+            .metal(surface, metal)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -952,7 +973,7 @@ private fun Badge(text: String) {
 }
 
 @Composable
-private fun SettingsSheet(viewModel: StoreViewModel) {
+private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMaterialChange: (Boolean) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -973,6 +994,15 @@ private fun SettingsSheet(viewModel: StoreViewModel) {
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
+        if (Surfaces.available) {
+            SettingSwitch(
+                heading = stringResource(R.string.appearance_title),
+                label = stringResource(R.string.material_switch),
+                description = stringResource(R.string.material_description),
+                checked = material,
+                onCheckedChange = onMaterialChange
+            )
+        }
         NotificationSetting()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
@@ -1278,6 +1308,7 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 
 private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
+private const val PREF_MATERIAL = "material"
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
