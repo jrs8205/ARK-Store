@@ -31,7 +31,15 @@ data class InstalledVersion(
      * The package that installed the app, such as "com.android.vending" for Google Play, or
      * null when the system does not tell: an app installed by hand, or by a tool.
      */
-    val installer: String? = null
+    val installer: String? = null,
+    /** The name the installed app goes by on the device, when it could be read. */
+    val label: String? = null,
+    /**
+     * What is installed under this package name is another app altogether: signed with
+     * another key and going by another name, like Google's own app whose package name an
+     * app offered here has taken for itself. The app offered here is not installed at all.
+     */
+    val otherApp: Boolean = false
 )
 
 enum class AppStatus {
@@ -47,7 +55,13 @@ enum class AppStatus {
      * app carries, as far as is known: not offered as the update, though its key, not known
      * yet, may turn out to match.
      */
-    OTHER_BUILD
+    OTHER_BUILD,
+
+    /**
+     * Another app altogether is installed under this package name, signed with another key
+     * and going by another name; this app is not installed, and cannot be while that is.
+     */
+    OTHER_APP
 }
 
 object InstalledApps {
@@ -90,14 +104,40 @@ object InstalledApps {
         // The index and the catalogues tell how their files are signed, so whether the
         // installed app is signed the same way is known without downloading anything.
         val signers = app.signer?.let { presentSigners(context.packageManager, packageName) }
+        val otherSigner = hasConflict(context, app, packageName) || (signers != null && app.signer !in signers)
+        val label = labelOf(context, info)
         return InstalledVersion(
             versionCode,
             info.versionName,
-            otherSigner = hasConflict(context, app, packageName) || (signers != null && app.signer !in signers),
+            otherSigner = otherSigner,
             beta = betas(context).getLong(packageName, -1) == versionCode,
             sameSigner = signers != null && app.signer in signers,
-            installer = installerOf(context, packageName, info.lastUpdateTime)
+            installer = installerOf(context, packageName, info.lastUpdateTime),
+            label = label,
+            // Another key and another name: another app under this package name, not this
+            // one installed from somewhere else.
+            otherApp = otherSigner && label != null && !label.equals(app.title.trim(), ignoreCase = true)
         )
+    }
+
+    private val labels = ConcurrentHashMap<String, String>()
+
+    /**
+     * The name the installed app [info] goes by, or null when it cannot be read. Remembered
+     * per installation ([PackageInfo.lastUpdateTime]), since the list asks for every
+     * installed app whenever it is shown.
+     */
+    private fun labelOf(context: Context, info: PackageInfo): String? {
+        val key = "${info.packageName}:${info.lastUpdateTime}"
+        val known = labels[key]
+        if (known != null) return known.ifEmpty { null }
+        val label = try {
+            info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.trim().orEmpty()
+        } catch (_: RuntimeException) {
+            ""
+        }
+        labels[key] = label
+        return label.ifEmpty { null }
     }
 
     private val installers = ConcurrentHashMap<String, String>()
@@ -155,6 +195,7 @@ object InstalledApps {
 
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
+        installed.otherApp -> AppStatus.OTHER_APP
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
         installed.otherSigner -> AppStatus.OTHER_SIGNER
         installed.otherBuild -> AppStatus.OTHER_BUILD

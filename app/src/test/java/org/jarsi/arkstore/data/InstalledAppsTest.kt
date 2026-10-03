@@ -35,6 +35,14 @@ class InstalledAppsTest {
     }
 
     @Test
+    fun anotherAppUnderThePackageNameLeavesThisOneNotInstalled() {
+        // Whatever its version: it is not this app at all.
+        val other = InstalledVersion(99, "53.3", otherSigner = true, label = "Google Play Store", otherApp = true)
+        assertEquals(AppStatus.OTHER_APP, InstalledApps.status(offered, other))
+        assertEquals(AppStatus.OTHER_APP, InstalledApps.status(offered, other.copy(versionCode = 1)))
+    }
+
+    @Test
     fun conflictBelongsToOneReleaseOfOneRepository() {
         val stable = testApp(fullName = "Owner/App")
         val beta = testApp(fullName = "Owner/App", prerelease = true)

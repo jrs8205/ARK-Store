@@ -349,7 +349,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
                             it.status == AppStatus.OTHER_BUILD
                     }
-                    val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
+                    val available = visible.filter {
+                        it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
+                    }
 
                     LazyColumn(
                         state = listState,
@@ -663,6 +665,9 @@ private fun AppCard(
                         AppStatus.NOT_INSTALLED -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
+                        // Another app under this name: nothing to open and nothing to install
+                        // over it; the note below says so.
+                        AppStatus.OTHER_APP -> Unit
                         AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
@@ -697,6 +702,7 @@ private fun AppCard(
             val note = when {
                 row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
                 row.status == AppStatus.OTHER_BUILD -> R.string.other_build_note
+                row.status == AppStatus.OTHER_APP -> R.string.other_app_note
                 row.betaInstalled -> R.string.newer_installed_note
                 row.newerInstalled -> R.string.newer_version_note
                 else -> null
@@ -904,9 +910,12 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             }
         )
         row.installed?.let {
+            val version = it.versionName ?: it.versionCode.toString()
             DetailLine(
                 stringResource(R.string.detail_installed),
-                it.versionName ?: it.versionCode.toString()
+                // Another app under this name is named, so that the version is not taken for
+                // this app's.
+                if (it.otherApp && it.label != null) "${it.label} · $version" else version
             )
             DetailLine(
                 stringResource(R.string.detail_installed_from),
@@ -938,14 +947,25 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
                 Text(stringResource(R.string.action_view_source))
             }
-            if (row.installed != null && app.packageName != null) {
+            // Not for another app under this name: that would be the other app's removal.
+            if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
                 TextButton(onClick = { uninstall(context, app.packageName) }) {
                     Text(stringResource(R.string.action_uninstall))
                 }
             }
         }
 
-        if (row.status == AppStatus.OTHER_SIGNER) {
+        if (row.status == AppStatus.OTHER_APP && row.installed != null) {
+            Text(
+                text = stringResource(
+                    R.string.other_app_detail,
+                    row.installed.label.orEmpty(),
+                    stringResource(installerName(row.installed.installer, context.packageName))
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+        } else if (row.status == AppStatus.OTHER_SIGNER) {
             Text(
                 text = stringResource(R.string.other_signer_detail),
                 style = MaterialTheme.typography.bodyMedium,
@@ -1066,6 +1086,7 @@ private fun versionLine(row: AppRow): String {
             installed.versionName ?: installed.versionCode.toString(),
             row.app.displayVersion
         )
+        row.status == AppStatus.OTHER_APP -> row.app.displayVersion
         installed != null -> installed.versionName ?: row.app.displayVersion
         else -> row.app.displayVersion
     }
