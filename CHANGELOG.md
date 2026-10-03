@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0-beta.1
+
+- Every app is shown with its own icon: the index reads it from the APK, as an image or, for
+  an icon drawn as a vector, as the paths the app then draws itself, and keeps it beside the
+  lists; IzzyOnDroid and F-Droid give theirs. An app whose icon cannot be read is shown by
+  its initial, not by a symbol or an emoji its name happens to begin with
+- Chips under the categories narrow the list to the apps of one place: GitHub, Codeberg,
+  GitLab, IzzyOnDroid or F-Droid
+
 ## 1.4.0
 
 The work of the 1.4.0 beta versions, now for everyone:
