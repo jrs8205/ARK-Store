@@ -250,7 +250,8 @@ def read_manifest(url, size, labels=None, icons=None):
 
 def read_signer(url, size, directory_start):
     """The SHA-256 of the certificate the APK is signed with, in hex, or None when it cannot
-    be told: the APK is signed with the version 1 scheme only, or by several keys at once.
+    be told: the APK is signed with the version 1 scheme only, by several keys at once, or
+    with different keys for different versions of Android, when its key has been rotated.
     Read from the signing block, which sits just before the zip directory that starts at
     directory_start. A network failure propagates."""
     if directory_start < 32:
@@ -272,11 +273,17 @@ def read_signer(url, size, directory_start):
         if pair_id in SIGNATURE_SCHEMES:
             certificates[pair_id] = signer_certificates(block[position + 12:position + 8 + length])
         position += 8 + length
+    # Each scheme is read by some versions of Android, so a file whose schemes disagree is
+    # signed with different keys on different devices: nothing to compare against before
+    # the download. A scheme with several signers is no single key either.
+    signers = set()
     for scheme in SIGNATURE_SCHEMES:
         found = certificates.get(scheme)
-        if found:
-            return hashlib.sha256(found[0]).hexdigest() if len(found) == 1 else None
-    return None
+        if found is not None:
+            if len(found) != 1:
+                return None
+            signers.add(hashlib.sha256(found[0]).hexdigest())
+    return signers.pop() if len(signers) == 1 else None
 
 
 def signer_certificates(value):
@@ -949,6 +956,11 @@ class IconStore:
         vector_description; any other is an image."""
         return self.found.get(package)
 
+    def remember(self, package, icon):
+        """Takes the icon of package as read on an earlier run, so that another file of the
+        same release gets it without the release's first file being read again."""
+        self.found[package] = icon
+
     def read(self, url, size, entries, table, resource_id, package):
         """Reads the icon that resource_id names in the resource table of the APK at url,
         whose zip directory is entries. An icon that cannot be made out costs the app its icon
@@ -1271,6 +1283,10 @@ def release_info(release, previous_apks, icons=None):
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
                         known["label"], known["signer"])
             icon = known.get("icon")
+            # A file of the release added since is read for its name and icon only when
+            # this one does not tell them, just as if this one had been read now.
+            if icons is not None:
+                icons.remember(manifest[0], icon)
         else:
             try:
                 manifest = read_manifest(asset["browser_download_url"], asset["size"], labels, icons)
