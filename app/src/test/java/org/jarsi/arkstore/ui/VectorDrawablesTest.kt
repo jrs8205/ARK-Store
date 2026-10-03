@@ -44,6 +44,29 @@ class VectorDrawablesTest {
     }
 
     @Test
+    fun clipOnTheRootIsKept() {
+        val described = """{"width":48,"height":48,"root":{"clip":"M0 0H24V48H0Z",
+            "nodes":[{"path":"M0 0h48v48h-48z","fill":"#ff000000"}]}}"""
+        val image = VectorDrawables.fromJson(described)!!
+        val clipped = image.root.single() as VectorGroup
+        assertTrue(clipped.clipPathData.isNotEmpty())
+        assertTrue(clipped.single() is VectorPath)
+        val plain = VectorDrawables.fromJson("""{"width":48,"height":48,"root":{"nodes":[{"path":"M0 0h1v1z"}]}}""")!!
+        assertTrue(plain.root.single() is VectorPath)
+    }
+
+    @Test
+    fun imagesAreDecodedNoLargerThanARowNeeds() {
+        assertEquals(1, IconLoader.sampleSize(144, 144))
+        assertEquals(1, IconLoader.sampleSize(383, 383))
+        assertEquals(2, IconLoader.sampleSize(384, 384))
+        assertEquals(4, IconLoader.sampleSize(1024, 1024))
+        // A long strip is sampled by its long side, whatever its short side.
+        assertEquals(256, IconLoader.sampleSize(65535, 191))
+        assertEquals(256, IconLoader.sampleSize(191, 65535))
+    }
+
+    @Test
     fun descriptionThatIsNoDrawableIsNone() {
         assertNull(VectorDrawables.fromJson("not json"))
         assertNull(VectorDrawables.fromJson("""{"width":0,"height":108,"root":{"nodes":[]}}"""))

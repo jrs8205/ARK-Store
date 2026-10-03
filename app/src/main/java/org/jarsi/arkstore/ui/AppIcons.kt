@@ -14,7 +14,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -133,13 +134,19 @@ private fun Initial(name: String, size: Dp) {
     }
 }
 
-/** The icon at [address], once it has been loaded; null while it is loading or when it cannot be had. */
+/**
+ * The icon at [address], once it has been loaded; null while it is loading or when it cannot
+ * be had. The state belongs to the address: a row keeps its place in the list while the
+ * icon of its app changes, and then shows the new one.
+ */
 @Composable
 private fun rememberIcon(address: String?): IconLoader.Loaded? {
     val context = LocalContext.current.applicationContext
-    return produceState(initialValue = address?.let { IconLoader.cached(it) }, address) {
-        if (address != null && value == null) value = IconLoader.load(context, address)
-    }.value
+    val loaded = remember(address) { mutableStateOf(address?.let { IconLoader.cached(it) }) }
+    LaunchedEffect(address) {
+        if (address != null && loaded.value == null) loaded.value = IconLoader.load(context, address)
+    }
+    return loaded.value
 }
 
 @Composable
@@ -220,14 +227,19 @@ object IconLoader {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        // Decoded at a fraction of its size when it is far larger than a row shows it.
-        val options = BitmapFactory.Options().apply { inSampleSize = 1 }
-        while (bounds.outWidth / (options.inSampleSize * 2) >= MAX_PIXELS &&
-            bounds.outHeight / (options.inSampleSize * 2) >= MAX_PIXELS
-        ) {
-            options.inSampleSize *= 2
-        }
+        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight) }
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.let { Loaded.Image(it.asImageBitmap()) }
+    }
+
+    /**
+     * The fraction, as a power of two, at which an image [width] by [height] is decoded: its
+     * longer side ends up under twice [MAX_PIXELS], so that neither a large icon nor a long
+     * strip of an image takes more memory than a row's icon is worth.
+     */
+    fun sampleSize(width: Int, height: Int): Int {
+        var size = 1
+        while (maxOf(width, height) / (size * 2) >= MAX_PIXELS) size *= 2
+        return size
     }
 
     private fun digest(text: String): String =
@@ -261,7 +273,9 @@ object VectorDrawables {
             viewportWidth = width,
             viewportHeight = height
         )
-        builder.add(root)
+        // The root may be clipped like any group; its clip needs a group of its own.
+        val clip = root.optString("clip").takeIf { it.isNotEmpty() }?.let { pathNodes(it) }
+        if (clip != null) builder.group(clipPathData = clip) { add(root) } else builder.add(root)
         return builder.build()
     }
 
