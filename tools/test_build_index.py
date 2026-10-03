@@ -468,17 +468,30 @@ def prefixed(data):
 
 
 def signing_block(*schemes):
-    """An APK signing block; each scheme is (id, certificates), one signer per certificate."""
+    """An APK signing block; each scheme is (id, certificates[, attributes]), one signer per
+    certificate. The attributes, when given, are the additional attributes of each signer's
+    signed data, behind the range of Android versions in the schemes that carry one."""
     pairs = b""
-    for scheme, certificates in schemes:
-        signers = b"".join(
-            prefixed(prefixed(prefixed(b"") + prefixed(prefixed(cert))) + prefixed(b"") + prefixed(b""))
-            for cert in certificates
-        )
+    for scheme in schemes:
+        scheme_id, certificates = scheme[0], scheme[1]
+        attributes = scheme[2] if len(scheme) > 2 else None
+        signers = b""
+        for cert in certificates:
+            signed = prefixed(b"") + prefixed(prefixed(cert))
+            if attributes is not None:
+                if scheme_id != build_index.SCHEME_V2:
+                    signed += struct.pack("<II", 28, 0)
+                signed += prefixed(attributes)
+            signers += prefixed(prefixed(signed) + prefixed(b"") + prefixed(b""))
         value = prefixed(signers)
-        pairs += struct.pack("<QI", 4 + len(value), scheme) + value
+        pairs += struct.pack("<QI", 4 + len(value), scheme_id) + value
     size = len(pairs) + 8 + 16
     return struct.pack("<Q", size) + pairs + struct.pack("<Q", size) + build_index.SIGNING_BLOCK_MAGIC
+
+
+def attribute(attribute_id, value):
+    """One additional attribute of a signer's signed data."""
+    return prefixed(struct.pack("<I", attribute_id) + value)
 
 
 class ReadManifestTest(unittest.TestCase):
@@ -529,6 +542,22 @@ class ReadManifestTest(unittest.TestCase):
         self.assertIsNone(self.read(files, block=rotated)[4])
         rotated = signing_block((0x7109871A, [self.OTHER]), (0xF05368C0, [self.CERTIFICATE]))
         self.assertIsNone(self.read(files, block=rotated)[4])
+
+    def test_proof_of_rotation_names_no_signer(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6))}
+        # A file signed with the new key alone, carrying the proof that it took over from
+        # the old one: it updates an app signed with either, which no single key can say.
+        proof = attribute(build_index.PROOF_OF_ROTATION, b"lineage")
+        for scheme in (0xF05368C0, 0x1B93AD61, 0x7109871A):
+            self.assertIsNone(self.read(files, block=signing_block((scheme, [self.OTHER], proof)))[4])
+        both = signing_block((0x7109871A, [self.OTHER]), (0xF05368C0, [self.OTHER], proof))
+        self.assertIsNone(self.read(files, block=both)[4])
+        # Other attributes, or none, leave the key as it is.
+        other = attribute(0x559F8B02, b"stripping protection") + attribute(0xBEEFFACE, b"")
+        plain = signing_block((0x7109871A, [self.OTHER], other), (0xF05368C0, [self.OTHER], other))
+        self.assertEqual(self.read(files, block=plain)[4], hashlib.sha256(self.OTHER).hexdigest())
+        self.assertEqual(self.read(files, block=signing_block((0xF05368C0, [self.OTHER], b"")))[4],
+                         hashlib.sha256(self.OTHER).hexdigest())
 
     def test_several_signers_or_no_block_give_no_signer(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6))}
