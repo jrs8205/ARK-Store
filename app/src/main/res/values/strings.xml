@@ -174,6 +174,14 @@
     <string name="install_ready_title">%1$s is ready to install</string>
     <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>
+    <string name="detail_installed_from">Installed from</string>
+    <string name="installer_play" translatable="false">Google Play</string>
+    <string name="installer_fdroid" translatable="false">F-Droid</string>
+    <string name="installer_aurora" translatable="false">Aurora Store</string>
+    <string name="installer_store" translatable="false">ARK-Store</string>
+    <string name="installer_other">another app, or by hand</string>
+    <string name="same_signer_detail">The installed app is signed with the same key as the version offered here, so ARK-Store can update it.</string>
+    <string name="unknown_signer_detail">Whether the installed app is signed with the same key as the version offered here is not known yet. It is checked once the file has been downloaded.</string>
     <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
     <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
     <string name="channel_installs">Ready to install</string>

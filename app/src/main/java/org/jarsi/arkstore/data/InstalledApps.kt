@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 
 data class InstalledVersion(
     val versionCode: Long,
@@ -17,7 +18,14 @@ data class InstalledVersion(
      */
     val otherSigner: Boolean = false,
     /** This very version was installed by the store as a beta. */
-    val beta: Boolean = false
+    val beta: Boolean = false,
+    /** The installed app is known to be signed with the same key as the one offered here. */
+    val sameSigner: Boolean = false,
+    /**
+     * The package that installed the app, such as "com.android.vending" for Google Play, or
+     * null when the system does not tell: an app installed by hand, or by a tool.
+     */
+    val installer: String? = null
 )
 
 enum class AppStatus {
@@ -66,23 +74,45 @@ object InstalledApps {
             }
         }
         val versionCode = PackageInfoCompat.getLongVersionCode(info)
+        // The index and the catalogues tell how their files are signed, so whether the
+        // installed app is signed the same way is known without downloading anything.
+        val signers = app.signer?.let { presentSigners(context.packageManager, packageName) }
         return InstalledVersion(
             versionCode,
             info.versionName,
-            otherSigner = hasConflict(context, app, packageName) || signedOtherwise(context, app, packageName),
-            beta = betas(context).getLong(packageName, -1) == versionCode
+            otherSigner = hasConflict(context, app, packageName) || (signers != null && app.signer !in signers),
+            beta = betas(context).getLong(packageName, -1) == versionCode,
+            sameSigner = signers != null && app.signer in signers,
+            installer = installerOf(context, packageName, info.lastUpdateTime)
         )
     }
 
+    private val installers = ConcurrentHashMap<String, String>()
+
     /**
-     * Whether the installed [packageName] is known to be signed with another key than the
-     * file offered as [app]. A catalogue tells how its files are signed, so this is known
-     * without downloading anything.
+     * The package that installed [packageName], or null when the system does not tell.
+     * Remembered per installation ([lastUpdateTime]), since the list asks for every
+     * installed app whenever it is shown.
      */
-    private fun signedOtherwise(context: Context, app: StoreApp, packageName: String): Boolean {
-        val offered = app.signer ?: return false
-        val installed = presentSigners(context.packageManager, packageName) ?: return false
-        return offered !in installed
+    fun installerOf(context: Context, packageName: String, lastUpdateTime: Long): String? {
+        val key = "$packageName:$lastUpdateTime"
+        val known = installers[key]
+        if (known != null) return known.ifEmpty { null }
+        val installer = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(packageName)
+                    .let { it.installingPackageName ?: it.initiatingPackageName }
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(packageName)
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        installers[key] = installer.orEmpty()
+        return installer
     }
 
     /**
