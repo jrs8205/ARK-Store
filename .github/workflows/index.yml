@@ -56,15 +56,20 @@ jobs:
             exit "$found"
           fi
 
+      # The icons read from the APKs are files beside the lists, carried from run to run and
+      # published at ICONS_URL; the lists refer to them by that address.
       - name: Build the index
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ICONS_URL: https://raw.githubusercontent.com/${{ github.repository }}/index/icons
         run: |
-          mkdir -p out
+          mkdir -p out/icons
           if [ -f previous/state.json ]; then cp previous/state.json out/state.json; fi
+          if [ -d previous/icons ]; then cp -r previous/icons/. out/icons/; fi
           python3 tools/build_index.py --previous previous/index.json \
             --previous-auto previous/auto.json --state out/state.json \
-            --output out/index.json --auto-output out/auto.json
+            --output out/index.json --auto-output out/auto.json \
+            --icons-dir out/icons --icons-url "$ICONS_URL"
 
       # The two steps below are an extra beside the index built above. Whatever becomes of
       # them, even a script that stops halfway or does not finish in time, the index is
@@ -82,7 +87,11 @@ jobs:
       - name: Build the lists of apps on Codeberg and GitLab
         continue-on-error: true
         timeout-minutes: 12
-        run: python3 tools/build_forge.py --previous-dir previous --output-dir out
+        env:
+          ICONS_URL: https://raw.githubusercontent.com/${{ github.repository }}/index/icons
+        run: |
+          python3 tools/build_forge.py --previous-dir previous --output-dir out \
+            --icons-dir out/icons --icons-url "$ICONS_URL"
 
       # A list that was not written, or not written whole, gives way to the one published
       # before, and failing that to an empty one.
@@ -98,13 +107,17 @@ jobs:
             fi
           done
 
+      # An icon stays as long as a list refers to it; the lists are all in place by now.
+      - name: Drop the icons no list refers to
+        run: PYTHONPATH=tools python3 -c 'import build_index; print(build_index.prune_icons("out"), "icons dropped")'
+
       - name: Publish to the index branch
         run: |
           cd out
           git init -q -b index
           git config user.name "${GITHUB_REPOSITORY_OWNER}"
           git config user.email "${GITHUB_REPOSITORY_OWNER}@users.noreply.github.com"
-          git add index.json auto.json state.json fdroid.json izzy.json forge.json codeberg.json gitlab.json
+          git add index.json auto.json state.json fdroid.json izzy.json forge.json codeberg.json gitlab.json icons
           git commit -q -m "Update the store index"
           # The branch holds only the newest index, so its history never grows.
           git push -q --force \

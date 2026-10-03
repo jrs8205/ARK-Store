@@ -90,6 +90,42 @@ class BuildAppTest(unittest.TestCase):
         read_manifest.assert_not_called()
         self.assertIsNone(app["apks"][0]["label"])
 
+    def test_apk_known_without_an_icon_is_read_again_when_icons_are_kept(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+        }}
+        icons = build_index.IconStore("unused", "https://x/icons")
+
+        def read_manifest(url, size, labels=None, icons=None):
+            icons.found["org.example"] = "https://x/icons/org.example-abc.png"
+            return "org.example", 4, "1.4", "Example"
+
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest", side_effect=read_manifest) as reader:
+            app = build_index.build_app(REPO, previous, icons=icons)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["icon"], "https://x/icons/org.example-abc.png")
+        # Without a store the entry is as it was.
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_not_called()
+        self.assertNotIn("icon", app["apks"][0])
+
+    def test_apk_known_to_have_no_icon_is_not_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "icon": None,
+        }}
+        icons = build_index.IconStore("unused", "https://x/icons")
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            app = build_index.build_app(REPO, previous, icons=icons)
+        reader.assert_not_called()
+        self.assertIsNone(app["apks"][0]["icon"])
+
     def test_downloads_of_prereleases_are_also_counted_apart(self):
         releases = [
             {"tag_name": "v2-beta.1", "prerelease": True, "assets": [asset("b.apk", 2)]},
@@ -135,9 +171,10 @@ def simple_entry(data_type, data):
     return struct.pack("<HHI", 8, 0, 0) + struct.pack("<HBBI", 8, 0, data_type, data)
 
 
-def type_chunk(type_id, entries, language=b"\0\0", flags=0):
-    """A type chunk holding entries, a list of encoded entries or None, for one language."""
-    config = struct.pack("<I", 16) + b"\0" * 4 + language + b"\0" * 6
+def type_chunk(type_id, entries, language=b"\0\0", flags=0, density=0):
+    """A type chunk holding entries, a list of encoded entries or None, for one language and
+    screen density."""
+    config = struct.pack("<I", 16) + b"\0" * 4 + language + b"\0" * 4 + struct.pack("<H", density)
     offsets = b""
     body = b""
     for index, entry in enumerate(entries):
@@ -170,25 +207,145 @@ def manifest_element(name, attributes):
     return chunk(0x0102, struct.pack("<Ii", 1, -1), body)
 
 
-def manifest(label):
+def manifest(label, icon=None):
     """A binary manifest of org.example, version 3, whose application has the given label
-    attribute as (type, data), or none."""
-    strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain"]
-    resource_map = chunk(0x0180, b"", struct.pack("<II", 0x0101021B, 0x01010001))
+    attribute as (type, data), or none, and refers to the icon resource icon, if any."""
+    strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain", "icon"]
+    resource_map = chunk(0x0180, b"", struct.pack("<8I", 0x0101021B, 0x01010001, 0, 0, 0, 0, 0, 0x01010002))
     elements = manifest_element(3, [(0, 0x10, 3), (2, 0x03, 5)])
-    elements += manifest_element(4, [(1,) + label] if label else [])
+    attributes = [(1,) + label] if label else []
+    if icon:
+        attributes.append((7, 0x01, icon))
+    elements += manifest_element(4, attributes)
     return chunk(0x0003, b"", string_pool(strings) + resource_map + elements)
+
+
+def adaptive_icon(background, foreground):
+    """The binary XML of an adaptive icon whose layers refer to the given resources; a layer
+    given as None is left out."""
+    strings = ["drawable", "adaptive-icon", "background", "foreground"]
+    resource_map = chunk(0x0180, b"", struct.pack("<I", 0x01010199))
+    elements = manifest_element(1, [])
+    if background:
+        elements += manifest_element(2, [(0, 0x01, background)])
+    if foreground:
+        elements += manifest_element(3, [(0, 0x01, foreground)])
+    return chunk(0x0003, b"", string_pool(strings) + resource_map + elements)
+
+
+def end_element(name):
+    """An end tag."""
+    return chunk(0x0103, struct.pack("<Ii", 1, -1), struct.pack("<ii", -1, name))
+
+
+def as_float(number):
+    """A float the way binary XML stores one."""
+    return struct.unpack("<I", struct.pack("<f", number))[0]
+
+
+VECTOR_STRINGS = ["vector", "viewportWidth", "viewportHeight", "group", "rotation", "pivotX", "scaleX",
+                  "path", "pathData", "fillColor", "strokeColor", "strokeWidth", "fillType", "clip-path",
+                  "M0 0h10v10z", "M5 5h2v2z", "attr", "name", "android:fillColor", "gradient", "item", "color",
+                  "startColor", "translateY", "M1 1", "shape", "solid", "selector"]
+
+
+def document(*elements):
+    """A binary XML document of the given elements, which refer to VECTOR_STRINGS by index for
+    element and attribute names alike."""
+    return chunk(0x0003, b"", string_pool(VECTOR_STRINGS) + b"".join(elements))
+
+
+def vector_document(*elements, viewport=(108.0, 108.0)):
+    """The binary XML of a vector drawable with the given elements inside."""
+    body = manifest_element(0, [(1, 0x04, as_float(viewport[0])), (2, 0x04, as_float(viewport[1]))])
+    return document(body + b"".join(elements) + end_element(0))
+
+
+class VectorTest(unittest.TestCase):
+    PATH = manifest_element(7, [(8, 0x03, 14), (9, 0x1C, 0xFF112233)]) + end_element(7)
+
+    def test_paths_and_groups_are_described_the_way_the_app_draws_them(self):
+        group = manifest_element(3, [(4, 0x04, as_float(45)), (5, 0x04, as_float(54)), (6, 0x10, 2)])
+        clip = manifest_element(13, [(8, 0x03, 15)]) + end_element(13)
+        stroked = manifest_element(7, [(8, 0x03, 15), (10, 0x1D, 0x445566), (11, 0x05, (3 << 8) | 1),
+                                       (12, 0x10, 1)]) + end_element(7)
+        document = vector_document(group + clip + self.PATH + end_element(3) + stroked)
+        self.assertEqual(build_index.vector_description(document, None), {
+            "width": 108.0, "height": 108.0,
+            "root": {"nodes": [
+                {"rotation": 45.0, "pivotX": 54.0, "scaleX": 2, "clip": "M5 5h2v2z",
+                 "nodes": [{"path": "M0 0h10v10z", "fill": "#ff112233"}]},
+                {"path": "M5 5h2v2z", "stroke": "#ff445566", "strokeWidth": 3.0, "fillType": 1},
+            ]},
+        })
+
+    def test_gradient_is_drawn_in_its_first_colour(self):
+        gradient = manifest_element(7, [(8, 0x03, 14)])
+        gradient += manifest_element(16, [(17, 0x03, 18)]) + manifest_element(19, [(22, 0x1C, 0xFF000001)])
+        gradient += manifest_element(20, [(21, 0x1C, 0xFFABCDEF)]) + end_element(20)
+        gradient += end_element(19) + end_element(16) + end_element(7)
+        document = vector_document(gradient)
+        self.assertEqual(build_index.vector_description(document, None)["root"]["nodes"],
+                         [{"path": "M0 0h10v10z", "fill": "#ff000001"}])
+
+    def test_colours_and_path_data_kept_in_resources_are_looked_up(self):
+        table = resource_table(["M1 1"], type_chunk(2, [simple_entry(0x03, 0)]),
+                               type_chunk(4, [simple_entry(0x1E, 0x8ABC)]))
+        resources = build_index.Resources(table)
+        path = manifest_element(7, [(8, 0x01, 0x7F020000), (9, 0x01, 0x7F040000), (23, 0x01, 0x7F040000)])
+        document = vector_document(path + end_element(7))
+        self.assertEqual(build_index.vector_description(document, resources)["root"]["nodes"],
+                         [{"path": "M1 1", "fill": "#88aabbcc"}])
+
+    def test_shape_is_drawn_as_a_square_of_its_colour(self):
+        solid = document(manifest_element(25, []) + manifest_element(26, [(21, 0x1C, 0xFF123456)])
+                         + end_element(26) + end_element(25))
+        self.assertEqual(build_index.vector_description(solid, None),
+                         {"width": 1, "height": 1, "root": {"nodes": [{"path": "M0 0h1v1h-1z", "fill": "#ff123456"}]}})
+        gradient = document(manifest_element(25, []) + manifest_element(19, [(22, 0x1D, 0x002A6B)])
+                            + end_element(19) + end_element(25))
+        self.assertEqual(build_index.vector_description(gradient, None)["root"]["nodes"][0]["fill"], "#ff002a6b")
+        self.assertIsNone(build_index.vector_description(document(manifest_element(25, []) + end_element(25)), None))
+
+    def test_colour_described_in_a_file_is_read_in_its_first_colour(self):
+        gradient = document(manifest_element(19, [(22, 0x1C, 0xFF0000FF)]) + end_element(19))
+        selector = document(manifest_element(27, []) + manifest_element(20, [(21, 0x1C, 0xFF00FF00)])
+                            + end_element(20) + end_element(27))
+        files = {"res/color/gradient.xml": gradient, "res/color/selector.xml": selector, "res/color/odd.xml": b""}
+        table = resource_table(list(files), type_chunk(4, [simple_entry(0x03, 0), simple_entry(0x03, 1),
+                                                           simple_entry(0x03, 2)]))
+        resources = build_index.Resources(table, files.get)
+        self.assertEqual(resources.color(0x7F040000), "#ff0000ff")
+        self.assertEqual(resources.color(0x7F040001), "#ff00ff00")
+        self.assertIsNone(resources.color(0x7F040002))
+        self.assertIsNone(build_index.Resources(table).color(0x7F040000))
+
+    def test_other_drawables_and_empty_canvases_are_none(self):
+        self.assertIsNone(build_index.vector_description(adaptive_icon(None, 0x7F050000), None))
+        self.assertIsNone(build_index.vector_description(vector_document(viewport=(0.0, 24.0)), None))
 
 
 class ManifestTest(unittest.TestCase):
     def test_label_written_out_is_returned_as_text(self):
-        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6))), ("org.example", 3, None, "Plain"))
+        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6))), ("org.example", 3, None, "Plain", None))
 
     def test_label_kept_in_a_resource_is_returned_as_its_id(self):
         self.assertEqual(build_index.parse_manifest(manifest((0x01, 0x7F020001)))[3], 0x7F020001)
 
     def test_application_without_a_label_has_none(self):
-        self.assertEqual(build_index.parse_manifest(manifest(None)), ("org.example", 3, None, None))
+        self.assertEqual(build_index.parse_manifest(manifest(None)), ("org.example", 3, None, None, None))
+
+    def test_icon_is_returned_as_the_id_of_its_resource(self):
+        self.assertEqual(build_index.parse_manifest(manifest(None, icon=0x7F030000))[4], 0x7F030000)
+
+    def test_adaptive_icon_names_the_resources_of_its_layers(self):
+        self.assertEqual(
+            build_index.adaptive_layers(adaptive_icon(0x7F040000, 0x7F050000)),
+            {"background": 0x7F040000, "foreground": 0x7F050000},
+        )
+        self.assertEqual(build_index.adaptive_layers(adaptive_icon(None, 0x7F050000)), {"foreground": 0x7F050000})
+        # Any other drawable described in XML, such as a vector, is no adaptive icon.
+        self.assertEqual(build_index.adaptive_layers(manifest(None)), {})
 
 
 class ResourceStringTest(unittest.TestCase):
@@ -316,6 +473,188 @@ class ReadManifestTest(unittest.TestCase):
         self.assertIsNone(build_index.tidy_label("  "))
 
 
+PNG = b"\x89PNG\r\n\x1a\n"
+WEBP = b"RIFF\x10\0\0\0WEBP"
+
+
+class IconTest(unittest.TestCase):
+    """The icon is read from the APK along with the manifest and kept as a file."""
+    ADDRESS = "https://example.invalid/index/icons"
+    # Resource 0x7F030000 is the icon, offered in three densities; 0x7F040000 a background
+    # colour, 0x7F050000 a foreground image and 0x7F060000 a vector drawable.
+    STRINGS = ["Example App", "res/mipmap-mdpi/ic.png", "res/mipmap-xxhdpi/ic.webp",
+               "res/mipmap-xxxhdpi/ic.png", "res/mipmap-anydpi-v26/ic.xml", "res/drawable/fg.png",
+               "res/drawable/vector.xml"]
+    FILES = {
+        b"res/mipmap-mdpi/ic.png": PNG + b"mdpi",
+        b"res/mipmap-xxhdpi/ic.webp": WEBP + b"xxhdpi",
+        b"res/mipmap-xxxhdpi/ic.png": PNG + b"xxxhdpi",
+        b"res/drawable/fg.png": PNG + b"foreground",
+        b"res/drawable/vector.xml": b"<vector/>",
+    }
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.icons = build_index.IconStore(self.directory.name, self.ADDRESS + "/")
+
+    def read(self, table, files=None, icon=0x7F030000, apk_files=None):
+        files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000), icon=icon), b"resources.arsc": table}
+        files.update(self.FILES if apk_files is None else apk_files)
+        apk = zip_file(files)
+        self.ranges = []
+
+        def read_range(url, start, length):
+            self.ranges.append((start, length))
+            return apk[start:start + length]
+
+        with mock.patch.object(build_index, "read_range", side_effect=read_range):
+            return build_index.read_manifest("https://example.invalid/a.apk", len(apk), icons=self.icons)
+
+    def table(self, *types):
+        label = type_chunk(2, [simple_entry(0x03, 0)])
+        return resource_table(self.STRINGS, label, *types)
+
+    def published(self, name):
+        files = os.listdir(self.directory.name)
+        self.assertEqual(len(files), 1)
+        self.assertTrue(files[0].startswith(name), files[0])
+        return self.ADDRESS + "/" + files[0]
+
+    def test_densest_file_up_to_the_wanted_density_is_kept(self):
+        table = self.table(
+            type_chunk(3, [simple_entry(0x03, 1)], density=160),
+            type_chunk(3, [simple_entry(0x03, 3)], density=640),
+            type_chunk(3, [simple_entry(0x03, 2)], density=480),
+        )
+        self.assertEqual(self.read(table)[3], "Example App")
+        address = self.published("org.example-")
+        self.assertTrue(address.endswith(".webp"))
+        self.assertEqual(self.icons.get("org.example"), address)
+        with open(os.path.join(self.directory.name, address.rsplit("/", 1)[1]), "rb") as file:
+            self.assertEqual(file.read(), WEBP + b"xxhdpi")
+
+    def test_least_dense_file_beyond_the_wanted_density_is_the_fallback(self):
+        table = self.table(
+            type_chunk(3, [simple_entry(0x03, 3)], density=640),
+            type_chunk(3, [simple_entry(0x03, 4)], density=0xFFFE),
+        )
+        self.read(table)
+        self.assertTrue(self.published("org.example-").endswith(".png"))
+
+    def test_file_name_changes_with_the_contents(self):
+        table = self.table(type_chunk(3, [simple_entry(0x03, 1)], density=160))
+        first = self.read(table) and self.icons.get("org.example")
+        self.icons = build_index.IconStore(self.directory.name, self.ADDRESS)
+        self.read(table, apk_files={**self.FILES, b"res/mipmap-mdpi/ic.png": PNG + b"other"})
+        self.assertNotEqual(first, self.icons.get("org.example"))
+        self.assertEqual(len(os.listdir(self.directory.name)), 2)
+
+    def test_layers_of_an_adaptive_icon_are_kept_for_the_app_to_draw(self):
+        table = self.table(
+            type_chunk(3, [simple_entry(0x03, 4)], density=0xFFFE),
+            type_chunk(4, [simple_entry(0x1C, 0xFF112233)]),
+            type_chunk(5, [simple_entry(0x03, 5)]),
+        )
+        self.read(table, apk_files={
+            **self.FILES, b"res/mipmap-anydpi-v26/ic.xml": adaptive_icon(0x7F040000, 0x7F050000)})
+        self.assertEqual(
+            self.icons.get("org.example"),
+            {"background": "#ff112233", "foreground": self.published("org.example-foreground-")},
+        )
+
+    def test_layer_drawn_as_a_vector_is_kept_for_the_app_to_draw(self):
+        table = self.table(
+            type_chunk(3, [simple_entry(0x03, 4)], density=0xFFFE),
+            type_chunk(5, [simple_entry(0x03, 6)]),
+        )
+        vector = vector_document(VectorTest.PATH)
+        self.read(table, apk_files={
+            **self.FILES, b"res/mipmap-anydpi-v26/ic.xml": adaptive_icon(None, 0x7F050000),
+            b"res/drawable/vector.xml": vector})
+        address = self.published("org.example-foreground-")
+        self.assertTrue(address.endswith(".json"))
+        self.assertEqual(self.icons.get("org.example"), {"foreground": address})
+        with open(os.path.join(self.directory.name, address.rsplit("/", 1)[1]), encoding="utf-8") as file:
+            self.assertEqual(json.load(file), build_index.vector_description(vector, None))
+
+    def test_icon_that_is_a_vector_itself_is_kept_the_same_way(self):
+        table = self.table(type_chunk(3, [simple_entry(0x03, 6)]))
+        self.read(table, apk_files={**self.FILES, b"res/drawable/vector.xml": vector_document(VectorTest.PATH)})
+        self.assertEqual(self.icons.get("org.example"), self.published("org.example-"))
+        self.assertTrue(self.icons.get("org.example").endswith(".json"))
+
+    def test_layer_that_is_neither_image_nor_vector_leaves_the_app_without_an_icon(self):
+        table = self.table(
+            type_chunk(3, [simple_entry(0x03, 4)], density=0xFFFE),
+            type_chunk(5, [simple_entry(0x03, 6)]),
+        )
+        self.read(table, apk_files={
+            **self.FILES, b"res/mipmap-anydpi-v26/ic.xml": adaptive_icon(None, 0x7F050000),
+            b"res/drawable/vector.xml": adaptive_icon(None, None)})
+        self.assertIsNone(self.icons.get("org.example"))
+        self.assertIn("org.example", self.icons)
+        self.assertEqual(os.listdir(self.directory.name), [])
+
+    def test_file_that_is_not_the_image_its_name_says_is_refused(self):
+        table = self.table(type_chunk(3, [simple_entry(0x03, 1)], density=160))
+        self.read(table, apk_files={b"res/mipmap-mdpi/ic.png": b"<html>not found</html>"})
+        self.assertIsNone(self.icons.get("org.example"))
+        self.assertEqual(os.listdir(self.directory.name), [])
+
+    def test_package_is_read_once_per_run(self):
+        table = self.table(type_chunk(3, [simple_entry(0x03, 1)], density=160))
+        self.read(table)
+        requests = len(self.ranges)
+        self.read(table)
+        self.assertLess(len(self.ranges), requests)
+        self.assertEqual(len(os.listdir(self.directory.name)), 1)
+
+    def test_app_without_an_icon_or_a_resource_table_has_none(self):
+        self.read(self.table(), icon=None)
+        self.assertIsNone(self.icons.get("org.example"))
+        self.icons = build_index.IconStore(self.directory.name, self.ADDRESS)
+        files = {b"AndroidManifest.xml": manifest((0x03, 6), icon=0x7F030000)}
+        apk = zip_file(files)
+        with mock.patch.object(build_index, "read_range", side_effect=lambda url, start, length: apk[start:start + length]):
+            build_index.read_manifest("https://example.invalid/a.apk", len(apk), icons=self.icons)
+        self.assertIsNone(self.icons.get("org.example"))
+
+    def test_package_name_that_is_no_file_name_is_refused(self):
+        with self.assertRaises(build_index.ManifestError):
+            self.icons.keep("../evil", "", "png", PNG)
+        self.assertEqual(os.listdir(self.directory.name), [])
+
+
+class PruneIconsTest(unittest.TestCase):
+    def test_files_no_list_refers_to_are_removed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            icons = os.path.join(directory, "icons")
+            os.makedirs(icons)
+            for name in ("kept.png", "layer.png", "gone.png"):
+                with open(os.path.join(icons, name), "wb") as file:
+                    file.write(PNG)
+            with open(os.path.join(directory, "index.json"), "w", encoding="utf-8") as file:
+                json.dump({"apps": [{"apks": [{"icon": "https://x/icons/kept.png"}], "beta": {"apks": [{"icon": None}]}}]}, file)
+            with open(os.path.join(directory, "auto.json"), "w", encoding="utf-8") as file:
+                json.dump({"autoApps": [{"apks": [{"icon": {"background": "#000000", "foreground": "https://x/icons/layer.png"}}]}]}, file)
+            with open(os.path.join(directory, "fdroid.json"), "w", encoding="utf-8") as file:
+                json.dump({"apps": [{"icon": "https://f-droid.org/repo/org.example/en-US/icon.png"}]}, file)
+            self.assertEqual(build_index.prune_icons(directory), 1)
+            self.assertEqual(sorted(os.listdir(icons)), ["kept.png", "layer.png"])
+
+    def test_unreadable_list_keeps_every_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            icons = os.path.join(directory, "icons")
+            os.makedirs(icons)
+            with open(os.path.join(icons, "a.png"), "wb") as file:
+                file.write(PNG)
+            with open(os.path.join(directory, "index.json"), "w", encoding="utf-8") as file:
+                file.write("{not json")
+            self.assertEqual(build_index.prune_icons(directory), 0)
+            self.assertEqual(os.listdir(icons), ["a.png"])
+
+
 def asset(name, asset_id):
     return {"id": asset_id, "name": name, "browser_download_url": "https://example.invalid/" + name,
             "size": 100, "download_count": 1}
@@ -327,7 +666,7 @@ class PrereleaseTest(unittest.TestCase):
         b.apk an upgrade of a.apk."""
         manifests = manifests or {"a.apk": ("org.example", 1), "b.apk": ("org.example", 2)}
 
-        def read_manifest(url, size, labels=None):
+        def read_manifest(url, size, labels=None, icons=None):
             package, code = manifests[url.rsplit("/", 1)[1]]
             return package, code, str(code), None
 

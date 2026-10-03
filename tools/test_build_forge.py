@@ -240,6 +240,19 @@ class ExamineTest(unittest.TestCase):
         self.assertIsNone(self.examine(license_name=None))
         self.assertEqual(self.asked, [])
 
+    def test_icons_are_kept_where_the_caller_says(self):
+        icons = build_index.IconStore("unused", "https://x/icons")
+
+        def read_manifest(url, size, labels=None, icons=None):
+            icons.found["org.example"] = "https://x/icons/org.example-abc.png"
+            return "org.example", 3, "1.0", "Example"
+
+        with mock.patch.object(build_forge, "forge", return_value=RELEASES), \
+                mock.patch.object(build_forge, "detect_license", return_value="GPL-3.0"), \
+                mock.patch.object(build_index, "read_manifest", side_effect=read_manifest):
+            app = build_forge.examine(REPO, None, NOW, True, icons=icons)
+        self.assertEqual(app["apks"][0]["icon"], "https://x/icons/org.example-abc.png")
+
     def test_fresh_entry_is_kept_without_asking(self):
         first = self.examine()
         again = self.examine(previous=first, repo=dict(REPO, stars_count=9))

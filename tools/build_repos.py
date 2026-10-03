@@ -187,11 +187,20 @@ def build_app(source, address, page, package, entry, anti_feature_names):
         "releaseNotes": localized(newest.get("whatsNew"))[:MAX_NOTES],
         "releaseUrl": page % package,
         "publishedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest.get("added", 0) / 1000)),
+        "icon": icon_address(address, metadata.get("icon")),
         # What the newest version is warned about, for versions of the store that do not look
         # at the file they picked.
         "antiFeatures": apks[0]["antiFeatures"],
         "apks": apks,
     }
+
+
+def icon_address(address, icon):
+    """The address of a package's icon, or None. The catalogue gives the file for each
+    language it has one in, each as {"name", "sha256", "size"}."""
+    described = localized(icon)
+    name = described.get("name") if isinstance(described, dict) else None
+    return address + name if isinstance(name, str) and name.startswith("/") else None
 
 
 def build_apk(address, package, label, version, anti_feature_names):
