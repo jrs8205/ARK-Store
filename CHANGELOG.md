@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0-beta.4
+
+- The material surfaces are on by default on Android 13 and later: the screen and everything
+  on it are brushed metal lit from above. The setting under Appearance turns them off for
+  flat colours or to save power. Measured with the release build on a Pixel 8a and a Galaxy
+  Z Flip 4, the metal costs nothing measurable in scrolling, and the text keeps a contrast
+  of at least 7:1 on it, light and dark
+
 ## 1.5.0-beta.3
 
 - The number of apps and the order stay above the list with the search and the chips, so

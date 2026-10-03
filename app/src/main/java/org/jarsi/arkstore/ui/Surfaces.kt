@@ -50,7 +50,7 @@ enum class Relief(internal val amount: Float) { PLATE(0.35f), RAISED(1f), RECESS
  * metal, lit from above the top left corner. The light, the grain and the bevelled edge are
  * computed for every pixel by a shader, so there is no image to scale, and the edge follows
  * the rounded corners of whatever shape the surface has. Needs Android 13; on older versions
- * the flat colours stay. An experiment behind a setting.
+ * the flat colours stay. On by default, behind a setting that turns it off.
  *
  * Whether the device can draw them is found out once, by drawing a small sample off screen
  * and looking at the pixels ([ready]); a device whose graphics driver cannot is remembered,

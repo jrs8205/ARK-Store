@@ -160,7 +160,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 ?: SortOrder.NAME
         )
     }
-    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, false)) }
+    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
 
     InstallHaptics(installs)
 

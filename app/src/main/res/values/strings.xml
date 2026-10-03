@@ -121,8 +121,8 @@
     <string name="action_settings">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="appearance_title">Appearance</string>
-    <string name="material_switch">Material surfaces (experimental)</string>
-    <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. Needs Android 13.</string>
+    <string name="material_switch">Material surfaces</string>
+    <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. On by default on Android 13 and later; turn it off here if you prefer flat colours or want to save power.</string>
     <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>

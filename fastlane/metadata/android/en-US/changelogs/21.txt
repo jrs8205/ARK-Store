@@ -1,0 +1,1 @@
+Material surfaces are on by default on Android 13 and later: the screen and everything on it are brushed metal lit from above. The setting under Appearance turns them off. Measured with the release build, the metal costs nothing noticeable in scrolling, and the text keeps a contrast of at least 7:1 on it.
