@@ -140,8 +140,19 @@ class LicenseTest(unittest.TestCase):
         self.assertIsNone(build_forge.identify_license("Commercial redistribution is forbidden.\n\n" + MIT))
         for added in ("The software may not be sold.", "For non-commercial use only.",
                       "The Software shall be used for Good, not Evil.", "Redistribution is forbidden.",
-                      "Use is limited to educational institutions."):
+                      "Use is limited to educational institutions.",
+                      # A line that tells whose copyright the work is may not add a condition either.
+                      "Copyright (c) 2026 Example. For non-commercial use only."):
             self.assertIsNone(build_forge.identify_license(MIT + "\n" + added + "\n"))
+            self.assertIsNone(build_forge.identify_license(added + "\n\n" + MIT))
+
+    def test_copyright_holder_may_have_any_name(self):
+        # The lower-case form of this letter is two characters long: the terms are still found
+        # whole whatever way the letters around them are written.
+        owner = "İsmail"
+        self.assertEqual(build_forge.identify_license(MIT.replace("Owner", owner)), "MIT")
+        self.assertEqual(
+            build_forge.identify_license(MIT.replace("Owner", owner) + "\nCopyright (c) 2026 " + owner + "\n"), "MIT")
 
     def test_only_further_licenses_may_follow_terms_that_are_not_closed(self):
         self.assertEqual(build_forge.identify_license(MIT + "\n----\n\nISC License\n\n" + ISC), "MIT")
@@ -338,12 +349,19 @@ class GitLabTest(unittest.TestCase):
                      link(12, "app.apk", "https://gitlab.com/api/v4/projects/12/releases/v1/downloads/" + upload),
                      link(13, "app.apk", "https://gitlab.com/group/app/-/raw/main/../../-/releases/v1/downloads/a.apk"),
                      link(14, "app.apk", "https://gitlab.com/group/app/-/raw/main/%2e%2e/x/app.apk"),
-                     link(15, "app.apk", "https://gitlab.com/group/app/-/blob/main/app.apk")]
+                     link(15, "app.apk", "https://gitlab.com/group/app/-/blob/main/app.apk"),
+                     # However an address is written, it is read as the one it stands for.
+                     link(16, "app.apk", "https://gitlab.com/%61pi/v4/projects/12/releases/v1/downloads/app.apk"),
+                     link(17, "app.apk", "https://gitlab.com/group/app/%2d/releases/v1/downloads/" + upload),
+                     link(18, "app.apk", "https://gitlab.com/api/v4/projects/group%2F..%2Fapp/packages/generic/a/1/app.apk"),
+                     link(19, "app.apk", "https://gitlab.com/api/v4/projects/group%2F/packages/generic/a/1/app.apk")]
         self.assertIsNone(self.examine([gitlab_release(passed_on)]))
         self.assertEqual(self.sized, [])
 
     def test_files_gitlab_keeps_itself_are_offered(self):
         kept = ["https://gitlab.com/api/v4/projects/12/packages/generic/app/1.0/app.apk",
+                # The API takes a project by its path too, with its slashes written as %2F.
+                "https://gitlab.com/api/v4/projects/group%2Fsub%2Fapp/packages/generic/app/1.0/app.apk",
                 "https://gitlab.com/-/project/12/uploads/0123456789abcdef0123456789abcdef/app.apk",
                 "https://gitlab.com/group/sub/app/uploads/0123456789abcdef0123456789abcdef/app.apk",
                 "https://gitlab.com/group/releases/-/raw/main/out/app.apk",

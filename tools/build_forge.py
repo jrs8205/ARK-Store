@@ -224,6 +224,8 @@ def identify_license(text):
     or adds conditions of its own is no license the store knows. After terms that end with
     "END OF TERMS AND CONDITIONS" a file may go on, as GitHub has it too; after any others
     only further licenses may follow, those of what the project includes."""
+    # Everything below is read from the lowered text: lowering can make a letter longer, so
+    # the indexes of where fit only this text.
     lowered = text.lower()
     where = [index for index, character in enumerate(lowered) if "a" <= character <= "z"]
     letters = "".join(lowered[index] for index in where)
@@ -234,7 +236,7 @@ def identify_license(text):
     for start, end, _ in found:
         if start < position:
             continue
-        gap = text[where[position - 1] + 1 if position else 0:where[start]]
+        gap = lowered[where[position - 1] + 1 if position else 0:where[start]]
         if not says_nothing(gap) or any(limit in letters[position:start] for limit in LICENSE_LIMITS):
             return None
         position = end
@@ -248,7 +250,11 @@ def identify_license(text):
                     return None
                 position = later_end
             return found[0][2]
-    return found[0][2] if says_nothing(text[where[position - 1] + 1:]) else None
+    # What is left may only tell whose copyright the work is, and a copyright line may not
+    # take anything back either.
+    if not says_nothing(lowered[where[position - 1] + 1:]):
+        return None
+    return None if any(limit in letters[position:] for limit in LICENSE_LIMITS) else found[0][2]
 
 
 def detect_license(name):
@@ -404,12 +410,19 @@ def apk_link(link):
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme != "https" or parsed.netloc != urllib.parse.urlsplit(GITLAB_HOST).netloc:
         return None
-    path = urllib.parse.unquote(parsed.path)
-    if not GITLAB_FILES.fullmatch(path) or any(part in ("", ".", "..") for part in path.split("/")[1:]):
+    # The path is read part by part: a slash written as %2F is part of a name, not a boundary
+    # between parts. That is how the API takes a project by its path. No name may be empty or
+    # stand for the directory itself or the one above, not within a part either.
+    parts = [urllib.parse.unquote(part) for part in parsed.path.split("/")]
+    if any(name in ("", ".", "..") for part in parts[1:] for name in part.split("/")):
+        return None
+    # Written one and the same way, whatever way the link wrote it.
+    path = "/".join(urllib.parse.quote(part, safe="") for part in parts)
+    if not GITLAB_FILES.fullmatch(path):
         return None
     name = link.get("name") or ""
     if not name.lower().endswith(".apk"):
-        name = path.rsplit("/", 1)[-1]
+        name = parts[-1]
     return (name, url) if name.lower().endswith(".apk") else None
 
 
