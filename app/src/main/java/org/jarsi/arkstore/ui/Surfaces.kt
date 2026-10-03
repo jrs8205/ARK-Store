@@ -39,8 +39,14 @@ object Surfaces {
     /**
      * The metal, in AGSL. "base" is the colour of the flat surface it replaces: the text on
      * top is set against that colour, and the material stays within a few percent of it, so
-     * that the text keeps its contrast. The edge is found from the distance to the rounded
-     * rectangle's border, and lit by how much it faces the light.
+     * that the text keeps its contrast.
+     *
+     * The surface is lit as a brushed metal is: a normal is made up for every pixel (flat in
+     * the middle, doming gently, and turning over along the bevel, which is found from the
+     * distance to the rounded rectangle's edge), and the light reflects off it with Ward's
+     * anisotropic model, so that the highlight stretches along the brushing and the bevel
+     * facing the light catches it. A little Fresnel brightening along the edge and the grain
+     * of the brushing finish it.
      */
     internal const val METAL = """
         uniform float2 resolution;
@@ -60,20 +66,31 @@ object Surfaces {
             float2 inner = max(center - float2(radius), float2(0.0));
             float2 away = q - clamp(q, -inner, inner);
             float d = length(away) - radius;
-            float2 n = length(away) > 0.5 ? normalize(away) : float2(0.0);
-            float2 light = normalize(float2(-0.55, -0.83));
-            // The bevel: the band along the edge, lit where it faces the light.
+            float2 outward = length(away) > 0.5 ? normalize(away) : float2(0.0);
             float rim = smoothstep(-bevel, 0.0, d);
-            float edge = rim * dot(n, light) * relief * 0.25;
-            // A raised surface tilts toward the light at the top and the left.
+            // The normal: a raised surface domes toward the viewer and turns down over its
+            // bevel, a recessed one the other way round.
             float2 uv = p / resolution;
-            float tilt = relief * ((0.5 - uv.y) * 0.06 + (0.5 - uv.x) * 0.02);
-            // The grain of brushing: fine streaks along the surface, each row its own.
-            float streak = (hash(float2(floor(p.y), floor(p.x / 64.0))) - 0.5) * 0.05 * grain;
-            // A soft highlight where the light falls.
-            float2 dl = (p - float2(resolution.x * 0.15, -resolution.y * 0.6)) / max(resolution.x, 1.0);
-            float spec = exp(-dot(dl, dl) * 2.5) * 0.10;
-            half3 color = base.rgb * (1.0 + streak + edge + tilt) + half3(spec);
+            float2 dome = (uv - 0.5) * float2(0.5, 0.7) * relief;
+            float3 N = normalize(float3(dome + outward * rim * 0.9 * relief, 1.0));
+            float3 V = float3(0.0, 0.0, 1.0);
+            float3 L = normalize(float3(-0.45, -0.55, 0.7));
+            float3 H = normalize(V + L);
+            // The brushing runs along x: broad highlight along it, tight across it.
+            float3 B = normalize(cross(N, float3(1.0, 0.0, 0.0)));
+            float3 T = cross(B, N);
+            float LN = max(dot(L, N), 0.0);
+            float VN = max(dot(V, N), 0.001);
+            float HN = max(dot(H, N), 0.001);
+            float HT = dot(H, T) / 0.55;
+            float HB = dot(H, B) / 0.18;
+            float ward = sqrt(LN / VN) * exp(-2.0 * (HT * HT + HB * HB) / (1.0 + HN));
+            // Most of the colour comes through whatever the light does; the shading moves it
+            // by a few percent only, and the edge brightens a little where it turns away.
+            float diffuse = 0.94 + 0.09 * LN;
+            float fresnel = pow(1.0 - VN, 3.0) * 0.12 * rim;
+            float streak = (hash(float2(floor(p.y), floor(p.x / 64.0))) - 0.5) * 0.06 * grain;
+            half3 color = base.rgb * (diffuse + streak + fresnel) + half3(ward * 0.14);
             return half4(color, 1.0);
         }
     """

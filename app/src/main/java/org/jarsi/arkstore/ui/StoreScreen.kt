@@ -133,6 +133,7 @@ import org.jarsi.arkstore.work.UpdateCheckWorker
 fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
+    val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -223,10 +224,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // and neither may a place.
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
-        val places = CatalogRules.PLACES.filter { place ->
-            state.rows.any { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
-        }
-        val activePlace = place?.takeIf { it in places }
+        val activePlace = place
+        // The places whose apps are turned on in the settings; GitHub always is.
+        val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
         val visible = state.rows.filter { row ->
             (activeCategory == null || row.app.category == activeCategory) &&
                 (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
@@ -258,13 +258,20 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     onSelect = { category = it }
                 )
                 PlaceChips(
-                    places = places,
-                    counts = places.associateWith { place ->
+                    counts = CatalogRules.PLACES.associateWith { place ->
                         state.rows.count { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
                     },
+                    enabled = enabledPlaces,
                     selected = activePlace,
-                    onSelect = { place = it }
+                    onSelect = { chosen ->
+                        // A quick way in: choosing a place that is off turns it on as well.
+                        if (chosen != null && chosen !in enabledPlaces) viewModel.setCatalogue(chosen, true)
+                        place = chosen
+                    }
                 )
+                // Room between the chips and the list, so that a card scrolling out goes
+                // under a clear edge rather than straight under the chips.
+                Spacer(Modifier.height(12.dp))
             }
             PullToRefreshBox(
                 isRefreshing = state.refreshing,
@@ -1070,15 +1077,25 @@ private fun StoreOutlinedButton(
     )
 }
 
+/**
+ * The colouring of a row of chips: the categories in the secondary tone, the places in the
+ * tertiary tone that the badges naming a place on the cards have too.
+ */
+private enum class ChipTone { CATEGORY, PLACE }
+
 /** A chip of a row of choices; raised metal, pressed in when chosen, when materials are on. */
 @Composable
-private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit) {
+private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, tone: ChipTone = ChipTone.CATEGORY) {
     val haptics = LocalHapticFeedback.current
     val metal = LocalMaterial.current
-    val base = if (selected) {
-        MaterialTheme.colorScheme.secondaryContainer
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+    val scheme = MaterialTheme.colorScheme
+    val container = when (tone) {
+        ChipTone.CATEGORY -> if (selected) scheme.secondaryContainer else scheme.surfaceContainerHigh
+        ChipTone.PLACE -> if (selected) scheme.tertiary else scheme.tertiaryContainer
+    }
+    val content = when (tone) {
+        ChipTone.CATEGORY -> if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
+        ChipTone.PLACE -> if (selected) scheme.onTertiary else scheme.onTertiaryContainer
     }
     FilterChip(
         selected = selected,
@@ -1088,15 +1105,15 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit) {
         },
         modifier = Modifier
             .clip(FilterChipDefaults.shape)
-            .material(base, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f),
-        colors = if (metal) {
-            FilterChipDefaults.filterChipColors(
-                containerColor = Color.Transparent,
-                selectedContainerColor = Color.Transparent
-            )
-        } else {
-            FilterChipDefaults.filterChipColors()
-        },
+            .material(container, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = if (metal) Color.Transparent else container,
+            labelColor = content,
+            iconColor = content,
+            selectedContainerColor = if (metal) Color.Transparent else container,
+            selectedLabelColor = content,
+            selectedLeadingIconColor = content
+        ),
         border = if (metal) {
             null
         } else {
@@ -1520,13 +1537,20 @@ private fun SortMenu(selected: SortOrder, onSelect: (SortOrder) -> Unit) {
 private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
+    Box(modifier = modifier) {
+    // Pressed into the surface, with the outline as its lip. The field keeps 8 dp above the
+    // outline for the floating label, so the metal starts where the outline does.
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .padding(top = 8.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .material(MaterialTheme.colorScheme.surfaceContainerLow, Relief.RECESSED, radius = 28.dp, grain = 0.4f)
+    )
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        // Pressed into the surface, with the outline as its lip.
-        modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
-            .material(MaterialTheme.colorScheme.surfaceContainerLow, Relief.RECESSED, radius = 28.dp, grain = 0.4f),
+        modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         shape = RoundedCornerShape(28.dp),
         label = { Text(stringResource(R.string.search_hint)) },
@@ -1554,6 +1578,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
         // The list is filtered while typing, so the search key only puts the keyboard away.
         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
     )
+    }
 }
 
 @Composable
@@ -1569,7 +1594,7 @@ private fun CategoryChips(
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = Modifier.padding(top = 16.dp)
     ) {
         item(key = "all") {
             ChoiceChip(
@@ -1589,27 +1614,38 @@ private fun CategoryChips(
 }
 
 /**
- * A chip for each place apps are offered from, to see one place's apps alone. Shown only
- * when there are several: one place tells nothing the full list does not.
+ * A chip for each place apps are offered from, to see one place's apps alone. A place that
+ * is turned off in the settings, among [enabled] it is not, is named without a count;
+ * choosing it is the quick way to turn it on.
  */
 @Composable
 private fun PlaceChips(
-    places: List<String>,
     counts: Map<String, Int>,
+    enabled: Set<String>,
     selected: String?,
     onSelect: (String?) -> Unit
 ) {
-    if (places.size < 2) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = Modifier.padding(top = 8.dp)
     ) {
-        items(places, key = { it }) { place ->
+        item(key = "all") {
+            ChoiceChip(
+                selected = selected == null,
+                label = stringResource(R.string.category_all),
+                onClick = { onSelect(null) },
+                tone = ChipTone.PLACE
+            )
+        }
+        items(CatalogRules.PLACES, key = { it }) { place ->
+            val count = counts[place] ?: 0
+            val name = stringResource(sourceName(place))
             ChoiceChip(
                 selected = selected == place,
-                label = stringResource(R.string.category_chip, stringResource(sourceName(place)), counts[place] ?: 0),
-                onClick = { onSelect(if (selected == place) null else place) }
+                label = if (place in enabled || count > 0) stringResource(R.string.category_chip, name, count) else name,
+                onClick = { onSelect(if (selected == place) null else place) },
+                tone = ChipTone.PLACE
             )
         }
     }
