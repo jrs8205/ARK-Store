@@ -51,7 +51,9 @@ ATTRIBUTE_DRAWABLE = 0x01010199
 # been rotated.
 SIGNING_BLOCK_MAGIC = b"APK Sig Block 42"
 MAX_SIGNING_BLOCK = 1024 * 1024
-SIGNATURE_SCHEMES = (0x1B93AD61, 0xF05368C0, 0x7109871A)
+SCHEME_V2 = 0x7109871A
+SIGNATURE_SCHEMES = (0x1B93AD61, 0xF05368C0, SCHEME_V2)
+PROOF_OF_ROTATION = 0x3BA06F8C
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -251,8 +253,9 @@ def read_manifest(url, size, labels=None, icons=None):
 def read_signer(url, size, directory_start):
     """The SHA-256 of the certificate the APK is signed with, in hex, or None when it cannot
     be told: the APK is signed with the version 1 scheme only, by several keys at once, or
-    with different keys for different versions of Android, when its key has been rotated.
-    Read from the signing block, which sits just before the zip directory that starts at
+    with a rotated key, when it carries different keys for different versions of Android or
+    a proof of rotation, which lets it update an app signed with a key before it. Read from
+    the signing block, which sits just before the zip directory that starts at
     directory_start. A network failure propagates."""
     if directory_start < 32:
         return None
@@ -271,7 +274,11 @@ def read_signer(url, size, directory_start):
         if length < 4 or position + 8 + length > end:
             raise ManifestError("odd signing block")
         if pair_id in SIGNATURE_SCHEMES:
-            certificates[pair_id] = signer_certificates(block[position + 12:position + 8 + length])
+            found, rotated = signer_certificates(block[position + 12:position + 8 + length],
+                                                 pair_id != SCHEME_V2)
+            if rotated:
+                return None
+            certificates[pair_id] = found
         position += 8 + length
     # Each scheme is read by some versions of Android, so a file whose schemes disagree is
     # signed with different keys on different devices: nothing to compare against before
@@ -286,19 +293,32 @@ def read_signer(url, size, directory_start):
     return signers.pop() if len(signers) == 1 else None
 
 
-def signer_certificates(value):
-    """The first certificate of each signer in the value of a signature scheme's pair."""
+def signer_certificates(value, versioned):
+    """(the first certificate of each signer in the value of a signature scheme's pair,
+    whether a signer carries a proof of rotation). The proof is an additional attribute of
+    the signed data, which in versions 3 and 3.1 (versioned) comes after the range of
+    Android versions the signer is for."""
     found = []
+    rotated = False
     signers, _ = prefixed(value, 0)
     position = 0
     while position + 4 <= len(signers):
         signer, position = prefixed(signers, position)
         signed_data, _ = prefixed(signer, 0)
         _, after = prefixed(signed_data, 0)
-        certificates, _ = prefixed(signed_data, after)
+        certificates, after = prefixed(signed_data, after)
         if len(certificates) >= 4:
             found.append(prefixed(certificates, 0)[0])
-    return found
+        if versioned:
+            after += 8
+        if after + 4 <= len(signed_data):
+            attributes, _ = prefixed(signed_data, after)
+            at = 0
+            while at + 4 <= len(attributes):
+                attribute, at = prefixed(attributes, at)
+                if len(attribute) >= 4 and struct.unpack_from("<I", attribute, 0)[0] == PROOF_OF_ROTATION:
+                    rotated = True
+    return found, rotated
 
 
 def prefixed(data, position):
