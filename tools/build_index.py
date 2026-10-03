@@ -45,6 +45,13 @@ IMAGE_SUFFIXES = (".png", ".webp", ".jpg", ".jpeg")
 # The attributes that name an application's icon and the drawable of a layer of one.
 ATTRIBUTE_ICON = 0x01010002
 ATTRIBUTE_DRAWABLE = 0x01010199
+# The APK signing block sits just before the zip directory and ends with these words. Its
+# pairs with these ids hold the signers of signature schemes v3.1, v3 and v2, in the order
+# a recent device looks at them; the first names the present key of an app whose key has
+# been rotated.
+SIGNING_BLOCK_MAGIC = b"APK Sig Block 42"
+MAX_SIGNING_BLOCK = 1024 * 1024
+SIGNATURE_SCHEMES = (0x1B93AD61, 0xF05368C0, 0x7109871A)
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -200,9 +207,11 @@ def inflate(data, limit):
 
 
 def read_manifest(url, size, labels=None, icons=None):
-    """Returns (package, versionCode, versionName, label) from the APK at url, fetching only
-    its zip directory, the compressed AndroidManifest.xml and, when the app's name is kept
-    there, its resource table. label is None when the APK does not tell it.
+    """Returns (package, versionCode, versionName, label, signer) from the APK at url,
+    fetching only its zip directory, the compressed AndroidManifest.xml, its signing block
+    and, when the app's name is kept there, its resource table. label is None when the APK
+    does not tell it; signer is the SHA-256 of the certificate the APK is signed with, in hex,
+    or None when that cannot be told (see read_signer).
 
     labels maps a package to the label already read from another APK of the same release.
     The files of one release differ in the CPU architecture they are built for, not in what
@@ -231,7 +240,67 @@ def read_manifest(url, size, labels=None, icons=None):
         if table is None and icon:
             table = read_table(url, size, entries.get(RESOURCES_FILE))
         icons.read(url, size, entries, table, icon, package)
-    return package, version_code, version_name, tidy_label(label)
+    try:
+        signer = read_signer(url, size, entries.start)
+    except (ManifestError, struct.error, IndexError) as error:
+        print("  no signer from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
+        signer = None
+    return package, version_code, version_name, tidy_label(label), signer
+
+
+def read_signer(url, size, directory_start):
+    """The SHA-256 of the certificate the APK is signed with, in hex, or None when it cannot
+    be told: the APK is signed with the version 1 scheme only, or by several keys at once.
+    Read from the signing block, which sits just before the zip directory that starts at
+    directory_start. A network failure propagates."""
+    if directory_start < 32:
+        return None
+    tail = read_range(url, directory_start - 24, 24)
+    block_size, = struct.unpack_from("<Q", tail, 0)
+    if tail[8:24] != SIGNING_BLOCK_MAGIC:
+        return None
+    if block_size > MAX_SIGNING_BLOCK or block_size + 8 > directory_start or block_size < 24:
+        raise ManifestError("odd signing block")
+    block = read_range(url, directory_start - block_size - 8, block_size + 8)
+    certificates = {}
+    position = 8
+    end = block_size + 8 - 24
+    while position + 12 <= end:
+        length, pair_id = struct.unpack_from("<QI", block, position)
+        if length < 4 or position + 8 + length > end:
+            raise ManifestError("odd signing block")
+        if pair_id in SIGNATURE_SCHEMES:
+            certificates[pair_id] = signer_certificates(block[position + 12:position + 8 + length])
+        position += 8 + length
+    for scheme in SIGNATURE_SCHEMES:
+        found = certificates.get(scheme)
+        if found:
+            return hashlib.sha256(found[0]).hexdigest() if len(found) == 1 else None
+    return None
+
+
+def signer_certificates(value):
+    """The first certificate of each signer in the value of a signature scheme's pair."""
+    found = []
+    signers, _ = prefixed(value, 0)
+    position = 0
+    while position + 4 <= len(signers):
+        signer, position = prefixed(signers, position)
+        signed_data, _ = prefixed(signer, 0)
+        _, after = prefixed(signed_data, 0)
+        certificates, _ = prefixed(signed_data, after)
+        if len(certificates) >= 4:
+            found.append(prefixed(certificates, 0)[0])
+    return found
+
+
+def prefixed(data, position):
+    """(bytes, next position) of the length-prefixed field at position in data."""
+    length, = struct.unpack_from("<I", data, position)
+    start = position + 4
+    if start + length > len(data):
+        raise ManifestError("signing block cut short")
+    return data[start:start + length], start + length
 
 
 def read_table(url, size, entry):
@@ -260,6 +329,11 @@ def tidy_label(label):
     return label[:MAX_LABEL] or None
 
 
+class ZipDirectory(dict):
+    """The entries of a zip directory by name, and where the directory starts in the file."""
+    start = 0
+
+
 def read_directory(url, size, wanted=None):
     """The zip directory's entries by name: those for the file names in wanted, or all."""
     tail_length = min(size, 22 + 65535)
@@ -277,7 +351,8 @@ def read_directory(url, size, wanted=None):
     else:
         directory = read_range(url, directory_offset, directory_size)
 
-    entries = {}
+    entries = ZipDirectory()
+    entries.start = directory_offset
     position = 0
     while position + 46 <= len(directory) and directory[position:position + 4] == b"PK\x01\x02":
         method, = struct.unpack_from("<H", directory, position + 10)
@@ -1188,12 +1263,13 @@ def release_info(release, previous_apks, icons=None):
     labels = {}
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
-        if known and "label" in known and (icons is None or "icon" in known):
+        if known and "label" in known and "signer" in known and (icons is None or "icon" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
-            # An entry written before names or icons were read lacks them, and is read again.
+            # An entry written before names, signers or icons were read lacks them, and is
+            # read again.
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
-                        known["label"])
+                        known["label"], known["signer"])
             icon = known.get("icon")
         else:
             try:
@@ -1213,6 +1289,9 @@ def release_info(release, previous_apks, icons=None):
             "versionCode": manifest[1],
             "versionName": manifest[2],
             "label": manifest[3],
+            # SHA-256 of the certificate the file is signed with, as the catalogues tell it;
+            # None when it cannot be told.
+            "signer": manifest[4] if len(manifest) > 4 else None,
         }
         if icons is not None:
             # See IconStore.get; None for an app whose icon could not be kept.
