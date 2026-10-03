@@ -1,5 +1,6 @@
 """Tests for the index builder. Run with: python3 -m unittest discover tools"""
 
+import hashlib
 import json
 import os
 import struct
@@ -56,6 +57,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None,
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -83,17 +85,32 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
+            "signer": "ab" * 32,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
             app = build_index.build_app(REPO, previous)
         read_manifest.assert_not_called()
         self.assertIsNone(app["apks"][0]["label"])
+        self.assertEqual(app["apks"][0]["signer"], "ab" * 32)
+
+    def test_apk_known_without_a_signer_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", "cd" * 32)) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["signer"], "cd" * 32)
 
     def test_apk_known_without_an_icon_is_read_again_when_icons_are_kept(self):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
 
@@ -117,7 +134,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "icon": None,
+            "signer": None, "icon": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
         with mock.patch.object(build_index, "api", return_value=release()), \
@@ -416,8 +433,8 @@ class ResourceStringTest(unittest.TestCase):
         self.assertIsNone(build_index.resource_string(table, 0x01020000))
 
 
-def zip_file(files):
-    """A zip of stored files, as bytes."""
+def zip_file(files, block=b""):
+    """A zip of stored files, as bytes, with block (an APK signing block) before the directory."""
     data = b""
     directory = b""
     for name, content in files.items():
@@ -426,15 +443,36 @@ def zip_file(files):
         data += b"PK\x03\x04" + common + struct.pack("<HH", len(name), 0) + name + content
         directory += b"PK\x01\x02" + struct.pack("<H", 20) + common
         directory += struct.pack("<HHHHHII", len(name), 0, 0, 0, 0, 0, offset) + name
-    end = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, len(files), len(files), len(directory), len(data), 0)
-    return data + directory + end
+    end = b"PK\x05\x06" + struct.pack("<HHHHIIH", 0, 0, len(files), len(files), len(directory),
+                                      len(data) + len(block), 0)
+    return data + block + directory + end
+
+
+def prefixed(data):
+    return struct.pack("<I", len(data)) + data
+
+
+def signing_block(*schemes):
+    """An APK signing block; each scheme is (id, certificates), one signer per certificate."""
+    pairs = b""
+    for scheme, certificates in schemes:
+        signers = b"".join(
+            prefixed(prefixed(prefixed(b"") + prefixed(prefixed(cert))) + prefixed(b"") + prefixed(b""))
+            for cert in certificates
+        )
+        value = prefixed(signers)
+        pairs += struct.pack("<QI", 4 + len(value), scheme) + value
+    size = len(pairs) + 8 + 16
+    return struct.pack("<Q", size) + pairs + struct.pack("<Q", size) + build_index.SIGNING_BLOCK_MAGIC
 
 
 class ReadManifestTest(unittest.TestCase):
     TABLE = resource_table(["Example App"], type_chunk(2, [simple_entry(0x03, 0)]))
+    CERTIFICATE = b"\x30\x82certificate one"
+    OTHER = b"\x30\x82certificate two"
 
-    def read(self, files, labels=None):
-        apk = zip_file(files)
+    def read(self, files, labels=None, block=b""):
+        apk = zip_file(files, block)
         self.ranges = []
 
         def read_range(url, start, length):
@@ -446,18 +484,45 @@ class ReadManifestTest(unittest.TestCase):
 
     def test_label_is_looked_up_in_the_resource_table(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
-        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App"))
+        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App", None))
 
     def test_label_read_from_another_apk_of_the_release_is_reused(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
         self.assertEqual(self.read(files, {"org.example": "Known"})[3], "Known")
-        self.assertEqual(len(self.ranges), 2)
+        self.assertEqual(len(self.ranges), 3)
 
     def test_unreadable_resource_table_costs_only_the_label(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": b"junk" * 8}
-        self.assertEqual(self.read(files), ("org.example", 3, None, None))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None))
         files.pop(b"resources.arsc")
-        self.assertEqual(self.read(files), ("org.example", 3, None, None))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None))
+
+    def test_signer_is_the_certificate_of_the_signing_block(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6))}
+        block = signing_block((0xF05368C0, [self.CERTIFICATE]))
+        self.assertEqual(self.read(files, block=block)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
+        # The signing block is read with two requests: its end, then the whole of it.
+        self.assertEqual(len(self.ranges), 4)
+
+    def test_present_key_of_a_rotated_app_comes_first(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6))}
+        block = signing_block((0x7109871A, [self.OTHER]), (0xF05368C0, [self.CERTIFICATE]))
+        self.assertEqual(self.read(files, block=block)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
+        block = signing_block((0xF05368C0, [self.OTHER]), (0x1B93AD61, [self.CERTIFICATE]))
+        self.assertEqual(self.read(files, block=block)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
+
+    def test_several_signers_or_no_block_give_no_signer(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6))}
+        self.assertIsNone(self.read(files, block=signing_block((0xF05368C0, [self.CERTIFICATE, self.OTHER])))[4])
+        self.assertIsNone(self.read(files)[4])
+        self.assertIsNone(self.read(files, block=signing_block((0x12345678, [self.CERTIFICATE])))[4])
+
+    def test_odd_signing_block_costs_only_the_signer(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6))}
+        block = bytearray(signing_block((0xF05368C0, [self.CERTIFICATE])))
+        struct.pack_into("<Q", block, 8, 1 << 40)
+        self.assertEqual(self.read(files, block=bytes(block))[:2], ("org.example", 3))
+        self.assertIsNone(self.read(files, block=bytes(block))[4])
 
     def test_resource_table_placed_outside_the_archive_costs_only_the_label(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
@@ -473,7 +538,7 @@ class ReadManifestTest(unittest.TestCase):
 
         with mock.patch.object(build_index, "read_range", side_effect=read_range):
             result = build_index.read_manifest("https://example.invalid/a.apk", len(apk))
-        self.assertEqual(result, ("org.example", 3, None, None))
+        self.assertEqual(result, ("org.example", 3, None, None, None))
 
     def test_label_is_tidied(self):
         self.assertEqual(build_index.tidy_label("  Two\n words "), "Two words")
