@@ -59,6 +59,7 @@
         <item quantity="other">%d latausta</item>
     </plurals>
     <string name="detail_developer">Kehittäjä</string>
+    <string name="detail_repository">Repo</string>
     <string name="detail_stars">Tähdet</string>
     <string name="detail_downloads">Lataukset</string>
     <string name="sources_title">Lähteet</string>
@@ -136,11 +137,26 @@
         <item quantity="other">Ladataan %d sovellusta</item>
     </plurals>
     <string name="download_notification_installing">Asennetaan</string>
-    <string name="badge_auto">Löydetty automaattisesti</string>
-    <string name="auto_title">Lisää sovelluksia</string>
-    <string name="auto_switch">Näytä automaattisesti löydetyt sovellukset</string>
-    <string name="auto_description">Listaa myös GitHubista haulla löydetyt avoimen lähdekoodin Android-sovellukset. Niiden kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä. Mukana ovat vain aktiivisesti kehitetyt sovellukset, joilla on tuore julkaisu.</string>
+    <string name="badge_auto">Löydetty GitHubista</string>
+    <string name="auto_switch">GitHubista löydetyt</string>
+    <string name="auto_description">GitHubista haulla löydetyt avoimen lähdekoodin sovellukset. Niiden kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä. Mukana ovat vain aktiivisesti kehitetyt sovellukset, joilla on tuore julkaisu.</string>
     <string name="auto_detail">Tämä sovellus löytyi GitHubista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="origins_title">Mistä sovellukset tulevat</string>
+    <string name="origin_published">ARK-Storeen julkaistut</string>
+    <string name="origin_published_description">Sovellukset, jotka kehittäjä on itse tuonut ARK-Storeen GitHubissa, Codebergissä tai GitLabissa. Näkyvät aina.</string>
+    <string name="codeberg_switch">Codebergistä löydetyt</string>
+    <string name="codeberg_description">Codebergistä haulla löydetyt avoimen lähdekoodin sovellukset. Codeberg on GitHubin kaltainen koodipalvelu. Sovellusten kehittäjät eivät ole tuoneet niitä ARK-Storeen, eikä kukaan ole tarkistanut niitä.</string>
+    <string name="auto_detail_codeberg">Tämä sovellus löytyi Codebergistä haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="gitlab_switch">GitLabista löydetyt</string>
+    <string name="gitlab_description">GitLabista haulla löydetyt avoimen lähdekoodin sovellukset. GitLab on toinen koodipalvelu. Harva projekti liittää siellä sovelluksensa julkaisuihin, joten lista on lyhyt. Kukaan ei ole tarkistanut näitä sovelluksia.</string>
+    <string name="auto_detail_gitlab">Tämä sovellus löytyi GitLabista haulla. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="izzy_description">Erikseen ylläpidetty avoimen lähdekoodin sovellusten luettelo. Se välittää kehittäjien omat tiedostot tarkistettuaan ne.</string>
+    <string name="fdroid_description">Tunnetuin avoimen lähdekoodin sovellusten luettelo. F-Droid kääntää sovellukset itse lähdekoodista ja allekirjoittaa useimmat omalla avaimellaan, joten F-Droidista asennettu sovellus myös päivittyy F-Droidista.</string>
+    <string name="origins_note">Usean lähteen tarjoama sovellus näkyy listalla kerran: ensisijaisesti kehittäjältä, sitten IzzyOnDroidista, sitten F-Droidista. Asennettu sovellus pysyy siinä lähteessä, jonka tiedostot on allekirjoitettu samoin kuin se.</string>
+    <string name="catalogue_detail">Tämä sovellus tulee luettelosta %1$s. Sen kehittäjä ei ole tuonut sitä ARK-Storeen.</string>
+    <string name="detail_source">Lähde</string>
+    <string name="detail_also_from">Saatavilla myös</string>
+    <string name="detail_warnings">Varoitukset</string>
     <string name="install_ready_title">%1$s on valmis asennettavaksi</string>
     <string name="install_ready_text">Jatka napauttamalla</string>
     <string name="newer_version_note">Asennettuna on uudempi versio kuin täällä tarjottu.</string>

@@ -1,0 +1,1 @@
+Myös Codebergissä julkaistut sovellukset ovat nyt mukana: kehittäjä voi julkaista sieltä arkstore-aiheella, ja asetusten uusi kytkin näyttää Codebergistä haulla löydetyt sovellukset.

@@ -1,0 +1,1 @@
+Apps released on Codeberg are now listed too: developers can publish from there with the arkstore topic, and a new switch in the settings shows apps found by searching Codeberg.

@@ -72,7 +72,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         // finds the same updates again; a notification the user has dismissed must not come
         // back because of that.
         if (newToAnnounce(waiting, announced)) {
-            notify(applicationContext, updates.map { it.repo })
+            notify(applicationContext, updates.map { it.title })
         } else if (waiting.isEmpty() && failure == null) {
             NotificationManagerCompat.from(applicationContext).cancel(NOTIFICATION_ID)
         }

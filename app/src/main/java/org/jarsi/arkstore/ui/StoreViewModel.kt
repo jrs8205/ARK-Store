@@ -28,7 +28,9 @@ data class AppRow(
     val installed: InstalledVersion?,
     val status: AppStatus,
     /** The version code of the app's prerelease, when it has one that the store knows of. */
-    val betaVersion: Long? = null
+    val betaVersion: Long? = null,
+    /** The other places that offer this app, by their source names. */
+    val alsoFrom: List<String> = emptyList()
 ) {
     /**
      * A newer version than the one offered is installed. Android cannot put the older version
@@ -82,14 +84,16 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         refreshing,
         error
     ) { catalog, _, isRefreshing, loadError ->
+        val packages = InstalledApps.snapshot(application)
         StoreUiState(
-            rows = catalog.apps.map { app ->
-                val installed = InstalledApps.find(application, app)
+            rows = InstalledApps.merged(application, catalog.apps, packages).map { (app, alsoFrom) ->
+                val installed = InstalledApps.find(application, app, packages)
                 AppRow(
                     app,
                     installed,
                     InstalledApps.status(app, installed),
-                    catalog.betaVersions[app.fullName]
+                    catalog.betaVersions[app.fullName],
+                    alsoFrom
                 )
             },
             checkedAt = catalog.checkedAt,
@@ -110,6 +114,15 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setIncludeBeta(include: Boolean) = repository.setIncludeBeta(include)
+
+    /** The other catalogues whose apps are shown, by their source names. */
+    val catalogues: StateFlow<Set<String>> = repository.catalogues
+
+    fun setCatalogue(source: String, include: Boolean) {
+        repository.setCatalogue(source, include)
+        // A catalogue's list is downloaded only once it is wanted.
+        if (include) refresh()
+    }
 
     private val _sources = MutableStateFlow(SourcesUiState(sources = repository.sources.list()))
     val sources: StateFlow<SourcesUiState> = _sources

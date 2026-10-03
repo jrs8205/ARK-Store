@@ -1,0 +1,1 @@
+Uutta asetuksissa: kytkimet IzzyOnDroid- ja F-Droid-luetteloille GitHubista löydettyjen sovellusten rinnalle. Usean lähteen tarjoama sovellus näkyy listalla kerran, ja asennettu sovellus päivittyy edelleen sieltä, mistä se asennettiin.

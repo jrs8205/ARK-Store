@@ -1,0 +1,1 @@
+An app whose name differs from its GitHub repository is now shown together with the repository, and the app details always name the repository. A new release no longer borrows its name from another app of the same repository.

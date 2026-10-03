@@ -1,0 +1,1 @@
+Muiden luetteloiden sovellukset ovat listassa heti, kun kauppa käynnistyy. IzzyOnDroidista ja F-Droidista tarjotaan uusin versio, joka toimii laitteessa ja sopii asennetun sovelluksen allekirjoitusavaimeen. Korjauksia luetteloiden lukemiseen, latauksiin ja latausilmoitukseen.

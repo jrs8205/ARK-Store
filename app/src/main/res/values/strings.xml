@@ -63,6 +63,7 @@
         <item quantity="other">%d downloads</item>
     </plurals>
     <string name="detail_developer">Developer</string>
+    <string name="detail_repository">Repository</string>
     <string name="detail_stars">Stars</string>
     <string name="detail_downloads">Downloads</string>
     <string name="sources_title">Sources</string>
@@ -142,11 +143,31 @@
         <item quantity="other">Downloading %d apps</item>
     </plurals>
     <string name="download_notification_installing">Installing</string>
-    <string name="badge_auto">Found automatically</string>
-    <string name="auto_title">More apps</string>
-    <string name="auto_switch">Show automatically found apps</string>
-    <string name="auto_description">Also list open-source Android apps found by searching GitHub. Their developers have not published them to ARK-Store, and nobody has checked them. Only actively developed apps with a recent release are included.</string>
+    <string name="badge_auto">Found on GitHub</string>
+    <string name="auto_switch">Found on GitHub</string>
+    <string name="auto_description">Open-source apps found by searching GitHub. Their developers have not published them to ARK-Store, and nobody has checked them. Only actively developed apps with a recent release are included.</string>
     <string name="auto_detail">This app was found by searching GitHub. Its developer has not published it to ARK-Store.</string>
+    <string name="origins_title">Where apps come from</string>
+    <string name="origin_published">Published to ARK-Store</string>
+    <string name="origin_published_description">Apps their developers have added to ARK-Store themselves, on GitHub, Codeberg or GitLab. Always shown.</string>
+    <string name="source_github" translatable="false">GitHub</string>
+    <string name="source_codeberg" translatable="false">Codeberg</string>
+    <string name="source_gitlab" translatable="false">GitLab</string>
+    <string name="gitlab_switch">Found on GitLab</string>
+    <string name="gitlab_description">Open-source apps found by searching GitLab, another code hosting service. Few projects there attach their apps to releases, so this list is short. Nobody has checked these apps.</string>
+    <string name="auto_detail_gitlab">This app was found by searching GitLab. Its developer has not published it to ARK-Store.</string>
+    <string name="source_izzy" translatable="false">IzzyOnDroid</string>
+    <string name="codeberg_switch">Found on Codeberg</string>
+    <string name="codeberg_description">Open-source apps found by searching Codeberg, a code hosting service like GitHub. Their developers have not published them to ARK-Store, and nobody has checked them.</string>
+    <string name="auto_detail_codeberg">This app was found by searching Codeberg. Its developer has not published it to ARK-Store.</string>
+    <string name="source_fdroid" translatable="false">F-Droid</string>
+    <string name="izzy_description">A separately maintained catalogue of open-source apps. It passes on the developers\' own files after scanning them.</string>
+    <string name="fdroid_description">The best-known catalogue of open-source apps. F-Droid builds the apps from their source itself and signs most of them with its own key, so an app installed from F-Droid is also updated from F-Droid.</string>
+    <string name="origins_note">An app offered by several of these is listed once: from its developer when possible, then from IzzyOnDroid, then from F-Droid. An installed app stays with the place whose files are signed the way it is.</string>
+    <string name="catalogue_detail">This app is offered through the %1$s catalogue. Its developer has not published it to ARK-Store.</string>
+    <string name="detail_source">Source</string>
+    <string name="detail_also_from">Also available from</string>
+    <string name="detail_warnings">Warnings</string>
     <string name="install_ready_title">%1$s is ready to install</string>
     <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>

@@ -1,0 +1,1 @@
+Myös GitLabissa julkaistut sovellukset ovat nyt mukana: kehittäjä voi julkaista sieltä arkstore-aiheella, ja asetusten uusi kytkin näyttää GitLabista haulla löydetyt sovellukset.

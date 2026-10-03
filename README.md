@@ -35,6 +35,27 @@ whenever you publish a release. To take the app out of the store, remove the top
 The first two points are requirements: a repository that is private or has no recognised
 license is never listed, with or without the topic.
 
+### Publishing from Codeberg or GitLab
+
+The same four steps work for a repository on [Codeberg](https://codeberg.org) or a project
+on [GitLab](https://gitlab.com): make it public, give it a license, attach the APK to a
+release and add the topic `arkstore`. Apps published this way are shown by ARK-Store 1.4 and
+later, not by older versions. A few things differ:
+
+- **Codeberg** does not say which license a repository has, so the store recognises it from
+  the `LICENSE` or `COPYING` file in the repository's root. The file has to hold the full,
+  unchanged text of one of the common licenses (GPL, AGPL, LGPL, Apache, MIT, BSD, MPL, ISC,
+  EUPL, Unlicense, CC0), with nothing before it but a title and copyright lines. After a
+  license that ends with "END OF TERMS AND CONDITIONS" the file may go on, for instance with
+  a notice of its own; after the others only the licenses of parts the app includes may
+  follow. A file that only names a license, changes its terms or adds conditions of its own
+  is not recognised, and the repository is left out.
+- **GitLab** attaches files to a release as links. The APK must be a link that points
+  straight at a file kept on gitlab.com itself: a package or an upload of a project, a file
+  of a repository or a pipeline's artifact. A link to another site, or one that is passed
+  on to another address, is not offered. GitLab has no prereleases, so beta versions cannot
+  be published from there, and it does not count downloads.
+
 ### How quickly it shows up
 
 - **A newly tagged app**: usually within a few hours. The list of published apps is rebuilt
@@ -102,7 +123,11 @@ None of these are required, but they make your app look better in the store.
 - **Safe updates**: the app warns before installing when the installed app is signed with a
   different key.
 - **Beta versions**: optionally get a developer's prereleases as updates.
-- **No account**: the app talks only to GitHub, without signing in.
+- **More apps when you want them**: switches in the settings add apps found by searching
+  GitHub, Codeberg and GitLab, and the catalogues of IzzyOnDroid and F-Droid. An app offered
+  by several of them is listed once.
+- **No account**: nothing to sign in to. The app talks to GitHub and, for the files of
+  their apps, to Codeberg, GitLab, IzzyOnDroid and F-Droid.
 - **Accessible**: screen reader labels, text that scales, text contrast of at least 7:1
   (WCAG AAA), and haptic feedback that follows the system setting.
 - **English and Finnish.**
@@ -110,9 +135,9 @@ None of these are required, but they make your app look better in the store.
 ## Automatically found apps
 
 Besides the apps developers publish with the topic, the index workflow searches GitHub for
-other open-source Android apps. They are shown only to users who turn on **Show automatically
-found apps** in the settings, and each carries a label saying that its developer did not
-publish it to the store. Nobody has checked these apps.
+other open-source Android apps. They are shown only to users who turn on **Found on GitHub**
+in the settings, and each carries a label saying so: its developer did not publish it to
+the store. Nobody has checked these apps.
 
 The search looks for repositories that carry the topic `android` and are written in Kotlin,
 Java or Dart, and for repositories that carry the topic `android-app`. To keep the list
@@ -150,6 +175,53 @@ under Other.
 The list is kept in a file of its own, `auto.json` next to the index, which the app downloads
 only while the setting is on. Beta versions of these apps are not offered.
 
+### Found on Codeberg
+
+A second switch, **Found on Codeberg**, does the same for Codeberg, a code hosting service
+like GitHub. Codeberg is far smaller, so less is asked: the repository carries the topic
+`android` or `android-app`, has at least 5 stars, has been active within the last 30 days,
+has a license the store recognises from its license file, and has a full release, at most
+180 days old, with an APK attached. These apps are listed in `codeberg.json` next to the
+index. A repository there that only mirrors another one is skipped.
+
+A third switch, **Found on GitLab**, does the same for gitlab.com with the same limits. Few
+projects there attach an APK to their releases, so that list is short: a handful of apps.
+They are listed in `gitlab.json`.
+
+## Other catalogues
+
+Two established catalogues of open-source Android apps can be turned on in the settings, each
+with a switch of its own:
+
+- **IzzyOnDroid** passes on the APKs developers release themselves, after scanning them.
+- **F-Droid** builds apps from their source and signs most of them with its own key.
+
+The index workflow reads each catalogue's own index, checks it against the checksum the
+catalogue publishes, and boils it down to one file per catalogue (`izzy.json`, `fdroid.json`
+next to the index), which the app downloads only while that switch is on. The APKs are
+downloaded from the catalogue itself, and the app checks every file against the checksum the
+catalogue gives for it before installing. Of an app's versions the newest one the device
+can run is offered, and for an app that is already installed the newest one signed with the
+same key. Apps of a catalogue carry its name as a label, and their details show what the
+catalogue warns about in that version, such as tracking or non-free network services. Stars
+and download counts are not shown for them, since the catalogues do not tell.
+
+### The same app from several places
+
+Many apps are in more than one of these places. The store lists a package once:
+
+1. from its developer, when they have published it with the `arkstore` topic,
+2. else from the developer's releases as found by searching GitHub, Codeberg or GitLab; when
+   more than one has it, as with a project and its mirror, the one with the newer version,
+3. else from IzzyOnDroid,
+4. else from F-Droid.
+
+That is also the order in which new versions tend to arrive. An installed app is the
+exception: Android updates an app only with a file signed with the same key, so an installed
+app stays with the place whose files are signed the way it is. An app installed from F-Droid
+keeps being updated from F-Droid, even when its developer also releases it on GitHub. The
+details of an app name the other places that offer it.
+
 ## Why only public and licensed apps
 
 Those two requirements are the store's only gatekeeping, and they are checked automatically
@@ -158,8 +230,9 @@ from. An open-source license means the code may actually be used, studied and sh
 Repositories that are private, or public but unlicensed, are never listed, and a repository
 that loses its license disappears from the store.
 
-ARK-Store does not review, build or host apps. It shows what developers publish on GitHub
-and installs the files they attached to their releases. Every app shows its developer, and
+ARK-Store does not review, build or host apps. It shows what developers publish on GitHub,
+and what the catalogues that are turned on offer, and installs those files. The catalogues
+list only open-source apps as well. Every app shows where it comes from and who made it, and
 its source is one tap away; install apps from developers you trust.
 
 ## How it works
@@ -170,8 +243,10 @@ its source is one tap away; install apps from developers you trust.
    archived repositories and repositories without a recognised license are dropped.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
-3. The package name and version are read from each APK's own manifest. Only the zip directory
-   and the manifest are fetched, a few kilobytes instead of the whole file.
+3. The package name and version are read from each APK's own manifest, and the app's name
+   from its resource table. Only the zip directory and those two files are fetched, not the
+   whole APK. An app is listed under that name; if it cannot be read, the repository's name
+   is shown instead.
 4. The result is written to one file, `index.json` on the `index` branch.
 5. The app downloads that file and compares it with what is installed on the device.
 
@@ -197,7 +272,11 @@ The store topic, the index location, the account that is a source on every new i
 and the store's own repository are the `STORE_TOPIC`, `INDEX_URL`, `GITHUB_OWNER` and
 `STORE_REPO` build config fields in `app/build.gradle.kts`; `AUTO_INDEX_URL` is where the
 automatically found apps are listed. The index is built with
-`python3 tools/build_index.py --output index.json --auto-output auto.json`.
+`python3 tools/build_index.py --output index.json --auto-output auto.json`, and the lists of
+the other catalogues, whose addresses are `IZZY_INDEX_URL` and `FDROID_INDEX_URL`, with
+`python3 tools/build_repos.py --output-dir .`. The lists of apps on Codeberg and
+GitLab (`FORGE_INDEX_URL` for those published with the topic, `CODEBERG_INDEX_URL` and
+`GITLAB_INDEX_URL` for those found by searching) are built with `python3 tools/build_forge.py --output-dir .`.
 
 Release signing is read from a `keystore.properties` file in the project root, which is never
 committed:

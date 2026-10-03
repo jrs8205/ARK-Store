@@ -1,7 +1,9 @@
 package org.jarsi.arkstore.data
 
 import android.content.Context
+import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
 import java.security.MessageDigest
@@ -32,21 +34,67 @@ object InstalledApps {
     private const val PREFS_CONFLICTS = "signature_conflicts"
     private const val PREFS_BETAS = "installed_betas"
 
-    /** The installed version of [app], seen against the release the store offers of it. */
-    fun find(context: Context, app: StoreApp): InstalledVersion? {
+    /**
+     * Every installed package, read in one go. Asking the system about each app of a
+     * catalogue of thousands, one by one, takes seconds.
+     */
+    fun snapshot(context: Context): Map<String, PackageInfo> = try {
+        context.packageManager.getInstalledPackages(0).associateBy { it.packageName }
+    } catch (_: RuntimeException) {
+        // The list can be too large to hand over at once; then nothing shows as installed
+        // until the next look.
+        emptyMap()
+    }
+
+    /**
+     * The installed version of [app], seen against the release the store offers of it.
+     * [installed] is a [snapshot] to look the package up in rather than asking the system.
+     */
+    fun find(
+        context: Context,
+        app: StoreApp,
+        installed: Map<String, PackageInfo>? = null
+    ): InstalledVersion? {
         val packageName = app.packageName ?: return null
-        return try {
-            val info = context.packageManager.getPackageInfo(packageName, 0)
-            val versionCode = PackageInfoCompat.getLongVersionCode(info)
-            InstalledVersion(
-                versionCode,
-                info.versionName,
-                otherSigner = hasConflict(context, app, packageName),
-                beta = betas(context).getLong(packageName, -1) == versionCode
-            )
-        } catch (_: PackageManager.NameNotFoundException) {
-            null
+        val info = if (installed != null) {
+            installed[packageName] ?: return null
+        } else {
+            try {
+                context.packageManager.getPackageInfo(packageName, 0)
+            } catch (_: PackageManager.NameNotFoundException) {
+                return null
+            }
         }
+        val versionCode = PackageInfoCompat.getLongVersionCode(info)
+        return InstalledVersion(
+            versionCode,
+            info.versionName,
+            otherSigner = hasConflict(context, app, packageName) || signedOtherwise(context, app, packageName),
+            beta = betas(context).getLong(packageName, -1) == versionCode
+        )
+    }
+
+    /**
+     * Whether the installed [packageName] is known to be signed with another key than the
+     * file offered as [app]. A catalogue tells how its files are signed, so this is known
+     * without downloading anything.
+     */
+    private fun signedOtherwise(context: Context, app: StoreApp, packageName: String): Boolean {
+        val offered = app.signer ?: return false
+        val installed = presentSigners(context.packageManager, packageName) ?: return false
+        return offered !in installed
+    }
+
+    /**
+     * [apps] as the list shows them: the same package offered by several places is listed
+     * once, see [CatalogRules.merged]. [installed] is a [snapshot].
+     */
+    internal fun merged(
+        context: Context,
+        apps: List<StoreApp>,
+        installed: Map<String, PackageInfo> = snapshot(context)
+    ): List<CatalogRules.Merged> = CatalogRules.merged(apps) { packageName ->
+        if (packageName in installed) presentSigners(context.packageManager, packageName) else null
     }
 
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
@@ -56,18 +104,67 @@ object InstalledApps {
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
-    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> = apps.filter {
-        status(it, find(context, it)) == AppStatus.UPDATE_AVAILABLE
+    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
+        val installed = snapshot(context)
+        return merged(context, apps, installed).map { it.app }.filter {
+            status(it, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
+        }
     }
 
     /**
      * The certificates the installed [packageName] is signed with, as digests, or null when it
-     * is not installed or they cannot be read.
+     * is not installed or they cannot be read. For an app whose signing key has been replaced
+     * along the way this is the first key it had, which stays the same as long as the same
+     * line of keys is installed: a conflict remembered is tied to it.
      */
     @Suppress("DEPRECATION")
     fun signers(context: Context, packageName: String): Set<String>? = try {
         context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
             .signatures?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    /**
+     * Every certificate the installed [packageName] is or has been signed with, as digests,
+     * or null when it is not installed or they cannot be read. A downloaded file that is
+     * signed with any of them may update the app, see [CatalogRules.mayUpdate]: a file that
+     * carries the history of its keys reports the first of them, one that does not reports
+     * the present one, and Android takes both.
+     */
+    @Suppress("DEPRECATION")
+    fun keysHeld(packages: PackageManager, packageName: String): Set<String>? = try {
+        val keys = mutableSetOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signing = packages.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo
+            // The history is reported for an app with a single signer only; it ends with the
+            // present key.
+            signing?.signingCertificateHistory?.mapTo(keys) { digest(it.toByteArray()) }
+            signing?.apkContentsSigners?.mapTo(keys) { digest(it.toByteArray()) }
+        }
+        packages.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+            .signatures?.mapTo(keys) { digest(it.toByteArray()) }
+        keys.takeIf { it.isNotEmpty() }
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    /**
+     * The certificates the installed [packageName] is signed with now, as digests, or null
+     * when it is not installed or they cannot be read. A catalogue tells the key each of its
+     * files is signed with, and it is the present key of the installed app that such a file
+     * has to match: a key the app has had before and given up does not update it.
+     */
+    fun presentSigners(packages: PackageManager, packageName: String): Set<String>? = try {
+        val certificates = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            packages.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packages.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+        }
+        certificates?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
     } catch (_: PackageManager.NameNotFoundException) {
         null
     }
