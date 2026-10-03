@@ -166,11 +166,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
 
     // With materials on, the screen itself is a sheet of brushed metal, and the bar and the
     // list lie on it; see Surfaces.
-    CompositionLocalProvider(LocalMaterial provides (material && Surfaces.available)) {
+    CompositionLocalProvider(LocalMaterial provides (material && Surfaces.ready(context))) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f)
+            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
     ) {
     Scaffold(
         containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.background,
@@ -1243,12 +1243,18 @@ private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMateri
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
-        if (Surfaces.available) {
+        if (Surfaces.supported) {
+            // A device whose graphics driver could not draw the materials keeps the flat
+            // colours, and the switch says so rather than disappearing.
+            val unavailable = Surfaces.failed(LocalContext.current)
             SettingSwitch(
                 heading = stringResource(R.string.appearance_title),
                 label = stringResource(R.string.material_switch),
-                description = stringResource(R.string.material_description),
-                checked = material,
+                description = stringResource(
+                    if (unavailable) R.string.material_unavailable else R.string.material_description
+                ),
+                checked = material && !unavailable,
+                enabled = !unavailable,
                 onCheckedChange = onMaterialChange
             )
         }
@@ -1395,7 +1401,8 @@ private fun SettingSwitch(
     label: String,
     description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     val haptics = LocalHapticFeedback.current
     if (heading != null) {
@@ -1414,6 +1421,7 @@ private fun SettingSwitch(
             .fillMaxWidth()
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = {
                     haptics.performHapticFeedback(
@@ -1433,7 +1441,7 @@ private fun SettingSwitch(
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 

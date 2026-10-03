@@ -123,6 +123,7 @@
     <string name="appearance_title">Appearance</string>
     <string name="material_switch">Material surfaces (experimental)</string>
     <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. Needs Android 13.</string>
+    <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>
     <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>

@@ -118,6 +118,7 @@
     <string name="appearance_title">Ulkoasu</string>
     <string name="material_switch">Materiaalipinnat (kokeellinen)</string>
     <string name="material_description">Piirtää näytön ja kaiken sillä olevan ylhäältä valaistuna harjattuna metallina näytönohjaimella. Vaatii Android 13:n.</string>
+    <string name="material_unavailable">Ei saatavilla tällä laitteella: näytönohjaimen ajuri ei pystynyt piirtämään pintoja, joten tasaiset värit pysyvät.</string>
     <string name="action_cancel">Peruuta</string>
     <string name="beta_return_note">Kun tämä on pois päältä, tarjolla ovat taas vakaat versiot. Jo asennettu beta pysyy, kunnes seuraava vakaa versio korvaa sen. Jos haluat palata aiemmin, avaa sovelluksen tiedot.</string>
     <string name="newer_installed_note">Uudempi beta on asennettuna. Seuraava vakaa versio korvaa sen.</string>
