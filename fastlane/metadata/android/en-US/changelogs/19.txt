@@ -1,0 +1,1 @@
+An experimental setting draws the whole screen as brushed metal lit from above, computed by the graphics processor (Android 13). The place chips are always shown, with a choice of all. The details say where an installed app came from and whether it can be updated from here. Fixes to spacing and to the search field.

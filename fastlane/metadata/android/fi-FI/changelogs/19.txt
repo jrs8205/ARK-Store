@@ -1,0 +1,1 @@
+Kokeellinen asetus piirtää koko näytön ylhäältä valaistuna harjattuna metallina näytönohjaimella (Android 13). Paikkavalinnat näytetään aina, ja niissä on myös kaikki-vaihtoehto. Tiedot kertovat, mistä asennettu sovellus on peräisin ja voiko sen päivittää täältä. Korjauksia välistyksiin ja hakukenttään.

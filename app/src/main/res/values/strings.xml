@@ -122,7 +122,7 @@
     <string name="settings_title">Settings</string>
     <string name="appearance_title">Appearance</string>
     <string name="material_switch">Material surfaces (experimental)</string>
-    <string name="material_description">Draws the cards as brushed metal lit from above, computed by the graphics processor. Needs Android 13.</string>
+    <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. Needs Android 13.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>
     <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>

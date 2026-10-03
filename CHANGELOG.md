@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.5.0-beta.2
+
+- An experiment behind a setting: with "Material surfaces" on, the screen and everything on
+  it, the search field, the chips, the buttons, the badges, the cards and the sheets, are
+  drawn as brushed metal lit from above. The graphics processor computes the light, the
+  grain and the bevelled edge for every pixel, so the edge follows each shape. Needs Android 13
+- The place chips are always shown, in a tone of their own and with a choice of all places;
+  the chip of a place that is off in the settings turns it on
+- The details say where an installed app came from, Google Play, F-Droid, Aurora Store,
+  ARK-Store or another app, and whether it is signed with the same key as the version offered
+  here, so that ARK-Store can update it
+- The index names the key each file is signed with, read from the APK's signing block, and
+  only when every signature scheme in the block agrees
+- The lists of IzzyOnDroid and F-Droid are built again once so that their icons appear
+- More room between the search field, the chips and the list, and the search field's
+  background lines up with its outline
+
 ## 1.5.0-beta.1
 
 - Every app is shown with its own icon: the index reads it from the APK, as an image or, for
