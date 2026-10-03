@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.toArgb
@@ -37,9 +38,11 @@ object Surfaces {
         get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
 
     /**
-     * The metal, in AGSL. "base" is the colour of the flat surface it replaces: the text on
-     * top is set against that colour, and the material stays within a few percent of it, so
-     * that the text keeps its contrast.
+     * The metal, in AGSL. "base" is the colour of the flat surface it replaces, and the text
+     * on top is set against that colour. The shading may therefore move the colour only a
+     * little where text can be: a dark surface, which carries light text, may brighten by a
+     * few percent, a light one, which carries dark text, may darken by a few percent. The
+     * bevel band along the edge carries no text and may shine freely.
      *
      * The surface is lit as a brushed metal is: a normal is made up for every pixel (flat in
      * the middle, doming gently, and turning over along the bevel, which is found from the
@@ -85,12 +88,15 @@ object Surfaces {
             float HT = dot(H, T) / 0.55;
             float HB = dot(H, B) / 0.18;
             float ward = sqrt(LN / VN) * exp(-2.0 * (HT * HT + HB * HB) / (1.0 + HN));
-            // Most of the colour comes through whatever the light does; the shading moves it
-            // by a few percent only, and the edge brightens a little where it turns away.
             float diffuse = 0.94 + 0.09 * LN;
             float fresnel = pow(1.0 - VN, 3.0) * 0.12 * rim;
             float streak = (hash(float2(floor(p.y), floor(p.x / 64.0))) - 0.5) * 0.06 * grain;
-            half3 color = base.rgb * (diffuse + streak + fresnel) + half3(ward * 0.14);
+            half3 shaded = base.rgb * (diffuse + streak + fresnel) + half3(ward * 0.14);
+            // Within reach of the text, the colour stays where the text keeps its contrast.
+            float lum = dot(base.rgb, half3(0.2126, 0.7152, 0.0722));
+            float up = mix(lum > 0.5 ? 0.2 : 0.02, 0.25, rim);
+            float down = mix(lum > 0.5 ? 0.05 : 0.2, 0.25, rim);
+            half3 color = base.rgb + clamp(shaded - base.rgb, half3(-down), half3(up));
             return half4(color, 1.0);
         }
     """
@@ -100,27 +106,43 @@ object Surfaces {
  * Draws the surface as brushed metal of the colour [base] with the given [relief], when
  * materials are on and the device can draw them; otherwise draws nothing, and the content's
  * own background shows. [radius] is the corner radius of the surface's shape, null for a pill;
- * the bevel follows it. [grain] is how strongly the brushing shows.
+ * the bevel follows it. [grain] is how strongly the brushing shows. With [reachBelow] the
+ * metal is drawn that far below the surface's own bounds as well, for a surface at the top
+ * of something larger that clips it to its shape.
  */
 @Composable
-fun Modifier.material(base: Color, relief: Relief = Relief.PLATE, radius: Dp? = 12.dp, grain: Float = 1f): Modifier {
+fun Modifier.material(
+    base: Color,
+    relief: Relief = Relief.PLATE,
+    radius: Dp? = 12.dp,
+    grain: Float = 1f,
+    reachBelow: Dp = 0.dp
+): Modifier {
     if (!LocalMaterial.current || !Surfaces.available) return this
     val density = LocalDensity.current
     val radiusPx = radius?.let { with(density) { it.toPx() } }
     val bevelPx = with(density) { 3.dp.toPx() }
-    return then(Modifier.metalSurface(base, relief, radiusPx, bevelPx, grain))
+    val reachPx = with(density) { reachBelow.toPx() }
+    return then(Modifier.metalSurface(base, relief, radiusPx, bevelPx, grain, reachPx))
 }
 
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-private fun Modifier.metalSurface(base: Color, relief: Relief, radius: Float?, bevel: Float, grain: Float): Modifier =
-    drawWithCache {
-        val shader = RuntimeShader(Surfaces.METAL)
-        shader.setFloatUniform("resolution", size.width, size.height)
-        shader.setFloatUniform("radius", radius ?: (minOf(size.width, size.height) / 2f))
-        shader.setFloatUniform("relief", relief.amount)
-        shader.setFloatUniform("bevel", bevel)
-        shader.setFloatUniform("grain", grain)
-        shader.setColorUniform("base", base.toArgb())
-        val brush = ShaderBrush(shader)
-        onDrawBehind { drawRect(brush) }
-    }
+private fun Modifier.metalSurface(
+    base: Color,
+    relief: Relief,
+    radius: Float?,
+    bevel: Float,
+    grain: Float,
+    reach: Float
+): Modifier = drawWithCache {
+    val height = size.height + reach
+    val shader = RuntimeShader(Surfaces.METAL)
+    shader.setFloatUniform("resolution", size.width, height)
+    shader.setFloatUniform("radius", radius ?: (minOf(size.width, height) / 2f))
+    shader.setFloatUniform("relief", relief.amount)
+    shader.setFloatUniform("bevel", bevel)
+    shader.setFloatUniform("grain", grain)
+    shader.setColorUniform("base", base.toArgb())
+    val brush = ShaderBrush(shader)
+    onDrawBehind { drawRect(brush, size = Size(size.width, height)) }
+}

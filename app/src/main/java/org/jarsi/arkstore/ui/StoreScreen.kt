@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,7 +49,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -78,6 +79,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -87,6 +89,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -98,6 +101,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -481,18 +485,20 @@ private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable Column
         containerColor = if (metal) Color.Transparent else color,
         // The text is set against the plate's colour, whether the container shows it or not.
         contentColor = contentColorFor(color),
-        // The handle goes on the plate, so that the plate reaches the top of the sheet.
-        dragHandle = if (metal) null else ({ BottomSheetDefaults.DragHandle() })
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .material(color, Relief.PLATE, radius = 28.dp)
-        ) {
-            if (metal) BottomSheetDefaults.DragHandle(modifier = Modifier.align(Alignment.CenterHorizontally))
-            content()
-        }
-    }
+        // The handle keeps the tap and the accessibility actions Material puts around this
+        // slot. The plate is drawn from here down behind the whole sheet, which clips it to
+        // its shape, so that the plate reaches the top of the sheet in one piece.
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .material(color, Relief.PLATE, radius = 28.dp, reachBelow = 4000.dp)
+            ) {
+                BottomSheetDefaults.DragHandle(modifier = Modifier.align(Alignment.Center))
+            }
+        },
+        content = content
+    )
 }
 
 private fun LazyListScope.section(
@@ -587,9 +593,11 @@ private fun AppCard(
         // The fill alone is too close to the background to show where a card ends in bright
         // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
         border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (metal) 6.dp else 0.dp),
+        // A metal plate casts a shadow; it is drawn here, outside the clip that bounds the
+        // touch feedback, where the card's own elevation shadow would be clipped away.
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (metal) Modifier.shadow(6.dp, CardDefaults.shape) else Modifier)
             .clip(CardDefaults.shape)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
@@ -1037,7 +1045,11 @@ private fun Badge(text: String) {
     )
 }
 
-/** A filled button; raised metal of the primary colour when materials are on. */
+/**
+ * A filled button; raised metal of the primary colour when materials are on. The metal is
+ * drawn inside the button's own surface, which keeps its size: the touch target Material
+ * adds around it stays clear.
+ */
 @Composable
 private fun StoreButton(
     onClick: () -> Unit,
@@ -1047,16 +1059,16 @@ private fun StoreButton(
     val metal = LocalMaterial.current
     Button(
         onClick = onClick,
-        modifier = modifier
-            .clip(ButtonDefaults.shape)
-            .material(MaterialTheme.colorScheme.primary, Relief.RAISED, radius = null, grain = 0.5f),
+        modifier = modifier,
         colors = if (metal) {
             ButtonDefaults.buttonColors(containerColor = Color.Transparent)
         } else {
             ButtonDefaults.buttonColors()
         },
-        content = content
-    )
+        contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
+    ) {
+        ButtonFace(MaterialTheme.colorScheme.primary, metal, content)
+    }
 }
 
 /** An outlined button; raised metal of the surface's colour when materials are on. */
@@ -1069,10 +1081,28 @@ private fun StoreOutlinedButton(
     val metal = LocalMaterial.current
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier
-            .clip(ButtonDefaults.outlinedShape)
-            .material(MaterialTheme.colorScheme.surfaceContainerHigh, Relief.RAISED, radius = null, grain = 0.5f),
+        modifier = modifier,
         border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = true),
+        contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
+    ) {
+        ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
+    }
+}
+
+/** The face of a button: its content, on metal of the colour [base] when [metal]. */
+@Composable
+private fun RowScope.ButtonFace(base: Color, metal: Boolean, content: @Composable RowScope.() -> Unit) {
+    if (!metal) {
+        content()
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .defaultMinSize(minWidth = ButtonDefaults.MinWidth, minHeight = ButtonDefaults.MinHeight)
+            .material(base, Relief.RAISED, radius = null, grain = 0.5f)
+            .padding(ButtonDefaults.ContentPadding),
         content = content
     )
 }
@@ -1097,39 +1127,34 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, to
         ChipTone.CATEGORY -> if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
         ChipTone.PLACE -> if (selected) scheme.onTertiary else scheme.onTertiaryContainer
     }
-    FilterChip(
+    // Built on the selectable surface a filter chip is built on, so that the metal can be
+    // drawn inside the chip's own 32 dp surface: the touch target around it stays clear.
+    Surface(
         selected = selected,
         onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
             onClick()
         },
-        modifier = Modifier
-            .clip(FilterChipDefaults.shape)
-            .material(container, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = if (metal) Color.Transparent else container,
-            labelColor = content,
-            iconColor = content,
-            selectedContainerColor = if (metal) Color.Transparent else container,
-            selectedLabelColor = content,
-            selectedLeadingIconColor = content
-        ),
-        border = if (metal) {
-            null
-        } else {
-            FilterChipDefaults.filterChipBorder(
-                enabled = true,
-                selected = selected,
-                borderColor = MaterialTheme.colorScheme.outline
-            )
-        },
-        leadingIcon = if (selected) {
-            { SelectedMark() }
-        } else {
-            null
-        },
-        label = { Text(label) }
-    )
+        shape = FilterChipDefaults.shape,
+        color = if (metal) Color.Transparent else container,
+        contentColor = content,
+        border = if (metal || selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.semantics { role = Role.Checkbox }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .material(container, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f)
+                .defaultMinSize(minHeight = FilterChipDefaults.Height)
+                .padding(start = if (selected) 8.dp else 16.dp, end = 16.dp)
+        ) {
+            if (selected) {
+                SelectedMark()
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
 }
 
 @Composable
@@ -1538,12 +1563,14 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
     val haptics = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     Box(modifier = modifier) {
-    // Pressed into the surface, with the outline as its lip. The field keeps 8 dp above the
-    // outline for the floating label, so the metal starts where the outline does.
+    // Pressed into the surface, with the outline as its lip. The field keeps half a line of
+    // small text above the outline for the floating label, whatever the font size, so the
+    // metal starts where the outline does.
+    val labelRoom = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() / 2 }
     Box(
         modifier = Modifier
             .matchParentSize()
-            .padding(top = 8.dp)
+            .padding(top = labelRoom)
             .clip(RoundedCornerShape(28.dp))
             .material(MaterialTheme.colorScheme.surfaceContainerLow, Relief.RECESSED, radius = 28.dp, grain = 0.4f)
     )
