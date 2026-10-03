@@ -134,4 +134,6 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(libs.junit)
+    // Android's own org.json is not there in unit tests; this stands in for it.
+    testImplementation(libs.json)
 }

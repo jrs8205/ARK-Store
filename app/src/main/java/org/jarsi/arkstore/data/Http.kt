@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.data
 
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -82,6 +83,29 @@ object Http {
             val bytes = connection.inputStream.use { it.readBytes() }
             if (bytes.size != length) throw IOException("Short range response")
             return bytes
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** Fetches a small document, such as an icon, refusing one of more than [limit] bytes. */
+    @Throws(IOException::class)
+    fun getBytes(url: String, limit: Int): ByteArray {
+        val connection = open(url)
+        try {
+            if (connection.responseCode != 200) throw HttpStatusException(connection.responseCode)
+            if (connection.contentLengthLong > limit) throw IOException("Too large: $url")
+            val output = ByteArrayOutputStream()
+            connection.inputStream.use { input ->
+                val buffer = ByteArray(16 * 1024)
+                while (true) {
+                    val n = input.read(buffer)
+                    if (n < 0) break
+                    if (output.size() + n > limit) throw IOException("Too large: $url")
+                    output.write(buffer, 0, n)
+                }
+            }
+            return output.toByteArray()
         } finally {
             connection.disconnect()
         }

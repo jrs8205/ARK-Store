@@ -665,7 +665,8 @@ class CatalogRepository private constructor(context: Context) {
             // The warnings belong to a version, and the one picked for this device need not
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.
-            antiFeatures = list(if (apk.has("antiFeatures")) apk else json, "antiFeatures")
+            antiFeatures = list(if (apk.has("antiFeatures")) apk else json, "antiFeatures"),
+            icon = AppIcon.of(json.opt("icon"))
         )
     }
 
@@ -745,7 +746,8 @@ class CatalogRepository private constructor(context: Context) {
             versionCode = apk.getLong("versionCode"),
             versionName = if (apk.isNull("versionName")) null else apk.getString("versionName"),
             label = if (apk.isNull("label")) null else apk.getString("label"),
-            allDownloads = allDownloads
+            allDownloads = allDownloads,
+            icon = AppIcon.of(apk.opt("icon"))
         )
     }
 

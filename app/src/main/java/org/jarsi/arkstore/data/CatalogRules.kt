@@ -175,10 +175,30 @@ internal object CatalogRules {
                 listOf(chosen)
             }
             val others = inLine.filter { it !in kept }.map { it.source }.distinct()
-            kept.forEach { result += Merged(it, others) }
+            // The icon comes from any place that has one: the app is the same wherever it
+            // comes from, and few places tell its icon.
+            val icon = inLine.firstNotNullOfOrNull { it.icon }
+            kept.forEach { result += Merged(if (it.icon == null && icon != null) it.copy(icon = icon) else it, others) }
         }
         return result
     }
+
+    /** The places apps are offered from, in the order their chips are shown. */
+    val PLACES = listOf(
+        StoreApp.SOURCE_GITHUB, StoreApp.SOURCE_CODEBERG, StoreApp.SOURCE_GITLAB,
+        StoreApp.SOURCE_IZZY, StoreApp.SOURCE_FDROID
+    )
+
+    /** Whether [app] is offered from [place]: shown from it, or [alsoFrom] there as well. */
+    fun offeredFrom(app: StoreApp, alsoFrom: List<String>, place: String): Boolean =
+        app.source == place || place in alsoFrom
+
+    /**
+     * What an app without an icon is shown by: the first letter or digit of its [title]. A
+     * title may begin with a symbol or an emoji, which says nothing on its own.
+     */
+    fun initial(title: String): String =
+        title.firstOrNull { it.isLetterOrDigit() }?.uppercaseChar()?.toString() ?: ""
 
     /**
      * The name for a release whose own is not known, taken from what was listed [before]: an

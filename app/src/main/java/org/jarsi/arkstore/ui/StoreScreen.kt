@@ -7,7 +7,6 @@ import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -33,7 +32,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -79,7 +77,6 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -95,14 +92,12 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -117,6 +112,7 @@ import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
@@ -134,6 +130,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var place by rememberSaveable { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -201,11 +198,18 @@ fun StoreScreen(viewModel: StoreViewModel) {
             )
         }
     ) { padding ->
-        // A category that no longer has apps (a source was removed) must not stay selected.
+        // A category that no longer has apps (a source was removed) must not stay selected,
+        // and neither may a place.
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
+        val places = CatalogRules.PLACES.filter { place ->
+            state.rows.any { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
+        }
+        val activePlace = place?.takeIf { it in places }
         val visible = state.rows.filter { row ->
-            (activeCategory == null || row.app.category == activeCategory) && matches(row, query)
+            (activeCategory == null || row.app.category == activeCategory) &&
+                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
+                matches(row, query)
         }.sortedWith(sortOrder.comparator)
         val pullState = rememberPullToRefreshState()
         PullThresholdHaptics(pullState)
@@ -231,6 +235,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     total = state.rows.size,
                     selected = activeCategory,
                     onSelect = { category = it }
+                )
+                PlaceChips(
+                    places = places,
+                    counts = places.associateWith { place ->
+                        state.rows.count { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
+                    },
+                    selected = activePlace,
+                    onSelect = { place = it }
                 )
             }
             PullToRefreshBox(
@@ -520,7 +532,7 @@ private fun AppCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app.title, app.packageName, row.installed != null)
+                RowIcon(app.title, app.packageName, row.installed != null, app.icon)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.title, style = MaterialTheme.typography.titleMedium)
@@ -704,45 +716,6 @@ private fun Progress(progress: Float?) {
             CircularProgressIndicator(modifier = Modifier.size(32.dp))
         } else {
             CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(32.dp))
-        }
-    }
-}
-
-@Composable
-private fun AppIcon(name: String, packageName: String?, installed: Boolean) {
-    val context = LocalContext.current
-    val icon = remember(packageName, installed) {
-        if (!installed || packageName == null) {
-            null
-        } else {
-            runCatching {
-                context.packageManager.getApplicationIcon(packageName)
-                    .toBitmap(144, 144)
-                    .asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    if (icon != null) {
-        Image(
-            bitmap = icon,
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-        )
-    } else {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(MaterialTheme.colorScheme.secondary, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondary
-            )
         }
     }
 }
@@ -1473,6 +1446,55 @@ private fun CategoryChips(
                             R.string.category_chip,
                             stringResource(categoryLabel(id)),
                             counts[id] ?: 0
+                        )
+                    )
+                }
+            )
+        }
+    }
+}
+
+/**
+ * A chip for each place apps are offered from, to see one place's apps alone. Shown only
+ * when there are several: one place tells nothing the full list does not.
+ */
+@Composable
+private fun PlaceChips(
+    places: List<String>,
+    counts: Map<String, Int>,
+    selected: String?,
+    onSelect: (String?) -> Unit
+) {
+    val haptics = LocalHapticFeedback.current
+    if (places.size < 2) return
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 4.dp)
+    ) {
+        items(places, key = { it }) { place ->
+            FilterChip(
+                selected = selected == place,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                    onSelect(if (selected == place) null else place)
+                },
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = selected == place,
+                    borderColor = MaterialTheme.colorScheme.outline
+                ),
+                leadingIcon = if (selected == place) {
+                    { SelectedMark() }
+                } else {
+                    null
+                },
+                label = {
+                    Text(
+                        stringResource(
+                            R.string.category_chip,
+                            stringResource(sourceName(place)),
+                            counts[place] ?: 0
                         )
                     )
                 }

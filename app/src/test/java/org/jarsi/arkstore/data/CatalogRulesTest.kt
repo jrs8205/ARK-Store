@@ -153,6 +153,38 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun iconComesFromAnyPlaceThatHasOne() {
+        val published = app()
+        val icon = AppIcon("https://x/icons/org.example.png", null, null)
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev").copy(icon = icon)
+        val row = merged(listOf(published, izzy)).single()
+        assertEquals(published.fullName, row.app.fullName)
+        assertEquals(icon, row.app.icon)
+        // An icon of the app's own is kept.
+        val own = AppIcon(null, "https://x/icons/fg.json", "#ff112233")
+        assertEquals(own, merged(listOf(published.copy(icon = own), izzy)).single().app.icon)
+        assertNull(merged(listOf(published)).single().app.icon)
+    }
+
+    @Test
+    fun appWithoutAnIconIsShownByItsFirstLetterOrDigit() {
+        assertEquals("B", CatalogRules.initial("bitwarden"))
+        assertEquals("7", CatalogRules.initial("7-Zip"))
+        assertEquals("A", CatalogRules.initial("🐾 App"))
+        assertEquals("Ä", CatalogRules.initial("äiti"))
+        assertEquals("", CatalogRules.initial("***"))
+    }
+
+    @Test
+    fun appIsOfferedFromThePlaceItIsShownFromAndThoseItIsAlsoAt() {
+        val found = app(auto = true)
+        assertTrue(CatalogRules.offeredFrom(found, listOf(StoreApp.SOURCE_FDROID), StoreApp.SOURCE_GITHUB))
+        assertTrue(CatalogRules.offeredFrom(found, listOf(StoreApp.SOURCE_FDROID), StoreApp.SOURCE_FDROID))
+        assertFalse(CatalogRules.offeredFrom(found, emptyList(), StoreApp.SOURCE_IZZY))
+        assertEquals(listOf("github", "codeberg", "gitlab", "izzy", "fdroid"), CatalogRules.PLACES)
+    }
+
+    @Test
     fun repositoriesReleasingTheSamePackageStayApart() {
         val one = app(fullName = "one/app")
         val two = app(fullName = "two/app")
