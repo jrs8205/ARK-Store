@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.4.0
+
+The work of the 1.4.0 beta versions, now for everyone:
+
+- Apps are listed under the name they give themselves instead of the name of their
+  repository: the store index reads it from the APK, so that for example `bitwarden/android`
+  is shown as Bitwarden. An app whose name is not known yet keeps its repository's name, and
+  an app whose name differs from its repository's is shown with the repository as well
+- Four more places to get apps from, each with a switch of its own in the settings: apps
+  released on Codeberg and GitLab with the `arkstore` topic, apps found by searching those
+  two, and the catalogues of IzzyOnDroid and F-Droid. Their apps carry the catalogue's name as
+  a label, show what the catalogue warns about, and are checked against the catalogue's
+  checksum before they are installed
+- The settings say where apps come from: published to ARK-Store (always shown), found on
+  GitHub, Codeberg, GitLab, IzzyOnDroid and F-Droid
+- An app offered by several places is listed once, from its developer when possible; an
+  installed app stays with the place whose files are signed the way it is, and the details
+  name the other places
+- From IzzyOnDroid and F-Droid the newest version the device can run is offered, also when
+  the very newest needs a newer Android, and an installed app is offered the newest version
+  signed with its key
+- The apps of the other catalogues are in the list as soon as the store starts, read from
+  the lists last downloaded, and the installed apps are read in one go, which keeps a list of
+  thousands quick
+- A beta version shows how often the prereleases have been downloaded and the stable version
+  how often the full releases have, instead of both showing the sum
+- An app whose signing key has been replaced is no longer taken for one signed otherwise,
+  and a file signed with the key the app has now installs whether or not it carries the
+  history of the keys before it
+- One faulty entry no longer costs a whole list its apps, and a list just downloaded always
+  replaces an older copy
+- Two downloads running at once never write to the same file, and the download notification
+  goes away when the last download is done
+- The index: a list that cannot be built no longer holds up the store's own index. On
+  Codeberg a license is recognised only from its full, unchanged text, whoever it names and
+  whatever the copyright lines around it say. On GitLab only files kept on gitlab.com itself
+  are offered, a project named by its path included, and a file replaced behind the same
+  link is noticed
+
 ## 1.4.0-beta.6
 
 - The apps of the other catalogues are in the list as soon as the store starts, read from the
