@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.ui
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.ColorSpace
 import android.graphics.HardwareRenderer
@@ -80,21 +81,23 @@ object Surfaces {
         ready?.let { return it }
         val prefs = prefs(context)
         val result = when {
-            prefs.getBoolean(FAILED, false) -> false
-            prefs.getBoolean(TRYING, false) -> {
+            mark(prefs, FAILED) == stamp -> false
+            mark(prefs, TRYING) == stamp -> {
                 // The last run began drawing the materials and never got to say that a
                 // frame went through.
-                prefs.edit { putBoolean(FAILED, true); putBoolean(TRYING, false) }
+                prefs.edit { putString(FAILED, stamp); remove(TRYING) }
                 false
             }
+            // The mark must be on disk before the drawing that may bring the run down, or
+            // the next run would not see it: written and waited for, not merely applied.
+            !prefs.edit().putString(TRYING, stamp).commit() -> false
             else -> {
-                prefs.edit { putBoolean(TRYING, true) }
                 val works = try {
                     probe()
                 } catch (_: Throwable) {
                     false
                 }
-                if (!works) prefs.edit { putBoolean(FAILED, true); putBoolean(TRYING, false) }
+                if (!works) prefs.edit { putString(FAILED, stamp); remove(TRYING) }
                 works
             }
         }
@@ -102,8 +105,15 @@ object Surfaces {
         return result
     }
 
-    /** Whether the device was found unable to draw the materials. */
-    fun failed(context: Context): Boolean = supported && prefs(context).getBoolean(FAILED, false)
+    /** Whether the device was found unable to draw the materials, as it is now. */
+    fun failed(context: Context): Boolean = supported && mark(prefs(context), FAILED) == stamp
+
+    /** The stamp stored under [key], or null; a value of another kind, from an older version, is none. */
+    private fun mark(prefs: SharedPreferences, key: String): String? = try {
+        prefs.getString(key, null)
+    } catch (_: ClassCastException) {
+        null
+    }
 
     /**
      * Called when a surface has been drawn: once the run has lived through a couple of
@@ -113,15 +123,26 @@ object Surfaces {
         if (drawn) return
         drawn = true
         val app = context.applicationContext
-        Handler(Looper.getMainLooper()).postDelayed({ prefs(app).edit { putBoolean(TRYING, false) } }, SETTLE_MS)
+        Handler(Looper.getMainLooper()).postDelayed({ prefs(app).edit { remove(TRYING) } }, SETTLE_MS)
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    /**
+     * What a failure is remembered for: this version of the drawing on this build of this
+     * device. A new version of the app or of the system is given a new try, and a failure
+     * restored from a backup onto another device means nothing there.
+     */
+    private val stamp: String
+        get() = "$DRAWING:${Build.FINGERPRINT}"
+
     private const val PREFS = "surfaces"
-    private const val FAILED = "failed"
-    private const val TRYING = "trying"
+    private const val FAILED = "failed_on"
+    private const val TRYING = "trying_on"
     private const val SETTLE_MS = 2000L
+
+    /** The version of the shader and the drawing around it; raise it when they change. */
+    private const val DRAWING = 2
 
     /**
      * Draws a small plate of a grey off screen and looks at a pixel of it: the shader must
@@ -274,7 +295,9 @@ object Surfaces {
             val image = reader.acquireNextImage() ?: return null
             try {
                 val buffer = image.hardwareBuffer ?: return null
-                return Bitmap.wrapHardwareBuffer(buffer, ColorSpace.get(ColorSpace.Named.SRGB))
+                // The bitmap keeps a reference of its own to the buffer; this handle is
+                // let go of at once rather than left to the garbage collector.
+                return buffer.use { Bitmap.wrapHardwareBuffer(it, ColorSpace.get(ColorSpace.Named.SRGB)) }
             } finally {
                 image.close()
             }

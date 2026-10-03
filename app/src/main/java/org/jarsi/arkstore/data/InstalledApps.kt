@@ -3,10 +3,12 @@ package org.jarsi.arkstore.data
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
 import java.security.MessageDigest
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 data class InstalledVersion(
@@ -104,40 +106,66 @@ object InstalledApps {
         // The index and the catalogues tell how their files are signed, so whether the
         // installed app is signed the same way is known without downloading anything.
         val signers = app.signer?.let { presentSigners(context.packageManager, packageName) }
-        val otherSigner = hasConflict(context, app, packageName) || (signers != null && app.signer !in signers)
-        val label = labelOf(context, info)
+        val sameSigner = signers != null && app.signer in signers
+        val differentSigner = signers != null && !sameSigner
+        // A conflict remembered from an earlier file of this app counts until a file is
+        // seen to carry the installed app's key; a key seen to differ counts on its own.
+        val otherSigner = differentSigner || (!sameSigner && hasConflict(context, app, packageName))
+        val names = labelsOf(context, info)
         return InstalledVersion(
             versionCode,
             info.versionName,
             otherSigner = otherSigner,
             beta = betas(context).getLong(packageName, -1) == versionCode,
-            sameSigner = signers != null && app.signer in signers,
+            sameSigner = sameSigner,
             installer = installerOf(context, packageName, info.lastUpdateTime),
-            label = label,
-            // Another key and another name: another app under this package name, not this
-            // one installed from somewhere else.
-            otherApp = otherSigner && label != null && !label.equals(app.title.trim(), ignoreCase = true)
+            label = names?.shown,
+            // Another key seen now and another name: another app under this package name,
+            // not this one installed from somewhere else. The names are compared as the
+            // apps give them in their own default language, which is what the index reads
+            // from a file, not as the device translates the installed one.
+            otherApp = differentSigner && names?.own != null &&
+                !names.own.equals(app.title.trim(), ignoreCase = true)
         )
     }
 
-    private val labels = ConcurrentHashMap<String, String>()
+    /** The names an installed app goes by: [shown] in the device's language, [own] in its own default one. */
+    private class Labels(val shown: String?, val own: String?)
+
+    private val labels = ConcurrentHashMap<String, Labels>()
 
     /**
-     * The name the installed app [info] goes by, or null when it cannot be read. Remembered
-     * per installation ([PackageInfo.lastUpdateTime]), since the list asks for every
-     * installed app whenever it is shown.
+     * The names the installed app [info] goes by, or null when they cannot be read.
+     * Remembered per installation ([PackageInfo.lastUpdateTime]) and per language of the
+     * device, since the list asks for every installed app whenever it is shown.
      */
-    private fun labelOf(context: Context, info: PackageInfo): String? {
-        val key = "${info.packageName}:${info.lastUpdateTime}"
-        val known = labels[key]
-        if (known != null) return known.ifEmpty { null }
-        val label = try {
-            info.applicationInfo?.loadLabel(context.packageManager)?.toString()?.trim().orEmpty()
+    private fun labelsOf(context: Context, info: PackageInfo): Labels? {
+        val application = info.applicationInfo ?: return null
+        val language = context.resources.configuration.locales.toLanguageTags()
+        val key = "${info.packageName}:${info.lastUpdateTime}:$language"
+        labels[key]?.let { return it }
+        val shown = try {
+            application.loadLabel(context.packageManager).toString().trim().ifEmpty { null }
         } catch (_: RuntimeException) {
-            ""
+            null
         }
-        labels[key] = label
-        return label.ifEmpty { null }
+        val own = try {
+            if (application.labelRes == 0) {
+                application.nonLocalizedLabel?.toString()?.trim()?.ifEmpty { null }
+            } else {
+                val plain = Configuration(context.resources.configuration).apply { setLocale(Locale.ROOT) }
+                context.createPackageContext(info.packageName, 0)
+                    .createConfigurationContext(plain)
+                    .resources.getString(application.labelRes).trim().ifEmpty { null }
+            }
+        } catch (_: RuntimeException) {
+            null
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        val names = Labels(shown, own)
+        labels[key] = names
+        return names
     }
 
     private val installers = ConcurrentHashMap<String, String>()

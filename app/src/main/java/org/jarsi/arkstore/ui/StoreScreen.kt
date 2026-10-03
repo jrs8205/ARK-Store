@@ -965,6 +965,11 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 16.dp)
             )
+            // The way out when the names misled: the keys are compared again after the
+            // download, and the file installs when they match after all.
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_try_install))
+            }
         } else if (row.status == AppStatus.OTHER_SIGNER) {
             Text(
                 text = stringResource(R.string.other_signer_detail),
@@ -998,7 +1003,8 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
                 modifier = Modifier.padding(top = 16.dp)
             )
         }
-        if (row.betaInstalled && app.packageName != null) {
+        // Not for another app under this name: its version says nothing about a beta.
+        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
             ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
         }
     }
