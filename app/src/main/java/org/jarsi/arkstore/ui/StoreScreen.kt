@@ -273,9 +273,43 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         place = chosen
                     }
                 )
-                // Room between the chips and the list, so that a card scrolling out goes
-                // under a clear edge rather than straight under the chips.
-                Spacer(Modifier.height(12.dp))
+                // The count and the order stay above the list with the filters, so that a
+                // card scrolling out goes under them instead of taking them along.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)
+                ) {
+                    Text(
+                        text = if (visible.size == state.rows.size) {
+                            pluralStringResource(
+                                R.plurals.count_apps,
+                                state.rows.size,
+                                state.rows.size
+                            )
+                        } else {
+                            pluralStringResource(
+                                R.plurals.count_apps_filtered,
+                                state.rows.size,
+                                visible.size,
+                                state.rows.size
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                    SortMenu(
+                        selected = sortOrder,
+                        onSelect = {
+                            sortOrder = it
+                            preferences.edit { putString(PREF_SORT, it.name) }
+                        }
+                    )
+                }
             }
             PullToRefreshBox(
                 isRefreshing = state.refreshing,
@@ -298,50 +332,13 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         item(key = "error") { ErrorBanner(error) }
                     }
 
-                    if (state.rows.isNotEmpty()) {
-                        item(key = "count") {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 4.dp)
-                        ) {
+                    if (state.rows.isNotEmpty() && visible.isEmpty()) {
+                        item(key = "no-match") {
                             Text(
-                                text = if (visible.size == state.rows.size) {
-                                    pluralStringResource(
-                                        R.plurals.count_apps,
-                                        state.rows.size,
-                                        state.rows.size
-                                    )
-                                } else {
-                                    pluralStringResource(
-                                        R.plurals.count_apps_filtered,
-                                        state.rows.size,
-                                        visible.size,
-                                        state.rows.size
-                                    )
-                                },
+                                text = stringResource(R.string.list_no_match),
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .semantics { liveRegion = LiveRegionMode.Polite }
+                                modifier = Modifier.padding(vertical = 32.dp)
                             )
-                            SortMenu(
-                                selected = sortOrder,
-                                onSelect = {
-                                    sortOrder = it
-                                    preferences.edit { putString(PREF_SORT, it.name) }
-                                }
-                            )
-                        }
-                    }
-                    if (visible.isEmpty()) {
-                            item(key = "no-match") {
-                                Text(
-                                    text = stringResource(R.string.list_no_match),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(vertical = 32.dp)
-                                )
-                            }
                         }
                     }
 
