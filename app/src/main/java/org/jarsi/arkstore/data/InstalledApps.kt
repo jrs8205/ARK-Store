@@ -127,6 +127,19 @@ object InstalledApps {
         if (packageName in installed) presentSigners(context.packageManager, packageName) else null
     }
 
+    /**
+     * [find] for a row of the list: a row that is another project's build of the installed
+     * package ([CatalogRules.Merged.otherBuild]) is signed otherwise as far as the store is
+     * concerned, whether or not its key is known yet.
+     */
+    internal fun find(
+        context: Context,
+        row: CatalogRules.Merged,
+        installed: Map<String, PackageInfo>? = null
+    ): InstalledVersion? = find(context, row.app, installed)?.let {
+        if (row.otherBuild) it.copy(otherSigner = true, sameSigner = false) else it
+    }
+
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
@@ -136,9 +149,9 @@ object InstalledApps {
 
     fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
         val installed = snapshot(context)
-        return merged(context, apps, installed).map { it.app }.filter {
-            status(it, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
-        }
+        return merged(context, apps, installed).filter {
+            status(it.app, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
+        }.map { it.app }
     }
 
     /**

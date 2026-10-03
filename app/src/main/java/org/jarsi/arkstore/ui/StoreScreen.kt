@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -231,11 +232,28 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val activePlace = place
         // The places whose apps are turned on in the settings; GitHub always is.
         val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
-        val visible = state.rows.filter { row ->
-            (activeCategory == null || row.app.category == activeCategory) &&
-                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
-                matches(row, query)
-        }.sortedWith(sortOrder.comparator)
+        // With a search, the apps whose name answers it come first, then those whose
+        // repository, developer or package does, and last those matched by their description
+        // alone; within each the chosen order holds.
+        val words = remember(query) { searchWords(query) }
+        val visible = state.rows.mapNotNull { row ->
+            val shown = (activeCategory == null || row.app.category == activeCategory) &&
+                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace))
+            if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
+        }
+            .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
+            .map { it.first }
+        // A changed search or filter shows its result from the top; a list restored as it
+        // was, after a turn of the screen, stays where it was.
+        val listState = rememberLazyListState()
+        val filterKey = "$query\u0000$activeCategory\u0000$activePlace"
+        var shownFor by rememberSaveable { mutableStateOf(filterKey) }
+        LaunchedEffect(filterKey) {
+            if (shownFor != filterKey) {
+                shownFor = filterKey
+                listState.scrollToItem(0)
+            }
+        }
         val pullState = rememberPullToRefreshState()
         PullThresholdHaptics(pullState)
 
@@ -324,6 +342,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1759,15 +1778,27 @@ private fun sourceBadge(app: StoreApp): Int? = when {
     else -> null
 }
 
-private fun matches(row: AppRow, query: String): Boolean {
-    val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    if (words.isEmpty()) return true
+/** The words of a search, each of which an app must carry somewhere. */
+private fun searchWords(query: String): List<String> =
+    query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+/**
+ * How well [row] answers a search for [words]: 0 when its name carries them all, 1 when its
+ * name together with its repository, developer and package does, 2 when its description is
+ * needed as well; null when it does not answer. No words match every app by name.
+ */
+private fun matchRank(row: AppRow, words: List<String>): Int? {
+    if (words.isEmpty()) return 0
     val app = row.app
-    val text = listOf(
-        app.title, app.repo, app.developer, app.description, app.packageName.orEmpty()
-    )
-        .joinToString(" ")
-    return words.all { text.contains(it, ignoreCase = true) }
+    fun String.carries() = words.all { contains(it, ignoreCase = true) }
+    val name = app.title
+    val identity = "$name ${app.repo} ${app.developer} ${app.packageName.orEmpty()}"
+    return when {
+        name.carries() -> 0
+        identity.carries() -> 1
+        "$identity ${app.description}".carries() -> 2
+        else -> null
+    }
 }
 
 private fun categoryLabel(id: String): Int = when (id) {

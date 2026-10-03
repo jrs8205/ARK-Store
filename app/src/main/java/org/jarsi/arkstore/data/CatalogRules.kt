@@ -110,8 +110,13 @@ internal object CatalogRules {
         return digest.take(16).joinToString("") { "%02x".format(it) } + ".apk"
     }
 
-    /** One app of the list, with the other places that offer the same package. */
-    data class Merged(val app: StoreApp, val alsoFrom: List<String>)
+    /**
+     * One app of the list, with the other places that offer the same package. [otherBuild]
+     * says the row is another project's build of an installed package whose own build is
+     * known from its key: it cannot update the installed app, whatever its own key, which
+     * may not be known yet.
+     */
+    data class Merged(val app: StoreApp, val alsoFrom: List<String>, val otherBuild: Boolean = false)
 
     /**
      * How far down the line a place is when the same app is offered from several: the
@@ -139,6 +144,13 @@ internal object CatalogRules {
      * what is chosen. The same package on GitHub and on Codeberg, on the other hand, is
      * usually one project and its mirror; of two that are level in line the one with the
      * newer version is taken, since the mirror is the one that falls behind.
+     *
+     * A catalogue names the repository its files come from. An entry naming a repository
+     * that is not among those offering the package is another project, such as the original
+     * of a fork that kept the package name, and is listed on its own rather than folded under
+     * the fork; see [projects]. When the installed app's key is known to be one project's,
+     * the rows of the other projects are marked as [Merged.otherBuild]: a fork whose key is
+     * not known yet must not be offered as the update of the original.
      */
     fun merged(apps: List<StoreApp>, installedSigners: (String) -> Set<String>?): List<Merged> {
         val result = ArrayList<Merged>(apps.size)
@@ -156,31 +168,107 @@ internal object CatalogRules {
                 result += Merged(offers[0], emptyList())
                 continue
             }
-            val inLine = offers.sortedWith(
-                compareBy<StoreApp>(::rank)
-                    .thenByDescending { if (it.fromRepository) it.versionCode else 0 }
-                    .thenBy { it.source != StoreApp.SOURCE_GITHUB }
-            )
             val signers = installedSigners(packageName)
-            val chosen = if (signers == null) {
-                inLine[0]
-            } else {
-                inLine.firstOrNull { it.signer != null && it.signer in signers }
-                    ?: inLine.firstOrNull { it.signer == null }
-                    ?: inLine[0]
+            val projects = projects(offers)
+            val own = projects.filter { project ->
+                signers != null && project.any { it.signer != null && it.signer in signers }
             }
-            val kept = if (chosen.fromRepository) {
-                inLine.filter { it.fromRepository && it.source == chosen.source }
-            } else {
-                listOf(chosen)
+            for (project in projects) {
+                val otherBuild = own.isNotEmpty() && own.none { it === project }
+                result += fold(project, signers).map { if (otherBuild) it.copy(otherBuild = true) else it }
             }
-            val others = inLine.filter { it !in kept }.map { it.source }.distinct()
-            // The icon comes from any place that has one: the app is the same wherever it
-            // comes from, and few places tell its icon.
-            val icon = inLine.firstNotNullOfOrNull { it.icon }
-            kept.forEach { result += Merged(if (it.icon == null && icon != null) it.copy(icon = icon) else it, others) }
         }
         return result
+    }
+
+    /**
+     * The offers of one package split into the projects they belong to. The repositories are
+     * one project (a project and its mirrors; those of one place are kept apart by [fold]). A
+     * catalogue entry joins them when the repository it names is among them, stands with the
+     * other entries naming the same repository otherwise, and one naming no repository joins
+     * the first project in line, since it may be any of them.
+     */
+    private fun projects(offers: List<StoreApp>): List<List<StoreApp>> {
+        val repositories = offers.filter { it.fromRepository }
+        val named = repositories.mapNotNull(::project).toSet()
+        val byProject = LinkedHashMap<String, MutableList<StoreApp>>()
+        if (repositories.isNotEmpty()) byProject[REPOSITORIES] = repositories.toMutableList()
+        val unnamed = mutableListOf<StoreApp>()
+        for (app in offers) {
+            if (app.fromRepository) continue
+            val project = project(app)
+            when {
+                project == null -> unnamed += app
+                project in named -> byProject.getValue(REPOSITORIES) += app
+                else -> byProject.getOrPut(project) { mutableListOf() } += app
+            }
+        }
+        val projects: MutableList<MutableList<StoreApp>> = byProject.values.toMutableList()
+        if (unnamed.isNotEmpty()) {
+            if (projects.isEmpty()) projects += mutableListOf<StoreApp>()
+            projects[0] += unnamed
+        }
+        return projects
+    }
+
+    private const val REPOSITORIES = ""
+
+    /** The rows of one project of one package; see [merged]. */
+    private fun fold(offers: List<StoreApp>, signers: Set<String>?): List<Merged> {
+        if (offers.size == 1) return listOf(Merged(offers[0], emptyList()))
+        val inLine = offers.sortedWith(
+            compareBy<StoreApp>(::rank)
+                .thenByDescending { if (it.fromRepository) it.versionCode else 0 }
+                .thenBy { it.source != StoreApp.SOURCE_GITHUB }
+        )
+        val chosen = if (signers == null) {
+            inLine[0]
+        } else {
+            inLine.firstOrNull { it.signer != null && it.signer in signers }
+                ?: inLine.firstOrNull { it.signer == null }
+                ?: inLine[0]
+        }
+        val kept = if (chosen.fromRepository) {
+            inLine.filter { it.fromRepository && it.source == chosen.source }
+        } else {
+            listOf(chosen)
+        }
+        return kept.map { row ->
+            // A catalogue entry stands behind the repository it names, or behind any when it
+            // names none; the other repositories are the project's mirrors.
+            val project = project(row)
+            val withIt = inLine.filter { it === row || it.fromRepository || project(it).let { named -> named == null || named == project } }
+            val others = withIt.filter { it !in kept }.map { it.source }.distinct()
+            // The icon comes from any place that has one: the app is the same wherever it
+            // comes from, and few places tell its icon.
+            val icon = withIt.firstNotNullOfOrNull { it.icon }
+            Merged(if (row.icon == null && icon != null) row.copy(icon = icon) else row, others)
+        }
+    }
+
+    private val HOSTS = mapOf(
+        StoreApp.SOURCE_GITHUB to "github.com",
+        StoreApp.SOURCE_CODEBERG to "codeberg.org",
+        StoreApp.SOURCE_GITLAB to "gitlab.com"
+    )
+
+    /**
+     * The repository [app] comes from or, for a catalogue entry, the one it names as the
+     * source of its files, as "host/owner/repo" in lower case; null for a catalogue entry
+     * that names no repository on one of the places (a website, or the catalogue's own page).
+     * A GitLab project keeps its whole path, up to the "-" that begins its pages.
+     */
+    fun project(app: StoreApp): String? {
+        if (app.fromRepository) return "${HOSTS.getValue(app.source)}/${app.repoPath}".lowercase()
+        val url = app.repoUrl.trim().lowercase()
+            .substringBefore('#').substringBefore('?')
+            .removePrefix("https://").removePrefix("http://").removePrefix("www.")
+        val host = url.substringBefore('/')
+        val place = HOSTS.entries.firstOrNull { it.value == host }?.key ?: return null
+        val segments = url.substringAfter('/', "").split('/').filter { it.isNotEmpty() }.takeWhile { it != "-" }
+        if (segments.size < 2) return null
+        val depth = if (place == StoreApp.SOURCE_GITLAB) segments.size else 2
+        return "$host/" + segments.take(depth).joinToString("/").removeSuffix(".git")
     }
 
     /** The places apps are offered from, in the order their chips are shown. */

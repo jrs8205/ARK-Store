@@ -195,6 +195,61 @@ class CatalogRulesTest {
         assertEquals(2, merged(listOf(unknown, unknown)).size)
     }
 
+    @Test
+    fun originalOfAForkThatKeptThePackageNameIsListedOnItsOwn() {
+        val fork = app(fullName = "someone/Shizuku-fork", auto = true)
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev")
+            .copy(repoUrl = "https://github.com/RikkaApps/Shizuku")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "f")
+            .copy(repoUrl = "https://github.com/RikkaApps/Shizuku/")
+        val rows = merged(listOf(fork, izzy, fdroid))
+        assertEquals(listOf(fork, izzy), rows.map { it.app })
+        assertEquals(emptyList<String>(), rows[0].alsoFrom)
+        assertEquals(listOf(StoreApp.SOURCE_FDROID), rows[1].alsoFrom)
+        // Installed from the original's developer: the original is offered, and the fork,
+        // whose key is not known yet, is another build that cannot update it.
+        val installedOriginal = merged(listOf(fork, izzy, fdroid), installed = setOf("dev"))
+        assertEquals(listOf(fork, izzy), installedOriginal.map { it.app })
+        assertEquals(listOf(true, false), installedOriginal.map { it.otherBuild })
+        // Not installed, or installed with a key no place is known to use: nothing is presumed.
+        assertEquals(listOf(false, false), rows.map { it.otherBuild })
+        assertEquals(listOf(false, false), merged(listOf(fork, izzy, fdroid), installed = setOf("x")).map { it.otherBuild })
+
+        // The original's own repository, once found, takes the entries that name it, and the
+        // fork beside it does not.
+        val own = app(fullName = "RikkaApps/Shizuku", auto = true)
+        val found = merged(listOf(fork, own, izzy, fdroid))
+        assertEquals(listOf(fork, own), found.map { it.app })
+        assertEquals(emptyList<String>(), found[0].alsoFrom)
+        assertEquals(listOf(StoreApp.SOURCE_IZZY, StoreApp.SOURCE_FDROID), found[1].alsoFrom)
+        val icon = AppIcon("https://x/icons/org.example.png", null, null)
+        val withIcon = merged(listOf(fork, own, izzy.copy(icon = icon)))
+        assertNull(withIcon[0].app.icon)
+        assertEquals(icon, withIcon[1].app.icon)
+
+        // An entry naming no repository may be any of them: it joins the first in line.
+        val site = catalogue(StoreApp.SOURCE_FDROID, "f").copy(repoUrl = "https://example.org/app")
+        assertEquals(listOf(StoreApp.SOURCE_FDROID), merged(listOf(fork, site)).single().alsoFrom)
+        assertEquals(listOf(StoreApp.SOURCE_FDROID), merged(listOf(izzy, site)).single().alsoFrom)
+        // Two catalogues naming different repositories are two rows.
+        assertEquals(2, merged(listOf(izzy, fdroid.copy(repoUrl = "https://codeberg.org/other/app"))).size)
+    }
+
+    @Test
+    fun projectIsTheRepositoryAListingComesFromOrNames() {
+        assertEquals("github.com/owner/app", CatalogRules.project(app(fullName = "Owner/App")))
+        assertEquals("codeberg.org/owner/app", CatalogRules.project(codeberg(1)))
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev")
+        fun named(url: String) = CatalogRules.project(izzy.copy(repoUrl = url))
+        assertEquals("github.com/rikkaapps/shizuku", named("https://github.com/RikkaApps/Shizuku.git"))
+        assertEquals("github.com/rikkaapps/shizuku", named("http://www.github.com/RikkaApps/Shizuku/tree/master"))
+        assertEquals("github.com/rikkaapps/shizuku", named(" https://github.com/RikkaApps/Shizuku#readme"))
+        assertEquals("gitlab.com/group/sub/app", named("https://gitlab.com/group/sub/app/-/releases"))
+        assertNull(named("https://example.org/app"))
+        assertNull(named("https://github.com/RikkaApps"))
+        assertNull(named("https://apt.izzysoft.de/fdroid/index/apk/org.example"))
+    }
+
     private fun codeberg(versionCode: Long, auto: Boolean = true) =
         app(fullName = "codeberg:owner/app", versionCode = versionCode, auto = auto)
             .copy(source = StoreApp.SOURCE_CODEBERG)
