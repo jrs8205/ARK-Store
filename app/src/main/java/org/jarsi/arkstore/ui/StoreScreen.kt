@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,7 +39,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -57,10 +61,13 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
@@ -148,7 +155,16 @@ fun StoreScreen(viewModel: StoreViewModel) {
 
     InstallHaptics(installs)
 
+    // With materials on, the screen itself is a sheet of brushed metal, and the bar and the
+    // list lie on it; see Surfaces.
+    CompositionLocalProvider(LocalMaterial provides (material && Surfaces.available)) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f)
+    ) {
     Scaffold(
+        containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.background,
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
@@ -160,6 +176,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
         },
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.surface
+                ),
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(
@@ -339,7 +358,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = updates,
                         installs = installs,
                         viewModel = viewModel,
-                        material = material,
                         onSelect = { selectedRepo = it },
                         header = {
                             SectionHeader(
@@ -365,7 +383,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = installed,
                         installs = installs,
                         viewModel = viewModel,
-                        material = material,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_installed)) }
                     )
@@ -374,7 +391,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         rows = available,
                         installs = installs,
                         viewModel = viewModel,
-                        material = material,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_available)) }
                     )
@@ -417,12 +433,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
 
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
-        ModalBottomSheet(onDismissRequest = { selectedRepo = null }) {
+        StoreSheet(onDismissRequest = { selectedRepo = null }) {
             DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
         }
     }
     if (showSources) {
-        ModalBottomSheet(
+        StoreSheet(
             onDismissRequest = {
                 showSources = false
                 viewModel.clearSourceError()
@@ -432,7 +448,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         }
     }
     if (showSettings) {
-        ModalBottomSheet(onDismissRequest = { showSettings = false }) {
+        StoreSheet(onDismissRequest = { showSettings = false }) {
             SettingsSheet(
                 viewModel = viewModel,
                 material = material,
@@ -443,6 +459,33 @@ fun StoreScreen(viewModel: StoreViewModel) {
             )
         }
     }
+    }
+    }
+}
+
+/** A bottom sheet, drawn as a plate of metal when materials are on. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val metal = LocalMaterial.current
+    val color = BottomSheetDefaults.ContainerColor
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = if (metal) Color.Transparent else color,
+        // The text is set against the plate's colour, whether the container shows it or not.
+        contentColor = contentColorFor(color),
+        // The handle goes on the plate, so that the plate reaches the top of the sheet.
+        dragHandle = if (metal) null else ({ BottomSheetDefaults.DragHandle() })
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .material(color, Relief.PLATE, radius = 28.dp)
+        ) {
+            if (metal) BottomSheetDefaults.DragHandle(modifier = Modifier.align(Alignment.CenterHorizontally))
+            content()
+        }
+    }
 }
 
 private fun LazyListScope.section(
@@ -450,7 +493,6 @@ private fun LazyListScope.section(
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
     viewModel: StoreViewModel,
-    material: Boolean,
     onSelect: (String) -> Unit,
     header: @Composable () -> Unit
 ) {
@@ -460,7 +502,6 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
-            material = material,
             onInstall = { viewModel.install(row.app) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -516,12 +557,10 @@ private fun ErrorBanner(error: LoadError) {
     }
 }
 
-/** [material] draws the card as brushed metal where the device can, see [Surfaces]. */
 @Composable
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
-    material: Boolean,
     onInstall: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -533,14 +572,11 @@ private fun AppCard(
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         onInstall()
     }
-    val metal = material && Surfaces.available
+    val metal = LocalMaterial.current
     val surface = MaterialTheme.colorScheme.surfaceContainer
 
     Card(
-        colors = CardDefaults.cardColors(
-            // The metal is drawn behind the card, and shows through a clear container.
-            containerColor = if (metal) Color.Transparent else surface
-        ),
+        colors = CardDefaults.cardColors(containerColor = surface),
         // The fill alone is too close to the background to show where a card ends in bright
         // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
         border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -548,10 +584,15 @@ private fun AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(CardDefaults.shape)
-            .metal(surface, metal)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // The metal is drawn over the card's own fill, inside its shape, so that the card
+        // stays opaque and its shadow falls outside it only.
+        Column(
+            modifier = Modifier
+                .material(surface, Relief.PLATE, radius = 12.dp)
+                .padding(16.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RowIcon(app.title, app.packageName, row.installed != null, app.icon)
                 Spacer(Modifier.width(16.dp))
@@ -570,10 +611,10 @@ private fun AppCard(
                     is InstallState.Downloading -> Progress(install.progress)
                     InstallState.Installing -> Progress(null)
                     else -> when (row.status) {
-                        AppStatus.UPDATE_AVAILABLE -> Button(onClick = startInstall) {
+                        AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_update))
                         }
-                        AppStatus.NOT_INSTALLED -> Button(onClick = startInstall) {
+                        AppStatus.NOT_INSTALLED -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
                         AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER -> {
@@ -583,7 +624,7 @@ private fun AppCard(
                                 }
                             }
                             if (launch != null) {
-                                OutlinedButton(
+                                StoreOutlinedButton(
                                     onClick = {
                                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                                         context.startActivity(launch)
@@ -847,7 +888,7 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 16.dp)
         ) {
-            OutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
+            StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
                 Text(stringResource(R.string.action_view_source))
             }
             if (row.installed != null && app.packageName != null) {
@@ -865,7 +906,7 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             )
             // The way out when a later release is signed with the right key after all: the
             // attempt compares the keys again and forgets the conflict when they match.
-            OutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(R.string.action_retry))
             }
         } else if (row.installed != null && row.status == AppStatus.UPDATE_AVAILABLE) {
@@ -908,7 +949,7 @@ private fun ReturnToStable(packageName: String, isStore: Boolean) {
         style = MaterialTheme.typography.bodyMedium
     )
     if (!isStore) {
-        OutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+        StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
             Text(stringResource(R.string.action_return_to_stable))
         }
     }
@@ -975,14 +1016,102 @@ private fun versionLine(row: AppRow): String {
 /** A short label on a card: a prerelease, or an app nobody published to the store. */
 @Composable
 private fun Badge(text: String) {
+    val color = MaterialTheme.colorScheme.tertiaryContainer
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onTertiaryContainer,
         modifier = Modifier
             .padding(top = 2.dp, bottom = 2.dp)
-            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(color)
+            .material(color, Relief.RAISED, radius = 8.dp, grain = 0.3f)
             .padding(horizontal = 8.dp, vertical = 2.dp)
+    )
+}
+
+/** A filled button; raised metal of the primary colour when materials are on. */
+@Composable
+private fun StoreButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    val metal = LocalMaterial.current
+    Button(
+        onClick = onClick,
+        modifier = modifier
+            .clip(ButtonDefaults.shape)
+            .material(MaterialTheme.colorScheme.primary, Relief.RAISED, radius = null, grain = 0.5f),
+        colors = if (metal) {
+            ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+        } else {
+            ButtonDefaults.buttonColors()
+        },
+        content = content
+    )
+}
+
+/** An outlined button; raised metal of the surface's colour when materials are on. */
+@Composable
+private fun StoreOutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    val metal = LocalMaterial.current
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
+            .clip(ButtonDefaults.outlinedShape)
+            .material(MaterialTheme.colorScheme.surfaceContainerHigh, Relief.RAISED, radius = null, grain = 0.5f),
+        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = true),
+        content = content
+    )
+}
+
+/** A chip of a row of choices; raised metal, pressed in when chosen, when materials are on. */
+@Composable
+private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit) {
+    val haptics = LocalHapticFeedback.current
+    val metal = LocalMaterial.current
+    val base = if (selected) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHigh
+    }
+    FilterChip(
+        selected = selected,
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            onClick()
+        },
+        modifier = Modifier
+            .clip(FilterChipDefaults.shape)
+            .material(base, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f),
+        colors = if (metal) {
+            FilterChipDefaults.filterChipColors(
+                containerColor = Color.Transparent,
+                selectedContainerColor = Color.Transparent
+            )
+        } else {
+            FilterChipDefaults.filterChipColors()
+        },
+        border = if (metal) {
+            null
+        } else {
+            FilterChipDefaults.filterChipBorder(
+                enabled = true,
+                selected = selected,
+                borderColor = MaterialTheme.colorScheme.outline
+            )
+        },
+        leadingIcon = if (selected) {
+            { SelectedMark() }
+        } else {
+            null
+        },
+        label = { Text(label) }
     )
 }
 
@@ -1057,7 +1186,7 @@ private fun NotificationSetting() {
         style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier.padding(top = 8.dp)
     )
-    OutlinedButton(
+    StoreOutlinedButton(
         onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
             runCatching {
@@ -1394,7 +1523,10 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier,
+        // Pressed into the surface, with the outline as its lip.
+        modifier = modifier
+            .clip(RoundedCornerShape(28.dp))
+            .material(MaterialTheme.colorScheme.surfaceContainerLow, Relief.RECESSED, radius = 28.dp, grain = 0.4f),
         singleLine = true,
         shape = RoundedCornerShape(28.dp),
         label = { Text(stringResource(R.string.search_hint)) },
@@ -1432,7 +1564,6 @@ private fun CategoryChips(
     selected: String?,
     onSelect: (String?) -> Unit
 ) {
-    val haptics = LocalHapticFeedback.current
     // One category tells nothing the full list does not.
     if (categories.size < 2) return
     LazyRow(
@@ -1441,59 +1572,17 @@ private fun CategoryChips(
         modifier = Modifier.padding(top = 4.dp)
     ) {
         item(key = "all") {
-            FilterChip(
+            ChoiceChip(
                 selected = selected == null,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    onSelect(null)
-                },
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected == null,
-                    borderColor = MaterialTheme.colorScheme.outline
-                ),
-                leadingIcon = if (selected == null) {
-                    { SelectedMark() }
-                } else {
-                    null
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.category_chip,
-                            stringResource(R.string.category_all),
-                            total
-                        )
-                    )
-                }
+                label = stringResource(R.string.category_chip, stringResource(R.string.category_all), total),
+                onClick = { onSelect(null) }
             )
         }
         items(categories, key = { it }) { id ->
-            FilterChip(
+            ChoiceChip(
                 selected = selected == id,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    onSelect(if (selected == id) null else id)
-                },
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected == id,
-                    borderColor = MaterialTheme.colorScheme.outline
-                ),
-                leadingIcon = if (selected == id) {
-                    { SelectedMark() }
-                } else {
-                    null
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.category_chip,
-                            stringResource(categoryLabel(id)),
-                            counts[id] ?: 0
-                        )
-                    )
-                }
+                label = stringResource(R.string.category_chip, stringResource(categoryLabel(id)), counts[id] ?: 0),
+                onClick = { onSelect(if (selected == id) null else id) }
             )
         }
     }
@@ -1510,7 +1599,6 @@ private fun PlaceChips(
     selected: String?,
     onSelect: (String?) -> Unit
 ) {
-    val haptics = LocalHapticFeedback.current
     if (places.size < 2) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
@@ -1518,31 +1606,10 @@ private fun PlaceChips(
         modifier = Modifier.padding(top = 4.dp)
     ) {
         items(places, key = { it }) { place ->
-            FilterChip(
+            ChoiceChip(
                 selected = selected == place,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    onSelect(if (selected == place) null else place)
-                },
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected == place,
-                    borderColor = MaterialTheme.colorScheme.outline
-                ),
-                leadingIcon = if (selected == place) {
-                    { SelectedMark() }
-                } else {
-                    null
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.category_chip,
-                            stringResource(sourceName(place)),
-                            counts[place] ?: 0
-                        )
-                    )
-                }
+                label = stringResource(R.string.category_chip, stringResource(sourceName(place)), counts[place] ?: 0),
+                onClick = { onSelect(if (selected == place) null else place) }
             )
         }
     }
