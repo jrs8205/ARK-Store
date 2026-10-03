@@ -526,10 +526,11 @@ class GitLab:
 PLACES = (Codeberg, GitLab)
 
 
-def examine(repo, previous, today, found, place=Codeberg):
+def examine(repo, previous, today, found, place=Codeberg, icons=None):
     """The entry of one repository, or None when it has nothing to list. previous is its
     entry from the last run: one that is still fresh is kept without asking again, apart from
-    the stars and topics, which the search has just told."""
+    the stars and topics, which the search has just told. icons, an IconStore, is where the
+    icons of the apps are kept."""
     pushed_at = place.pushed_at(repo)
     if previous and previous.get("pushedAt") == pushed_at \
             and today - previous.get("examinedAt", 0) < build_index.AUTO_RECHECK_HOURS * 3600:
@@ -541,7 +542,7 @@ def examine(repo, previous, today, found, place=Codeberg):
         app = build_index.build_app(
             described, build_index.known_apks(previous),
             not_before=today - build_index.AUTO_RELEASE_DAYS * 86400 if found else None,
-            with_prerelease=not found, list_releases=place.list_releases,
+            with_prerelease=not found, list_releases=place.list_releases, icons=icons,
         )
         if app is None:
             return None
@@ -556,13 +557,13 @@ def examine(repo, previous, today, found, place=Codeberg):
     return app
 
 
-def build_list(repos, previous, today, found, place=Codeberg):
+def build_list(repos, previous, today, found, place=Codeberg, icons=None):
     apps = []
     for repo in repos:
         key = "%s:%s" % (place.source, place.name(repo))
         before = previous.get(key)
         try:
-            app = examine(repo, before, today, found, place)
+            app = examine(repo, before, today, found, place, icons)
         except Exception as error:  # pylint: disable=broad-except
             # Keep what was known rather than dropping an app over a passing error. An app
             # found by searching is kept only as long as its release is recent, as always.
@@ -580,7 +581,7 @@ def load(path, keys):
     return build_index.load_previous(path, keys) or {}
 
 
-def published_apps(place, previous, today):
+def published_apps(place, previous, today, icons=None):
     """(names, apps): the repositories of one place that carry the store topic, by name, and
     their entries. When the place cannot be searched, its previous entries stand."""
     prefix = place.source + ":"
@@ -589,13 +590,13 @@ def published_apps(place, previous, today):
             repo for repo in place.search(build_index.TOPIC, None)
             if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])
         ]
-        return {place.name(repo) for repo in repos}, build_list(repos, previous, today, False, place)
+        return {place.name(repo) for repo in repos}, build_list(repos, previous, today, False, place, icons)
     except Exception as error:  # pylint: disable=broad-except
         print("%s: published apps unavailable: %r" % (place.source, error), file=sys.stderr)
         return set(), [app for name, app in previous.items() if name.startswith(prefix)]
 
 
-def found_apps(place, taken, previous, today):
+def found_apps(place, taken, previous, today, icons=None):
     """The apps found by searching one place, leaving out the repositories in taken, which
     their developers have published. When the place cannot be searched, the previous list
     stands as far as its releases are still recent."""
@@ -614,7 +615,7 @@ def found_apps(place, taken, previous, today):
             and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
         ]
         repos.sort(key=lambda repo: -place.stars(repo))
-        return build_list(repos, previous, today, True, place)
+        return build_list(repos, previous, today, True, place, icons)
     except Exception as error:  # pylint: disable=broad-except
         print("%s: search unavailable: %r" % (place.source, error), file=sys.stderr)
         published = {"%s:%s" % (place.source, name) for name in taken}
@@ -629,18 +630,23 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--previous-dir", help="where the files written by the previous run are")
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--icons-dir", help="where the icons read from the APKs are kept as files")
+    parser.add_argument("--icons-url", help="the address the files of --icons-dir are published at")
     arguments = parser.parse_args()
     before = arguments.previous_dir or ""
     previous_published = load(os.path.join(before, "forge.json"), ("apps", "betaApps"))
     today = time.time()
     generated_at = int(today * 1000)
+    icons = None
+    if arguments.icons_dir and arguments.icons_url:
+        icons = build_index.IconStore(arguments.icons_dir, arguments.icons_url)
 
     published = []
     for place in PLACES:
-        taken, apps = published_apps(place, previous_published, today)
+        taken, apps = published_apps(place, previous_published, today, icons)
         published += apps
         name = place.source + ".json"
-        found = found_apps(place, taken, load(os.path.join(before, name), ("apps",)), today)
+        found = found_apps(place, taken, load(os.path.join(before, name), ("apps",)), today, icons)
         write_json(os.path.join(arguments.output_dir, name), {
             "version": 1,
             "source": place.source,

@@ -76,6 +76,15 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual((apk["sha256"], apk["signer"], apk["minSdk"]), (SHA, "cd" * 32, 23))
         self.assertEqual(apk["id"], int(SHA[:13], 16))
 
+    def test_icon_is_the_catalogue_file_for_the_language_read(self):
+        described = {"fi": {"name": "/org.example/fi/icon.png", "sha256": SHA, "size": 1},
+                     "en-US": {"name": "/org.example/en-US/icon.png", "sha256": SHA, "size": 1}}
+        app = build(package([version(1)], icon=described))
+        self.assertEqual(app["icon"], "https://f-droid.org/repo/org.example/en-US/icon.png")
+        self.assertIsNone(build(package([version(1)]))["icon"])
+        self.assertIsNone(build(package([version(1)], icon={"en-US": {"name": "icon.png"}}))["icon"])
+        self.assertIsNone(build(package([version(1)], icon={"en-US": "odd"}))["icon"])
+
     def test_narrow_category_is_preferred_to_a_broad_one(self):
         self.assertEqual(build(package([version(1)]))["topics"], ["arkstore-communication"])
         broad = build(package([version(1)], categories=["Internet"]))

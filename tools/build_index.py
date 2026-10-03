@@ -11,6 +11,7 @@ Only the standard library is used. Set GITHUB_TOKEN to raise the API request lim
 
 import argparse
 import calendar
+import hashlib
 import json
 import os
 import re
@@ -35,6 +36,15 @@ MAX_MANIFEST = 4 * 1024 * 1024
 # An app's name is looked up in the APK's resource table, which is fetched whole.
 MAX_RESOURCES = 32 * 1024 * 1024
 MAX_LABEL = 60
+# An app's icon is read from the APK as well and kept as a file beside the index.
+MAX_ICON = 512 * 1024
+# The dots per inch a row of the list wants its icon in: 144 pixels for 48 dp. Of the files an
+# app has, the densest up to this is taken, failing that the least dense beyond it.
+ICON_DENSITY = 480
+IMAGE_SUFFIXES = (".png", ".webp", ".jpg", ".jpeg")
+# The attributes that name an application's icon and the drawable of a layer of one.
+ATTRIBUTE_ICON = 0x01010002
+ATTRIBUTE_DRAWABLE = 0x01010199
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -189,7 +199,7 @@ def inflate(data, limit):
     return result
 
 
-def read_manifest(url, size, labels=None):
+def read_manifest(url, size, labels=None, icons=None):
     """Returns (package, versionCode, versionName, label) from the APK at url, fetching only
     its zip directory, the compressed AndroidManifest.xml and, when the app's name is kept
     there, its resource table. label is None when the APK does not tell it.
@@ -197,31 +207,49 @@ def read_manifest(url, size, labels=None):
     labels maps a package to the label already read from another APK of the same release.
     The files of one release differ in the CPU architecture they are built for, not in what
     the app is called, so the resource table is fetched for the first of them only.
+
+    With icons, an IconStore, the app's icon is read from the APK too and kept there, once
+    per package: ask the store for it afterwards.
     """
     try:
-        entries = read_directory(url, size, (MANIFEST_FILE, RESOURCES_FILE))
+        entries = read_directory(url, size)
         if MANIFEST_FILE not in entries:
             raise ManifestError("manifest not found")
         manifest = read_entry(url, size, entries[MANIFEST_FILE], MAX_MANIFEST)
-        package, version_code, version_name, label = parse_manifest(manifest)
+        package, version_code, version_name, label, icon = parse_manifest(manifest)
     except (struct.error, IndexError, ValueError, zlib.error, UnicodeDecodeError) as error:
         raise ManifestError(str(error)) from error
+    table = None
     if isinstance(label, int):
         if labels is not None and package in labels:
             label = labels[package]
         else:
-            label = read_label(url, size, entries.get(RESOURCES_FILE), label)
+            table = read_table(url, size, entries.get(RESOURCES_FILE))
+            label = table_string(table, label, url) if table else None
+    if icons is not None and package not in icons:
+        if table is None and icon:
+            table = read_table(url, size, entries.get(RESOURCES_FILE))
+        icons.read(url, size, entries, table, icon, package)
     return package, version_code, version_name, tidy_label(label)
 
 
-def read_label(url, size, entry, resource_id):
-    """The string the APK's resource table gives for resource_id, or None. A table that is
-    missing, too large or malformed costs the app its name, not its place in the store."""
+def read_table(url, size, entry):
+    """The APK's resource table, or None. A table that is missing, too large or malformed
+    costs the app its name and icon, not its place in the store."""
     if entry is None:
         return None
     try:
-        return resource_string(read_entry(url, size, entry, MAX_RESOURCES), resource_id)
+        return read_entry(url, size, entry, MAX_RESOURCES)
     except (ManifestError, struct.error, IndexError, ValueError, zlib.error) as error:
+        print("  no resource table from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
+        return None
+
+
+def table_string(table, resource_id, url):
+    """The string the resource table gives for resource_id, or None for a malformed table."""
+    try:
+        return resource_string(table, resource_id)
+    except (ManifestError, struct.error, IndexError, ValueError) as error:
         print("  no name from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
         return None
 
@@ -231,8 +259,8 @@ def tidy_label(label):
     return label[:MAX_LABEL] or None
 
 
-def read_directory(url, size, wanted):
-    """The zip directory's entries for the file names in wanted, by name."""
+def read_directory(url, size, wanted=None):
+    """The zip directory's entries by name: those for the file names in wanted, or all."""
     tail_length = min(size, 22 + 65535)
     tail_start = size - tail_length
     tail = read_range(url, tail_start, tail_length)
@@ -256,7 +284,7 @@ def read_directory(url, size, wanted):
         name_length, extra_length, comment_length = struct.unpack_from("<HHH", directory, position + 28)
         local_offset, = struct.unpack_from("<I", directory, position + 42)
         name = directory[position + 46:position + 46 + name_length]
-        if name in wanted and name not in entries:
+        if (wanted is None or name in wanted) and name not in entries:
             entries[name] = (method, compressed, uncompressed, local_offset, name_length)
         position += 46 + name_length + extra_length + comment_length
     return entries
@@ -294,46 +322,42 @@ def read_entry(url, size, entry, limit):
     raise ManifestError("unsupported compression")
 
 
-def parse_manifest(data):
-    """Returns (package, versionCode, versionName, label) from a binary AndroidManifest.xml.
-    label is the application's name as text, the id of the resource that holds it, or None."""
+def elements(document, ends=False):
+    """The start tags of a binary XML document, in order, each as (name, attributes). An
+    attribute is (resource, name, type, data, text): the id of the attribute's resource, 0
+    when it has none, its name, its typed value and the text of a value that is a string.
+    With ends, end tags come too, as (name, None)."""
     strings = None
-    resource_ids = []
-    manifest = None
+    resource_ids = ()
     position = 8
-    while position + 8 <= len(data):
-        kind, header_size, chunk_size = struct.unpack_from("<HHI", data, position)
-        if chunk_size < 8 or header_size < 8 or position + chunk_size > len(data):
+    while position + 8 <= len(document):
+        kind, header_size, chunk_size = struct.unpack_from("<HHI", document, position)
+        if chunk_size < 8 or header_size < 8 or position + chunk_size > len(document):
             break
         if kind == 0x0001:
-            strings = StringPool(data, position, header_size, chunk_size)
+            strings = StringPool(document, position, header_size, chunk_size)
         elif kind == 0x0180:
             count = (chunk_size - header_size) // 4
-            resource_ids = struct.unpack_from("<%dI" % count, data, position + header_size)
+            resource_ids = struct.unpack_from("<%dI" % count, document, position + header_size)
+        elif kind == 0x0103 and ends:
+            if strings is None:
+                raise ManifestError("string pool missing")
+            name_index, = struct.unpack_from("<i", document, position + header_size + 4)
+            yield strings.get(name_index), None
         elif kind == 0x0102:
             if strings is None:
                 raise ManifestError("string pool missing")
             body = position + header_size
-            name_index, = struct.unpack_from("<i", data, body + 4)
-            element = strings.get(name_index)
-            if manifest is None and element != "manifest":
-                raise ManifestError("unexpected root element")
-            if manifest is not None and element != "application":
-                position += chunk_size
-                continue
-            attribute_start, attribute_size, attribute_count = struct.unpack_from("<HHH", data, body + 8)
+            name_index, = struct.unpack_from("<i", document, body + 4)
+            attribute_start, attribute_size, attribute_count = struct.unpack_from("<HHH", document, body + 8)
             if attribute_size < 20:
                 raise ManifestError("bad attribute size")
-            package = None
-            version_code = 0
-            version_code_major = 0
-            version_name = None
-            label = None
+            attributes = []
             for index in range(attribute_count):
                 attribute = body + attribute_start + index * attribute_size
-                _, name, raw = struct.unpack_from("<iii", data, attribute)
-                data_type = data[attribute + 15]
-                value, = struct.unpack_from("<I", data, attribute + 16)
+                _, name, raw = struct.unpack_from("<iii", document, attribute)
+                data_type = document[attribute + 15]
+                value, = struct.unpack_from("<I", document, attribute + 16)
                 if data_type == 0x03:
                     text = strings.get(value)
                 elif raw >= 0:
@@ -341,35 +365,73 @@ def parse_manifest(data):
                 else:
                     text = None
                 resource = resource_ids[name] if 0 <= name < len(resource_ids) else 0
-                if resource == 0x0101021B:
-                    version_code = value
-                elif resource == 0x01010576:
-                    version_code_major = value
-                elif resource == 0x0101021C:
-                    version_name = text
-                elif resource == 0x01010001:
-                    # A reference to a string resource, or the name itself.
-                    label = value if data_type in (0x01, 0x07) else text
-                elif strings.get(name) == "package":
-                    package = text
-            if manifest is not None:
-                return manifest + (label,)
-            if not package:
-                raise ManifestError("package name missing")
-            manifest = (package, (version_code_major << 32) | version_code, version_name)
+                attributes.append((resource, strings.get(name), data_type, value, text))
+            yield strings.get(name_index), attributes
         position += chunk_size
+
+
+def parse_manifest(data):
+    """Returns (package, versionCode, versionName, label, icon) from a binary
+    AndroidManifest.xml. label is the application's name as text, the id of the resource that
+    holds it, or None; icon the id of the resource that holds the application's icon, or
+    None."""
+    manifest = None
+    for element, attributes in elements(data):
+        if manifest is None and element != "manifest":
+            raise ManifestError("unexpected root element")
+        if manifest is not None and element != "application":
+            continue
+        package = None
+        version_code = 0
+        version_code_major = 0
+        version_name = None
+        label = None
+        icon = None
+        for resource, name, data_type, value, text in attributes:
+            if resource == 0x0101021B:
+                version_code = value
+            elif resource == 0x01010576:
+                version_code_major = value
+            elif resource == 0x0101021C:
+                version_name = text
+            elif resource == 0x01010001:
+                # A reference to a string resource, or the name itself.
+                label = value if data_type in (0x01, 0x07) else text
+            elif resource == ATTRIBUTE_ICON:
+                icon = value if data_type in (0x01, 0x07) and value else None
+            elif name == "package":
+                package = text
+        if manifest is not None:
+            return manifest + (label, icon)
+        if not package:
+            raise ManifestError("package name missing")
+        manifest = (package, (version_code_major << 32) | version_code, version_name)
     if manifest is None:
         raise ManifestError("manifest element not found")
-    return manifest + (None,)
+    return manifest + (None, None)
 
 
-def resource_string(table, resource_id):
-    """The string a resource table (resources.arsc) holds for resource_id, or None.
+def adaptive_layers(document):
+    """The resources the layers of an adaptive icon refer to, by layer ("background",
+    "foreground"), from the binary XML that describes the icon. Empty for a drawable of any
+    other kind, such as a vector."""
+    layers = {}
+    root = None
+    for element, attributes in elements(document):
+        if root is None:
+            root = element
+            if root != "adaptive-icon":
+                return {}
+        elif element in ("background", "foreground"):
+            for resource, _, data_type, value, _ in attributes:
+                if resource == ATTRIBUTE_DRAWABLE and data_type in (0x01, 0x07) and value:
+                    layers[element] = value
+    return layers
 
-    A resource has a value for each configuration it is defined in. The one without any
-    qualifier is what a device falls back to, so that is taken; failing it, English, and
-    failing that too, whichever comes first.
-    """
+
+def table_parts(table):
+    """(strings, packages) of a resource table (resources.arsc): its string pool and the
+    position, header size and size of each package chunk."""
     kind, header_size, _ = struct.unpack_from("<HHI", table, 0)
     if kind != 0x0002:
         raise ManifestError("not a resource table")
@@ -387,6 +449,17 @@ def resource_string(table, resource_id):
         position += chunk_size
     if strings is None:
         raise ManifestError("string pool missing")
+    return strings, packages
+
+
+def resource_string(table, resource_id):
+    """The string a resource table (resources.arsc) holds for resource_id, or None.
+
+    A resource has a value for each configuration it is defined in. The one without any
+    qualifier is what a device falls back to, so that is taken; failing it, English, and
+    failing that too, whichever comes first.
+    """
+    strings, packages = table_parts(table)
     # A resource may point at another one; a few steps are plenty for any honest table.
     for _ in range(8):
         value = resource_value(table, packages, resource_id)
@@ -401,12 +474,13 @@ def resource_string(table, resource_id):
     return None
 
 
-def resource_value(table, packages, resource_id):
-    """(type, data) of the value resource_id has in the best configuration, or None."""
+def resource_values(table, packages, resource_id):
+    """(configuration, (type, data)) for every configuration resource_id has a value in, the
+    configuration being its bytes after the size: country and language at 4, density at 10."""
     package_id = resource_id >> 24
     type_id = (resource_id >> 16) & 0xFF
     entry = resource_id & 0xFFFF
-    best = None
+    found = []
     for package, package_header, package_size in packages:
         if struct.unpack_from("<I", table, package + 8)[0] != package_id:
             continue
@@ -420,14 +494,269 @@ def resource_value(table, packages, resource_id):
                 value = entry_value(table, position, header_size, chunk_size, entry)
                 if value is not None:
                     config_size, = struct.unpack_from("<I", table, position + 20)
-                    config = table[position + 24:position + min(20 + config_size, header_size)]
-                    if not any(config):
-                        return value
-                    rank = 1 if config[4:6] == b"en" else 2
-                    if best is None or rank < best[0]:
-                        best = (rank, value)
+                    found.append((table[position + 24:position + min(20 + config_size, header_size)], value))
             position += chunk_size
+    return found
+
+
+def resource_value(table, packages, resource_id):
+    """(type, data) of the value resource_id has in the best configuration, or None."""
+    best = None
+    for config, value in resource_values(table, packages, resource_id):
+        if not any(config):
+            return value
+        rank = 1 if config[4:6] == b"en" else 2
+        if best is None or rank < best[0]:
+            best = (rank, value)
     return best[1] if best else None
+
+
+def config_density(config):
+    """The screen density a configuration is for, in dots per inch; 0 when it names none."""
+    return struct.unpack_from("<H", config, 10)[0] if len(config) >= 12 else 0
+
+
+def density_rank(density):
+    """Sorts the densities a file comes in the way a list row wants them: the densest up to
+    ICON_DENSITY first, then the least dense beyond it, and last those that name none."""
+    if density in (0, 0xFFFE, 0xFFFF):
+        return (2, 0)
+    if density <= ICON_DENSITY:
+        return (0, -density)
+    return (1, density)
+
+
+class Resources:
+    """A resource table, read for the files and colours an app's icon is made of. read, given
+    the path of a file inside the APK, returns its contents: a colour can be kept in a file
+    of its own."""
+
+    def __init__(self, table, read=None):
+        self.table = table
+        self.read = read
+        self.strings, self.packages = table_parts(table)
+
+    def values(self, resource_id):
+        return resource_values(self.table, self.packages, resource_id)
+
+    def file(self, resource_id, suffixes=IMAGE_SUFFIXES):
+        """The path, inside the APK, of the file resource_id stands for, taken from the
+        configuration that suits a list row best (see density_rank) among those whose file
+        has one of suffixes; None when there is none. A reference is followed."""
+        for _ in range(8):
+            files = []
+            reference = None
+            for config, (data_type, data) in self.values(resource_id):
+                if data_type == 0x03:
+                    path = self.strings.get(data) or ""
+                    if path.lower().endswith(suffixes):
+                        files.append((density_rank(config_density(config)), path))
+                elif data_type in (0x01, 0x07) and data and reference is None:
+                    reference = data
+            if files:
+                return min(files)[1]
+            if reference is None:
+                return None
+            resource_id = reference
+        return None
+
+    def color(self, resource_id, depth=0):
+        """The colour resource_id stands for, as "#aarrggbb", or None. A reference is
+        followed, and a colour described in a file of its own, a gradient or a selector, is
+        read from there in its first colour."""
+        for _ in range(8):
+            value = resource_value(self.table, self.packages, resource_id)
+            if value is None:
+                return None
+            data_type, data = value
+            color = color_text(data_type, data)
+            if color is not None:
+                return color
+            if data_type == 0x03:
+                path = self.strings.get(data) or ""
+                if path.endswith(".xml") and self.read is not None and depth < 4:
+                    return document_color(self.read(path), self, depth + 1)
+                return None
+            if data_type not in (0x01, 0x07) or not data:
+                return None
+            resource_id = data
+        return None
+
+
+def document_color(document, resources, depth=0):
+    """The first colour a colour described in XML comes in: of a gradient, its start colour
+    or the colour of its first item; of a selector, the colour of its first item."""
+    root = None
+    for element, attributes in elements(document):
+        values = {name: (data_type, data, text) for _, name, data_type, data, text in attributes}
+        if root is None:
+            root = element
+            if root == "gradient":
+                color = attribute_color(values, "startColor", resources, depth)
+                if color:
+                    return color
+            elif root != "selector":
+                return None
+        elif element == "item":
+            color = attribute_color(values, "color", resources, depth)
+            if color:
+                return color
+    return None
+
+
+def color_text(data_type, data):
+    """A colour value as "#aarrggbb", or None for a value that is no colour."""
+    if data_type == 0x1C:
+        return "#%08x" % data
+    if data_type == 0x1D:
+        return "#ff%06x" % (data & 0xFFFFFF)
+    if data_type in (0x1E, 0x1F):
+        alpha = (data >> 12) & 0xF if data_type == 0x1E else 0xF
+        red, green, blue = (data >> 8) & 0xF, (data >> 4) & 0xF, data & 0xF
+        return "#%02x%02x%02x%02x" % (alpha * 17, red * 17, green * 17, blue * 17)
+    return None
+
+
+def attribute_number(values, name, resources, default=None):
+    """The attribute name of an element as a number, or default. values maps the element's
+    attribute names to (type, data, text). A dimension is taken by its number, whatever its
+    unit; a reference is followed into the resource table."""
+    if name not in values:
+        return default
+    data_type, data, text = values[name]
+    for _ in range(8):
+        if data_type == 0x04:
+            return round(struct.unpack("<f", struct.pack("<I", data))[0], 4)
+        if 0x10 <= data_type <= 0x1F and data_type not in (0x1C, 0x1D, 0x1E, 0x1F):
+            return struct.unpack("<i", struct.pack("<I", data))[0]
+        if data_type == 0x05:
+            mantissa = data >> 8
+            if mantissa & 0x800000:
+                mantissa -= 1 << 24
+            return round(mantissa * (1.0, 1 / 128, 1 / 32768, 1 / 8388608)[(data >> 4) & 3], 4)
+        if data_type == 0x03:
+            try:
+                return float(text)
+            except (TypeError, ValueError):
+                return default
+        if data_type not in (0x01, 0x07) or not data or resources is None:
+            return default
+        found = resource_value(resources.table, resources.packages, data)
+        if found is None:
+            return default
+        data_type, data = found
+        text = resources.strings.get(data) if data_type == 0x03 else None
+    return default
+
+
+def attribute_text(values, name, resources):
+    """The attribute name of an element as text, or None; a reference is followed."""
+    if name not in values:
+        return None
+    data_type, data, text = values[name]
+    if data_type == 0x03:
+        return text
+    if data_type in (0x01, 0x07) and data and resources is not None:
+        return resource_string(resources.table, data)
+    return None
+
+
+def attribute_color(values, name, resources, depth=0):
+    """The attribute name of an element as "#aarrggbb", or None; a reference is followed."""
+    if name not in values:
+        return None
+    data_type, data, _ = values[name]
+    color = color_text(data_type, data)
+    if color is None and data_type in (0x01, 0x07) and data and resources is not None:
+        color = resources.color(data, depth)
+    return color
+
+
+# The attributes of a vector drawable's groups and paths that the app draws, by the names the
+# app knows them by.
+VECTOR_GROUP = ("rotation", "pivotX", "pivotY", "scaleX", "scaleY", "translateX", "translateY")
+VECTOR_PATH = (("strokeWidth", "strokeWidth"), ("fillAlpha", "fillAlpha"), ("strokeAlpha", "strokeAlpha"),
+               ("fillType", "fillType"), ("strokeLineCap", "cap"), ("strokeLineJoin", "join"))
+
+
+def vector_description(document, resources):
+    """How a vector drawable is drawn, from its binary XML: the size of its canvas, and its
+    groups and paths as a tree of nodes the way the app draws them. None when the XML is no
+    vector drawable. What the app does not draw is simplified: a gradient is drawn in its
+    first colour, and a clip path clips the whole group it is in.
+
+    A shape drawable, as the background of an adaptive icon often is, is drawn as a square
+    of its colour, a gradient again in its first colour."""
+    root = None
+    group = None
+    above = []
+    path = None
+    target = "fill"
+    for element, attributes in elements(document, ends=True):
+        if attributes is None:
+            if element == "group" and above:
+                group = above.pop()
+            elif element == "path":
+                path = None
+            continue
+        values = {name: (data_type, data, text) for _, name, data_type, data, text in attributes}
+        if root is None:
+            if element == "shape":
+                path = {"path": "M0 0h1v1h-1z"}
+                root = {"width": 1, "height": 1, "root": {"nodes": [path]}}
+                continue
+            if element != "vector":
+                return None
+            group = {"nodes": []}
+            root = {
+                "width": attribute_number(values, "viewportWidth", resources, 0),
+                "height": attribute_number(values, "viewportHeight", resources, 0),
+                "root": group,
+            }
+            if not root["width"] or not root["height"]:
+                return None
+        elif group is None:
+            # Inside a shape: its colour, solid or the start of a gradient.
+            color = attribute_color(values, "color" if element == "solid" else "startColor", resources)
+            if color and element in ("solid", "gradient"):
+                path.setdefault("fill", color)
+        elif element == "group":
+            node = {"nodes": []}
+            for name in VECTOR_GROUP:
+                value = attribute_number(values, name, resources)
+                if value is not None:
+                    node[name] = value
+            group["nodes"].append(node)
+            above.append(group)
+            group = node
+        elif element == "clip-path":
+            data = attribute_text(values, "pathData", resources)
+            if data:
+                group["clip"] = data
+        elif element == "path":
+            data = attribute_text(values, "pathData", resources)
+            if not data:
+                continue
+            path = {"path": data}
+            for name, key in (("fillColor", "fill"), ("strokeColor", "stroke")):
+                color = attribute_color(values, name, resources)
+                if color:
+                    path[key] = color
+            for name, key in VECTOR_PATH:
+                value = attribute_number(values, name, resources)
+                if value is not None:
+                    path[key] = value
+            group["nodes"].append(path)
+        elif element == "attr":
+            target = "stroke" if (attribute_text(values, "name", None) or "").endswith("strokeColor") else "fill"
+        elif element in ("gradient", "item") and path is not None:
+            color = attribute_color(values, "startColor" if element == "gradient" else "color", resources)
+            if color:
+                path.setdefault(target, color)
+    if root is not None and group is None and "fill" not in path:
+        # A shape of no colour.
+        return None
+    return root
 
 
 def entry_value(table, chunk, header_size, chunk_size, entry):
@@ -510,6 +839,162 @@ class StringPool:
         if at + length * 2 > self.limit:
             return None
         return data[at:at + length * 2].decode("utf-16-le", "replace")
+
+
+def file_of_kind(data, suffix):
+    """Whether data begins the way a file with the given suffix does: an image, or the
+    description of a vector drawable."""
+    if suffix == "png":
+        return data[:8] == b"\x89PNG\r\n\x1a\n"
+    if suffix == "webp":
+        return data[:4] == b"RIFF" and data[8:12] == b"WEBP"
+    if suffix in ("jpg", "jpeg"):
+        return data[:2] == b"\xff\xd8"
+    if suffix == "json":
+        return data[:1] == b"{"
+    return False
+
+
+class IconStore:
+    """The icons read from APKs: files in a directory, published at an address. A file is
+    named after its package and its contents, so that the address of an icon changes when
+    the icon does and an icon carried from run to run is written once. Each package is read
+    once per run, whatever the number of its files.
+
+    An icon is an image file, or a vector drawable described for the app to draw (see
+    vector_description), kept as a JSON file. An adaptive icon is kept as its layers."""
+
+    def __init__(self, directory, address):
+        self.directory = directory
+        self.address = address.rstrip("/")
+        self.found = {}
+
+    def __contains__(self, package):
+        return package in self.found
+
+    def get(self, package):
+        """How the icon of package is published: the address of the icon; for an icon drawn in
+        layers, {"background", "foreground"} with the address of each layer, the background
+        possibly a colour as "#aarrggbb"; or None when the app has no icon the store can
+        keep. An address ending in .json is a vector drawable to draw, see vector_description;
+        any other is an image."""
+        return self.found.get(package)
+
+    def read(self, url, size, entries, table, resource_id, package):
+        """Reads the icon that resource_id names in the resource table of the APK at url,
+        whose zip directory is entries. An icon that cannot be made out costs the app its icon
+        only. A network failure propagates, as it does for the manifest."""
+        try:
+            self.found[package] = self.extract(url, size, entries, table, resource_id, package)
+        except (ManifestError, struct.error, IndexError, KeyError, ValueError, zlib.error,
+                UnicodeDecodeError) as error:
+            print("  no icon from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
+            self.found[package] = None
+
+    def extract(self, url, size, entries, table, resource_id, package):
+        if table is None or not resource_id:
+            return None
+        resources = Resources(table, lambda path: read_entry(url, size, entries[path.encode()], MAX_ICON))
+        path = resources.file(resource_id)
+        if path is not None:
+            return self.image(package, "", path, url, size, entries)
+        described = resources.file(resource_id, (".xml",))
+        if described is None:
+            return None
+        document = read_entry(url, size, entries[described.encode()], MAX_ICON)
+        layers = adaptive_layers(document)
+        if not layers:
+            # An icon described in XML that is not drawn in layers: a vector, or nothing the
+            # store can keep.
+            return self.vector(package, "", document, resources)
+        foreground = self.layer(package, "-foreground", layers.get("foreground"), resources, url, size, entries)
+        if foreground is None:
+            return None
+        icon = {"foreground": foreground}
+        background = layers.get("background")
+        if background:
+            kept = resources.color(background) \
+                or self.layer(package, "-background", background, resources, url, size, entries)
+            if kept:
+                icon["background"] = kept
+        return icon
+
+    def layer(self, package, layer, resource_id, resources, url, size, entries):
+        """One layer of an adaptive icon, kept as a file: the image resource_id stands for,
+        or the vector it is drawn as. None when it is neither."""
+        if not resource_id:
+            return None
+        path = resources.file(resource_id)
+        if path is not None:
+            return self.image(package, layer, path, url, size, entries)
+        described = resources.file(resource_id, (".xml",))
+        if described is None:
+            return None
+        return self.vector(package, layer, read_entry(url, size, entries[described.encode()], MAX_ICON), resources)
+
+    def image(self, package, layer, path, url, size, entries):
+        data = read_entry(url, size, entries[path.encode()], MAX_ICON)
+        return self.keep(package, layer, path.rsplit(".", 1)[-1].lower(), data)
+
+    def vector(self, package, layer, document, resources):
+        drawn = vector_description(document, resources)
+        if drawn is None:
+            return None
+        return self.keep(package, layer, "json", json.dumps(drawn, separators=(",", ":")).encode())
+
+    def keep(self, package, layer, suffix, data):
+        """Writes data as a file of the given kind (see file_of_kind) of package's icon and
+        returns the address it is published at."""
+        if not re.fullmatch(r"[A-Za-z0-9_.]+", package):
+            raise ManifestError("package name %r is no file name" % package)
+        if not file_of_kind(data, suffix):
+            raise ManifestError("the icon is not the %s file its name says" % suffix)
+        name = "%s%s-%s.%s" % (package, layer, hashlib.sha256(data).hexdigest()[:12], suffix)
+        os.makedirs(self.directory, exist_ok=True)
+        target = os.path.join(self.directory, name)
+        if not os.path.exists(target):
+            with open(target, "wb") as file:
+                file.write(data)
+        return "%s/%s" % (self.address, name)
+
+
+def prune_icons(directory, folder="icons"):
+    """Removes from the icons folder under directory every file none of the lists in
+    directory refers to any more, and returns how many. An unreadable list keeps every file:
+    better a few files too many than the icons of a list that is published after all."""
+    icons = os.path.join(directory, folder)
+    if not os.path.isdir(icons):
+        return 0
+    referred = set()
+
+    def collect(value):
+        if isinstance(value, dict):
+            for key, inner in value.items():
+                if key != "icon":
+                    collect(inner)
+                    continue
+                for address in (inner.values() if isinstance(inner, dict) else [inner]):
+                    if isinstance(address, str):
+                        referred.add(address.rsplit("/", 1)[-1])
+        elif isinstance(value, list):
+            for inner in value:
+                collect(inner)
+
+    for name in os.listdir(directory):
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(directory, name), encoding="utf-8") as file:
+                collect(json.load(file))
+        except ValueError:
+            print("%s unreadable, keeping every icon" % name, file=sys.stderr)
+            return 0
+    removed = 0
+    for name in os.listdir(icons):
+        if name not in referred:
+            os.remove(os.path.join(icons, name))
+            removed += 1
+    return removed
 
 
 def discover():
@@ -603,13 +1088,13 @@ def with_category(topics, description):
     return topics + [prefix + category] if category else topics
 
 
-def build_auto_apps(published, previous_auto, state, today):
+def build_auto_apps(published, previous_auto, state, today, icons=None):
     """Builds the list of automatically found apps.
 
     state records, for each repository, the pushed_at it had when it was last examined and
     when that was. A repository that has not changed and is not due for another look is not
     asked about again: its previous entry, or its absence, still stands. Returns the entries
-    and the new state.
+    and the new state. icons is passed on to build_app.
     """
     candidates = [
         repo for repo in discover_candidates(today)
@@ -658,7 +1143,7 @@ def build_auto_apps(published, previous_auto, state, today):
                 # worth the requests that reading its files takes.
                 app = build_app(
                     repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400,
-                    with_prerelease=False,
+                    with_prerelease=False, icons=icons,
                 )
                 looked = True
             except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
@@ -702,27 +1187,30 @@ def apk_assets(release):
     return [a for a in release.get("assets", []) if a["name"].lower().endswith(".apk")]
 
 
-def release_info(release, previous_apks):
-    """Describes one release and its usable APKs, or returns None when it has none."""
+def release_info(release, previous_apks, icons=None):
+    """Describes one release and its usable APKs, or returns None when it has none. With
+    icons, an IconStore, each file tells how its app's icon is published."""
     apks = []
     labels = {}
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
-        if known and "label" in known:
+        if known and "label" in known and (icons is None or "icon" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
-            # An entry written before names were read has no label, and is read again.
+            # An entry written before names or icons were read lacks them, and is read again.
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
                         known["label"])
+            icon = known.get("icon")
         else:
             try:
-                manifest = read_manifest(asset["browser_download_url"], asset["size"], labels)
+                manifest = read_manifest(asset["browser_download_url"], asset["size"], labels, icons)
             except ManifestError as error:
                 # The file is broken; leave it out. A network failure, on the other hand,
                 # propagates so that the caller keeps what it knew about the app.
                 print("  skipping %s: %s" % (asset["name"], error), file=sys.stderr)
                 continue
-        apks.append({
+            icon = icons.get(manifest[0]) if icons is not None else None
+        apk = {
             "id": asset["id"],
             "name": asset["name"],
             "url": asset["browser_download_url"],
@@ -731,7 +1219,11 @@ def release_info(release, previous_apks):
             "versionCode": manifest[1],
             "versionName": manifest[2],
             "label": manifest[3],
-        })
+        }
+        if icons is not None:
+            # See IconStore.get; None for an app whose icon could not be kept.
+            apk["icon"] = icon
+        apks.append(apk)
         labels[manifest[0]] = manifest[3]
     if not apks:
         return None
@@ -801,11 +1293,12 @@ def is_upgrade(beta_info, stable_info):
     return False
 
 
-def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None):
+def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None):
     """Returns the index entry of a repository, or None when it has nothing to install.
 
     With not_before, a repository whose newest full release was published earlier than that
-    is given up on at once, before any of its APKs are examined.
+    is given up on at once, before any of its APKs are examined. With icons, an IconStore,
+    the icons of the apps are read and kept there.
 
     The entry describes the newest full release. When the release at the top of the list is a
     prerelease that upgrades it, that is added under "beta" for users who have asked for beta
@@ -840,8 +1333,8 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
     if not with_prerelease:
         prerelease = None
 
-    stable_info = release_info(stable, previous_apks) if stable else None
-    beta_info = release_info(prerelease, previous_apks) if prerelease else None
+    stable_info = release_info(stable, previous_apks, icons) if stable else None
+    beta_info = release_info(prerelease, previous_apks, icons) if prerelease else None
     if stable_info is None and beta_info is None:
         return None
 
@@ -913,7 +1406,11 @@ def main():
     parser.add_argument("--auto-output", required=True,
                         help="where the automatically found apps go; they are many and wanted by few, "
                              "so the app downloads them separately and only on request")
+    parser.add_argument("--icons-dir", help="where the icons read from the APKs are kept as files; "
+                                            "the files of the previous run are expected to be there already")
+    parser.add_argument("--icons-url", help="the address the files of --icons-dir are published at")
     arguments = parser.parse_args()
+    icons = IconStore(arguments.icons_dir, arguments.icons_url) if arguments.icons_dir and arguments.icons_url else None
 
     previous_apps = load_previous(arguments.previous, ("apps", "betaApps")) or {}
     previous_auto = load_previous(arguments.previous_auto, ("autoApps",))
@@ -937,7 +1434,7 @@ def main():
         full_name = repo["full_name"]
         previous = previous_apps.get(full_name)
         try:
-            app = build_app(repo, known_apks(previous))
+            app = build_app(repo, known_apks(previous), icons=icons)
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             # Keep what was known rather than dropping an app over a passing error.
             print("%s: %s" % (full_name, error), file=sys.stderr)
@@ -955,7 +1452,7 @@ def main():
     today = time.time()
     try:
         auto_apps, state = build_auto_apps(
-            {app["fullName"] for app in apps}, previous_auto, state, today
+            {app["fullName"] for app in apps}, previous_auto, state, today, icons
         )
     except Exception as error:  # pylint: disable=broad-except
         # The published apps matter most; nothing that goes wrong in this optional part may
