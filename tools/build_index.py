@@ -54,6 +54,10 @@ MAX_SIGNING_BLOCK = 1024 * 1024
 SCHEME_V2 = 0x7109871A
 SIGNATURE_SCHEMES = (0x1B93AD61, 0xF05368C0, SCHEME_V2)
 PROOF_OF_ROTATION = 0x3BA06F8C
+# The version of read_signer, written beside each signer: a file whose signer an older
+# reader named is read again, since the reader may have named a key it should not have.
+# Raise it whenever read_signer changes what it names.
+SIGNER_READER = 2
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -1295,11 +1299,12 @@ def release_info(release, previous_apks, icons=None):
     labels = {}
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
-        if known and "label" in known and "signer" in known and (icons is None or "icon" in known):
+        if known and "label" in known and known.get("signerReader") == SIGNER_READER \
+                and (icons is None or "icon" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
             # An entry written before names, signers or icons were read lacks them, and is
-            # read again.
+            # read again, as is one whose signer an older reader named (see SIGNER_READER).
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
                         known["label"], known["signer"])
             icon = known.get("icon")
@@ -1326,8 +1331,9 @@ def release_info(release, previous_apks, icons=None):
             "versionName": manifest[2],
             "label": manifest[3],
             # SHA-256 of the certificate the file is signed with, as the catalogues tell it;
-            # None when it cannot be told.
+            # None when it cannot be told, and which reader told it.
             "signer": manifest[4] if len(manifest) > 4 else None,
+            "signerReader": SIGNER_READER,
         }
         if icons is not None:
             # See IconStore.get; None for an app whose icon could not be kept.

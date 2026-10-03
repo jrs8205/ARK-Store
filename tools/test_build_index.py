@@ -57,7 +57,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None,
+            "signer": None, "signerReader": 2,
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -85,7 +85,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
-            "signer": "ab" * 32,
+            "signer": "ab" * 32, "signerReader": 2,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -106,11 +106,25 @@ class BuildAppTest(unittest.TestCase):
         reader.assert_called_once()
         self.assertEqual(app["apks"][0]["signer"], "cd" * 32)
 
+    def test_apk_whose_signer_an_older_reader_named_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": "ab" * 32, "signerReader": 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None)) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertIsNone(app["apks"][0]["signer"])
+        self.assertEqual(app["apks"][0]["signerReader"], build_index.SIGNER_READER)
+
     def test_apk_known_without_an_icon_is_read_again_when_icons_are_kept(self):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None,
+            "signer": None, "signerReader": 2,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
 
@@ -134,7 +148,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "icon": "https://x/icons/org.example-abc.png",
+            "signer": None, "signerReader": 2, "icon": "https://x/icons/org.example-abc.png",
         }}
         releases = [dict(release()[0], assets=release()[0]["assets"] + [asset("app-arm64.apk", 8)])]
         icons = build_index.IconStore("unused", "https://x/icons")
@@ -149,7 +163,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "icon": None,
+            "signer": None, "signerReader": 2, "icon": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
         with mock.patch.object(build_index, "api", return_value=release()), \
