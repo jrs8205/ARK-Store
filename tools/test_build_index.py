@@ -130,6 +130,21 @@ class BuildAppTest(unittest.TestCase):
         reader.assert_not_called()
         self.assertNotIn("icon", app["apks"][0])
 
+    def test_file_added_to_a_release_takes_the_icon_already_known(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "icon": "https://x/icons/org.example-abc.png",
+        }}
+        releases = [dict(release()[0], assets=release()[0]["assets"] + [asset("app-arm64.apk", 8)])]
+        icons = build_index.IconStore("unused", "https://x/icons")
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None)) as reader:
+            app = build_index.build_app(REPO, previous, icons=icons)
+        reader.assert_called_once()
+        self.assertEqual([apk["icon"] for apk in app["apks"]], ["https://x/icons/org.example-abc.png"] * 2)
+
     def test_apk_known_to_have_no_icon_is_not_read_again(self):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
@@ -504,12 +519,16 @@ class ReadManifestTest(unittest.TestCase):
         # The signing block is read with two requests: its end, then the whole of it.
         self.assertEqual(len(self.ranges), 4)
 
-    def test_present_key_of_a_rotated_app_comes_first(self):
+    def test_schemes_that_agree_name_the_key_and_schemes_that_do_not_name_none(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6))}
-        block = signing_block((0x7109871A, [self.OTHER]), (0xF05368C0, [self.CERTIFICATE]))
-        self.assertEqual(self.read(files, block=block)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
-        block = signing_block((0xF05368C0, [self.OTHER]), (0x1B93AD61, [self.CERTIFICATE]))
-        self.assertEqual(self.read(files, block=block)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
+        agreeing = signing_block((0x7109871A, [self.CERTIFICATE]), (0xF05368C0, [self.CERTIFICATE]))
+        self.assertEqual(self.read(files, block=agreeing)[4], hashlib.sha256(self.CERTIFICATE).hexdigest())
+        # A rotated key: older versions of Android read one scheme, newer ones another, so
+        # the installed app's key differs by device and is compared only after the download.
+        rotated = signing_block((0xF05368C0, [self.OTHER]), (0x1B93AD61, [self.CERTIFICATE]))
+        self.assertIsNone(self.read(files, block=rotated)[4])
+        rotated = signing_block((0x7109871A, [self.OTHER]), (0xF05368C0, [self.CERTIFICATE]))
+        self.assertIsNone(self.read(files, block=rotated)[4])
 
     def test_several_signers_or_no_block_give_no_signer(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6))}
