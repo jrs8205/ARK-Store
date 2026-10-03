@@ -86,6 +86,21 @@ internal object CatalogRules {
     }
 
     /**
+     * Whether a downloaded file, signed with the certificates [file], may update the installed
+     * app that has been signed with the certificates [installed], or null when it is not
+     * installed. Both are read as the system reports them: for a file that carries the
+     * history of its keys that is the first key the app had, for one that carries no history
+     * its present key. [installed] holds every key the app has had, present one included; see
+     * InstalledApps.keysHeld.
+     *
+     * Android takes a file signed with the present key whether or not it carries the history,
+     * so only a file signed with a key the app never had is known to be refused. Whether a
+     * key the app gave up still does is for the system to say.
+     */
+    fun mayUpdate(file: Collection<String>, installed: Set<String>?): Boolean =
+        installed == null || file.isEmpty() || file.any { it in installed }
+
+    /**
      * The name of the file an app's download is kept in until it is installed. Every
      * [fullName] has a name of its own, whatever characters it is made of: two downloads
      * running at once must never write to the same file.

@@ -113,15 +113,39 @@ object InstalledApps {
 
     /**
      * The certificates the installed [packageName] is signed with, as digests, or null when it
-     * is not installed or they cannot be read.
+     * is not installed or they cannot be read. For an app whose signing key has been replaced
+     * along the way this is the first key it had, which stays the same as long as the same
+     * line of keys is installed: a conflict remembered is tied to it.
      */
     @Suppress("DEPRECATION")
     fun signers(context: Context, packageName: String): Set<String>? = try {
-        // For an app whose signing key has been replaced along the way this is the first key
-        // it had, and the same is read from a downloaded file: the two are compared like
-        // for like, which tells whether they come from the same line of keys.
         context.packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
             .signatures?.map { digest(it.toByteArray()) }?.toSet()?.takeIf { it.isNotEmpty() }
+    } catch (_: PackageManager.NameNotFoundException) {
+        null
+    }
+
+    /**
+     * Every certificate the installed [packageName] is or has been signed with, as digests,
+     * or null when it is not installed or they cannot be read. A downloaded file that is
+     * signed with any of them may update the app, see [CatalogRules.mayUpdate]: a file that
+     * carries the history of its keys reports the first of them, one that does not reports
+     * the present one, and Android takes both.
+     */
+    @Suppress("DEPRECATION")
+    fun keysHeld(packages: PackageManager, packageName: String): Set<String>? = try {
+        val keys = mutableSetOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val signing = packages.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo
+            // The history is reported for an app with a single signer only; it ends with the
+            // present key.
+            signing?.signingCertificateHistory?.mapTo(keys) { digest(it.toByteArray()) }
+            signing?.apkContentsSigners?.mapTo(keys) { digest(it.toByteArray()) }
+        }
+        packages.getPackageInfo(packageName, PackageManager.GET_SIGNATURES)
+            .signatures?.mapTo(keys) { digest(it.toByteArray()) }
+        keys.takeIf { it.isNotEmpty() }
     } catch (_: PackageManager.NameNotFoundException) {
         null
     }

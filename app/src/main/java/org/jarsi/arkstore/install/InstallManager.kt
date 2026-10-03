@@ -313,12 +313,16 @@ object InstallManager {
         null
     }
 
-    /** False only when the app is installed and provably signed with a different key. */
+    /**
+     * False only when the app is installed and provably signed with a different key: one the
+     * installed app has never had, see [CatalogRules.mayUpdate].
+     */
     @Suppress("DEPRECATION")
     private fun signaturesMatch(context: Context, archive: PackageInfo): Boolean {
-        val installedSigners = InstalledApps.signers(context, archive.packageName) ?: return true
         val archiveSigners = archive.signatures?.map { InstalledApps.digest(it.toByteArray()) }.orEmpty()
-        if (archiveSigners.isEmpty()) return true
-        return archiveSigners.any { it in installedSigners }
+        return CatalogRules.mayUpdate(
+            archiveSigners,
+            InstalledApps.keysHeld(context.packageManager, archive.packageName)
+        )
     }
 }

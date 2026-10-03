@@ -241,6 +241,22 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun downloadedFileSignedWithAKeyTheAppHasHadMayUpdateIt() {
+        // The installed app has had the keys a, b and c, in that order, and is signed with c now.
+        val held = setOf("a", "b", "c")
+        // A file carrying its key history reports the first key; one without reports its own.
+        assertTrue(CatalogRules.mayUpdate(listOf("a"), held))
+        assertTrue(CatalogRules.mayUpdate(listOf("c"), held))
+        // A key the app gave up is for the system to judge, a key it never had is refused here.
+        assertTrue(CatalogRules.mayUpdate(listOf("b"), held))
+        assertFalse(CatalogRules.mayUpdate(listOf("d"), held))
+        assertTrue(CatalogRules.mayUpdate(listOf("d", "c"), held))
+        // Nothing is known of an app that is not installed or a file whose signers cannot be read.
+        assertTrue(CatalogRules.mayUpdate(listOf("d"), null))
+        assertTrue(CatalogRules.mayUpdate(emptyList(), held))
+    }
+
+    @Test
     fun everyAppDownloadsToAFileOfItsOwn() {
         val name = CatalogRules.downloadName("gitlab:group/sub/app")
         assertEquals(name, CatalogRules.downloadName("gitlab:group/sub/app"))
