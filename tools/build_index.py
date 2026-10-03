@@ -208,8 +208,9 @@ def read_manifest(url, size, labels=None, icons=None):
     The files of one release differ in the CPU architecture they are built for, not in what
     the app is called, so the resource table is fetched for the first of them only.
 
-    With icons, an IconStore, the app's icon is read from the APK too and kept there, once
-    per package: ask the store for it afterwards.
+    With icons, an IconStore, the app's icon is read from the APK too and kept there: ask
+    the store for it afterwards. Like the label, it is read from the first file of a package
+    in a release only; the releases of a package can have different icons.
     """
     try:
         entries = read_directory(url, size)
@@ -226,7 +227,7 @@ def read_manifest(url, size, labels=None, icons=None):
         else:
             table = read_table(url, size, entries.get(RESOURCES_FILE))
             label = table_string(table, label, url) if table else None
-    if icons is not None and package not in icons:
+    if icons is not None and (labels is None or package not in labels):
         if table is None and icon:
             table = read_table(url, size, entries.get(RESOURCES_FILE))
         icons.read(url, size, entries, table, icon, package)
@@ -605,15 +606,12 @@ def document_color(document, resources, depth=0):
 
 
 def color_text(data_type, data):
-    """A colour value as "#aarrggbb", or None for a value that is no colour."""
-    if data_type == 0x1C:
+    """A colour value as "#aarrggbb", or None for a value that is no colour. The four types
+    tell how the colour was written; the data is the full colour whichever way."""
+    if data_type in (0x1C, 0x1E):
         return "#%08x" % data
-    if data_type == 0x1D:
+    if data_type in (0x1D, 0x1F):
         return "#ff%06x" % (data & 0xFFFFFF)
-    if data_type in (0x1E, 0x1F):
-        alpha = (data >> 12) & 0xF if data_type == 0x1E else 0xF
-        red, green, blue = (data >> 8) & 0xF, (data >> 4) & 0xF, data & 0xF
-        return "#%02x%02x%02x%02x" % (alpha * 17, red * 17, green * 17, blue * 17)
     return None
 
 
@@ -858,8 +856,7 @@ def file_of_kind(data, suffix):
 class IconStore:
     """The icons read from APKs: files in a directory, published at an address. A file is
     named after its package and its contents, so that the address of an icon changes when
-    the icon does and an icon carried from run to run is written once. Each package is read
-    once per run, whatever the number of its files.
+    the icon does and an icon carried from run to run is written once.
 
     An icon is an image file, or a vector drawable described for the app to draw (see
     vector_description), kept as a JSON file. An adaptive icon is kept as its layers."""
@@ -869,15 +866,12 @@ class IconStore:
         self.address = address.rstrip("/")
         self.found = {}
 
-    def __contains__(self, package):
-        return package in self.found
-
     def get(self, package):
-        """How the icon of package is published: the address of the icon; for an icon drawn in
-        layers, {"background", "foreground"} with the address of each layer, the background
-        possibly a colour as "#aarrggbb"; or None when the app has no icon the store can
-        keep. An address ending in .json is a vector drawable to draw, see vector_description;
-        any other is an image."""
+        """How the icon of package is published, as last read: the address of the icon; for
+        an icon drawn in layers, {"background", "foreground"} with the address of each layer,
+        the background possibly a colour as "#aarrggbb"; or None when the app has no icon the
+        store can keep. An address ending in .json is a vector drawable to draw, see
+        vector_description; any other is an image."""
         return self.found.get(package)
 
     def read(self, url, size, entries, table, resource_id, package):
