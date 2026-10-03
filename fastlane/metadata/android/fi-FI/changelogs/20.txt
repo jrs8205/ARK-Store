@@ -1,0 +1,1 @@
+Lukumäärä ja järjestys pysyvät listan yläpuolella, ja haku näyttää nimiosumat ensin. Paketinnimensä säilyttäneen forkin alkuperäinen on omana rivinään, ja samalla nimellä asennettu eri sovellus näytetään sellaisena. Avaimet verrataan latauksen jälkeen, kun niitä ei tiedetä. Materiaalipinnat palaavat tasaisiin väreihin, kun ajuri ei piirrä niitä, ja vierivät sulavammin.

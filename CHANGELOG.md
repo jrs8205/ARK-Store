@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.5.0-beta.3
+
+- The number of apps and the order stay above the list with the search and the chips, so
+  that a card scrolling out goes under them; in a window too low for that they scroll with
+  the list
+- A search puts the apps it names first, then those whose repository, developer or package
+  it names, and shows the result from the top
+- The original of a fork that kept its package name is listed on its own, found from the
+  repository the catalogues name as its source, and a build of another project is not
+  offered as the installed app's update: its key, not known yet, is compared once the file
+  has been downloaded. Another app altogether installed under an app's package name, such
+  as Google's own under microG Companion's, is shown as what it is, with nothing to open,
+  update or remove
+- The index names no key for a file whose key has been rotated, since such a file updates
+  an app signed with the key before as well, and reads the keys of the files it knows once
+  again
+- Material surfaces: the metal is tried once off screen before it is drawn, and a device
+  whose graphics driver cannot draw it keeps the flat colours and says so in the settings;
+  the background is drawn once into an image, the shaders are shared and the lighting is
+  computed in half precision, so that scrolling is smoother. Still an experiment, off by
+  default
+
 ## 1.5.0-beta.2
 
 - An experiment behind a setting: with "Material surfaces" on, the screen and everything on
