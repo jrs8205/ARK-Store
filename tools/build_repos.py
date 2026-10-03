@@ -265,11 +265,16 @@ def build_catalogue(source, index, timestamp, now):
 
 
 def read_timestamp(path):
-    """The catalogue timestamp a file written by an earlier run was built from, or None."""
+    """The catalogue timestamp a file written by an earlier run was built from, or None when
+    the file is not one to carry on from: among other things, one written before the lists
+    told the apps' icons, which is built again whether the catalogue has changed or not."""
     try:
         with open(path, encoding="utf-8") as file:
             loaded = json.load(file)
-        return loaded["timestamp"] if loaded.get("version") == 1 and loaded.get("apps") else None
+        apps = loaded.get("apps")
+        if loaded.get("version") != 1 or not apps or not all("icon" in app for app in apps):
+            return None
+        return loaded["timestamp"]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
 
