@@ -289,13 +289,21 @@ class VectorTest(unittest.TestCase):
                          [{"path": "M0 0h10v10z", "fill": "#ff000001"}])
 
     def test_colours_and_path_data_kept_in_resources_are_looked_up(self):
+        # A colour written short, "#8abc", is stored expanded, with only its type telling.
         table = resource_table(["M1 1"], type_chunk(2, [simple_entry(0x03, 0)]),
-                               type_chunk(4, [simple_entry(0x1E, 0x8ABC)]))
+                               type_chunk(4, [simple_entry(0x1E, 0x88AABBCC)]))
         resources = build_index.Resources(table)
         path = manifest_element(7, [(8, 0x01, 0x7F020000), (9, 0x01, 0x7F040000), (23, 0x01, 0x7F040000)])
         document = vector_document(path + end_element(7))
         self.assertEqual(build_index.vector_description(document, resources)["root"]["nodes"],
                          [{"path": "M1 1", "fill": "#88aabbcc"}])
+
+    def test_colours_are_read_however_they_were_written(self):
+        self.assertEqual(build_index.color_text(0x1C, 0x80112233), "#80112233")
+        self.assertEqual(build_index.color_text(0x1D, 0xFF112233), "#ff112233")
+        self.assertEqual(build_index.color_text(0x1E, 0x88AABBCC), "#88aabbcc")
+        self.assertEqual(build_index.color_text(0x1F, 0xFFFF0000), "#ffff0000")
+        self.assertIsNone(build_index.color_text(0x10, 1))
 
     def test_shape_is_drawn_as_a_square_of_its_colour(self):
         solid = document(manifest_element(25, []) + manifest_element(26, [(21, 0x1C, 0xFF123456)])
@@ -498,7 +506,7 @@ class IconTest(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.icons = build_index.IconStore(self.directory.name, self.ADDRESS + "/")
 
-    def read(self, table, files=None, icon=0x7F030000, apk_files=None):
+    def read(self, table, files=None, icon=0x7F030000, apk_files=None, labels=None):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000), icon=icon), b"resources.arsc": table}
         files.update(self.FILES if apk_files is None else apk_files)
         apk = zip_file(files)
@@ -509,7 +517,7 @@ class IconTest(unittest.TestCase):
             return apk[start:start + length]
 
         with mock.patch.object(build_index, "read_range", side_effect=read_range):
-            return build_index.read_manifest("https://example.invalid/a.apk", len(apk), icons=self.icons)
+            return build_index.read_manifest("https://example.invalid/a.apk", len(apk), labels, self.icons)
 
     def table(self, *types):
         label = type_chunk(2, [simple_entry(0x03, 0)])
@@ -593,7 +601,7 @@ class IconTest(unittest.TestCase):
             **self.FILES, b"res/mipmap-anydpi-v26/ic.xml": adaptive_icon(None, 0x7F050000),
             b"res/drawable/vector.xml": adaptive_icon(None, None)})
         self.assertIsNone(self.icons.get("org.example"))
-        self.assertIn("org.example", self.icons)
+        self.assertIn("org.example", self.icons.found)
         self.assertEqual(os.listdir(self.directory.name), [])
 
     def test_file_that_is_not_the_image_its_name_says_is_refused(self):
@@ -602,13 +610,25 @@ class IconTest(unittest.TestCase):
         self.assertIsNone(self.icons.get("org.example"))
         self.assertEqual(os.listdir(self.directory.name), [])
 
-    def test_package_is_read_once_per_run(self):
+    def test_package_is_read_once_per_release(self):
         table = self.table(type_chunk(3, [simple_entry(0x03, 1)], density=160))
-        self.read(table)
+        # The files of one release share a labels dict, filled in as each is read.
+        labels = {}
+        self.read(table, labels=labels)
+        labels["org.example"] = "Example App"
         requests = len(self.ranges)
-        self.read(table)
+        self.read(table, labels=labels)
         self.assertLess(len(self.ranges), requests)
         self.assertEqual(len(os.listdir(self.directory.name)), 1)
+
+    def test_each_release_has_an_icon_of_its_own(self):
+        table = self.table(type_chunk(3, [simple_entry(0x03, 1)], density=160))
+        self.read(table, labels={})
+        stable = self.icons.get("org.example")
+        self.read(table, labels={}, apk_files={**self.FILES, b"res/mipmap-mdpi/ic.png": PNG + b"beta"})
+        beta = self.icons.get("org.example")
+        self.assertNotEqual(stable, beta)
+        self.assertEqual(len(os.listdir(self.directory.name)), 2)
 
     def test_app_without_an_icon_or_a_resource_table_has_none(self):
         self.read(self.table(), icon=None)
