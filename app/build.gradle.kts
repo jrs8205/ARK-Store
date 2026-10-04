@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 23
-        versionName = "1.6.0-beta.1"
+        versionCode = 24
+        versionName = "1.6.0-beta.2"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")

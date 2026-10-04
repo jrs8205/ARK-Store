@@ -1,0 +1,1 @@
+A list being scrolled is left alone when the updates section appears; a list at its top still shows it at once. The README says more precisely what an install rests on and what the store checks.

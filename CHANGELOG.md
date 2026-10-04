@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.6.0-beta.2
+
+- A list being scrolled at the moment the updates section or an error comes first is left
+  alone; a list at its top is still brought to the newcomer
+- The README's section on what an install rests on now says what the store can and cannot
+  tell: the service hosting the release, the index and HTTPS are trusted; the comparison of
+  keys is a first sieve, with Android deciding; and an update without asking is a possibility
+  on Android 12 and later under Android's conditions, not a rule
+
 ## 1.6.0-beta.1
 
 - The updates a refresh has just found are seen at once. A list at its top stays at its top
