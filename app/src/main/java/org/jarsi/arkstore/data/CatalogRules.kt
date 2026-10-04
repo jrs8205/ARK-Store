@@ -78,12 +78,19 @@ internal object CatalogRules {
             apk.minSdk <= sdk && (apk.abis.isEmpty() || apk.abis.any { it in deviceAbis })
         }
         val updating = installedSigners?.let { signers ->
-            runnable.filter { (_, apk) -> apk.signer == null || apk.signer in signers }
+            runnable.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
         }
         return (updating?.takeIf { it.isNotEmpty() } ?: runnable)
             .maxByOrNull { (_, apk) -> apk.versionCode }
             ?.index
     }
+
+    /**
+     * A catalogue's known signer describes a file signed by that key alone. It matches only
+     * the entire current signer set; sharing one key with a multiply signed app is not enough.
+     */
+    fun sameSigner(signer: String?, installed: Set<String>?): Boolean =
+        signer != null && installed == setOf(signer)
 
     /**
      * Whether a downloaded file, signed with the certificates [file], may update the installed
@@ -171,7 +178,7 @@ internal object CatalogRules {
             val signers = installedSigners(packageName)
             val projects = projects(offers)
             val own = projects.filter { project ->
-                signers != null && project.any { it.signer != null && it.signer in signers }
+                project.any { sameSigner(it.signer, signers) }
             }
             for (project in projects) {
                 val otherBuild = own.isNotEmpty() && own.none { it === project }
@@ -224,7 +231,7 @@ internal object CatalogRules {
         val chosen = if (signers == null) {
             inLine[0]
         } else {
-            inLine.firstOrNull { it.signer != null && it.signer in signers }
+            inLine.firstOrNull { sameSigner(it.signer, signers) }
                 ?: inLine.firstOrNull { it.signer == null }
                 ?: inLine[0]
         }

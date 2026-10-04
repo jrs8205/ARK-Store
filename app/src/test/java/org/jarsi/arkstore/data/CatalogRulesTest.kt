@@ -328,6 +328,29 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun oneOfSeveralInstalledSignersDoesNotMakeACatalogueFilePreferred() {
+        val files = listOf(
+            CatalogRules.CatalogueApk(9, emptyList(), 23, "a"),
+            CatalogRules.CatalogueApk(8, emptyList(), 23, null)
+        )
+        assertEquals(1, CatalogRules.pickCatalogueApk(files, listOf("arm64-v8a"), 34, setOf("a", "b")))
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, listOf("arm64-v8a"), 34, setOf("a")))
+    }
+
+    @Test
+    fun oneOfSeveralInstalledSignersDoesNotIdentifyTheInstalledProject() {
+        val repository = app()
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "a")
+        assertSame(repository, merged(listOf(repository, izzy), setOf("a", "b")).single().app)
+
+        val fork = app(fullName = "someone/fork")
+        val original = izzy.copy(repoUrl = "https://github.com/original/app")
+        val rows = merged(listOf(fork, original), setOf("a", "b"))
+        assertEquals(2, rows.size)
+        assertTrue(rows.none { it.otherBuild })
+    }
+
+    @Test
     fun downloadedFileSignedWithAKeyTheAppHasHadMayUpdateIt() {
         // The installed app has had the keys a, b and c, in that order, and is signed with c now.
         val held = setOf("a", "b", "c")

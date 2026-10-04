@@ -747,7 +747,7 @@ class CatalogRepository private constructor(context: Context) {
             versionName = if (apk.isNull("versionName")) null else apk.getString("versionName"),
             label = if (apk.isNull("label")) null else apk.getString("label"),
             allDownloads = allDownloads,
-            signer = if (apk.isNull("signer")) null else apk.getString("signer").lowercase(),
+            signer = StoreApp.indexedSigner(apk),
             icon = AppIcon.of(apk.opt("icon"))
         )
     }

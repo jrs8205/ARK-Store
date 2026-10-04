@@ -49,8 +49,8 @@ data class StoreApp(
     val versionCode: Long,
     val versionName: String?,
     /**
-     * The name the app gives itself, read from the APK by the store index. Null when the
-     * index has not told it; the repository's name then stands in.
+     * The APK's default name for a repository release, or a translated metadata name for
+     * a catalogue entry. Null when unknown; the repository's name then stands in.
      */
     val label: String? = null,
     /** Downloads of APK files summed over all of the repository's recent releases. */
@@ -121,6 +121,7 @@ data class StoreApp(
         .put("source", source)
         .put("author", author ?: JSONObject.NULL)
         .put("signer", signer ?: JSONObject.NULL)
+        .put("signerReader", if (fromRepository) SIGNER_READER else JSONObject.NULL)
         .put("sha256", sha256 ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
@@ -134,6 +135,17 @@ data class StoreApp(
         val ELSEWHERE = setOf(SOURCE_CODEBERG, SOURCE_GITLAB)
         const val SOURCE_IZZY = "izzy"
         const val SOURCE_FDROID = "fdroid"
+
+        // Matches the index reader that rejects ambiguous and rotated signing keys.
+        private const val SIGNER_READER = 2
+
+        /** Older index entries may name an obsolete key; wait for their files to be read again. */
+        internal fun indexedSigner(json: JSONObject): String? =
+            if (json.optInt("signerReader") == SIGNER_READER && !json.isNull("signer")) {
+                json.getString("signer").lowercase()
+            } else {
+                null
+            }
 
         fun fromJson(json: JSONObject) = StoreApp(
             fullName = json.getString("fullName"),
@@ -161,7 +173,11 @@ data class StoreApp(
             allDownloads = json.optLong("allDownloads", json.optLong("downloads")),
             source = json.optString("source", SOURCE_GITHUB),
             author = if (json.isNull("author")) null else json.getString("author"),
-            signer = if (json.isNull("signer")) null else json.getString("signer"),
+            signer = if (json.optString("source", SOURCE_GITHUB).let { it == SOURCE_GITHUB || it in ELSEWHERE }) {
+                indexedSigner(json)
+            } else {
+                if (json.isNull("signer")) null else json.getString("signer")
+            },
             sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }

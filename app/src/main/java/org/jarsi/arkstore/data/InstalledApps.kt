@@ -106,26 +106,40 @@ object InstalledApps {
         // The index and the catalogues tell how their files are signed, so whether the
         // installed app is signed the same way is known without downloading anything.
         val signers = app.signer?.let { presentSigners(context.packageManager, packageName) }
-        val sameSigner = signers != null && app.signer in signers
-        val differentSigner = signers != null && !sameSigner
-        // A conflict remembered from an earlier file of this app counts until a file is
-        // seen to carry the installed app's key; a key seen to differ counts on its own.
-        val otherSigner = differentSigner || (!sameSigner && hasConflict(context, app, packageName))
         val names = labelsOf(context, info)
-        return InstalledVersion(
-            versionCode,
-            info.versionName,
-            otherSigner = otherSigner,
-            beta = betas(context).getLong(packageName, -1) == versionCode,
+        return compareIdentity(
+            app,
+            InstalledVersion(
+                versionCode,
+                info.versionName,
+                otherSigner = hasConflict(context, app, packageName),
+                beta = betas(context).getLong(packageName, -1) == versionCode,
+                installer = installerOf(context, packageName, info.lastUpdateTime),
+                label = names?.shown
+            ),
+            signers,
+            names?.own
+        )
+    }
+
+    /** Compares current signing and default names, retaining a remembered conflict until disproved. */
+    internal fun compareIdentity(
+        app: StoreApp,
+        installed: InstalledVersion,
+        signers: Set<String>?,
+        defaultLabel: String?
+    ): InstalledVersion {
+        val sameSigner = CatalogRules.sameSigner(app.signer, signers)
+        val differentSigner = app.signer != null && !signers.isNullOrEmpty() && !sameSigner
+        // Repository labels come from APK resources. Catalogue labels are translated
+        // metadata, and a repository name standing in for a missing label is not an APK name.
+        val offeredLabel = app.label?.trim()?.takeIf { app.fromRepository && it.isNotEmpty() }
+        val installedLabel = defaultLabel?.trim()?.takeIf { it.isNotEmpty() }
+        return installed.copy(
             sameSigner = sameSigner,
-            installer = installerOf(context, packageName, info.lastUpdateTime),
-            label = names?.shown,
-            // Another key seen now and another name: another app under this package name,
-            // not this one installed from somewhere else. The names are compared as the
-            // apps give them in their own default language, which is what the index reads
-            // from a file, not as the device translates the installed one.
-            otherApp = differentSigner && names?.own != null &&
-                !names.own.equals(app.title.trim(), ignoreCase = true)
+            otherSigner = differentSigner || (!sameSigner && installed.otherSigner),
+            otherApp = differentSigner && offeredLabel != null && installedLabel != null &&
+                !installedLabel.equals(offeredLabel, ignoreCase = true)
         )
     }
 
