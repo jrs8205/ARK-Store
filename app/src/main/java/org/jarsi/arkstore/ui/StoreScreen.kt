@@ -556,12 +556,18 @@ private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable Column
  * section of updates a refresh has just found, or an error, would appear above the list
  * out of sight: the store would open to the apps installed, and the updates would be seen
  * only by scrolling up. The first item is read in composition, before the list has been laid
- * out with the new items, and the list is asked for its top before that layout. A list
- * scrolled further down stays where it is.
+ * out with the new items, and the list is asked for its top before that layout.
+ *
+ * The top is the first item, wholly or partly shown: that item is a section's heading or a
+ * notice, at most a few lines high, and a reader that far from the top has come for what
+ * is now put first. A list scrolled past its first item stays where it is, and so does one
+ * being scrolled at that moment: a gesture is not cut short for the newcomer.
  */
 @Composable
 private fun KeepTop(listState: LazyListState, firstKey: String) {
-    val atTop by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val atTop by remember(listState) {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 && !listState.isScrollInProgress }
+    }
     val shown = remember { arrayOf(firstKey) }
     if (shown[0] != firstKey) {
         SideEffect {
