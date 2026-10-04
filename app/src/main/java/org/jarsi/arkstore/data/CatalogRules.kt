@@ -49,6 +49,13 @@ internal object CatalogRules {
         else -> null
     }
 
+    /**
+     * Whether a file whose manifest names [minSdk] as the lowest Android API level it runs on,
+     * or null when the index does not tell it, runs on Android [sdk]. A file not yet read
+     * for it is offered, as every file was before the index read it.
+     */
+    fun runsOn(minSdk: Int?, sdk: Int): Boolean = minSdk == null || minSdk <= sdk
+
     /** One file a catalogue offers of an app, as far as choosing between them goes. */
     data class CatalogueApk(
         val versionCode: Long,

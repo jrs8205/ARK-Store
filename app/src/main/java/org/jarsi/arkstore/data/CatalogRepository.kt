@@ -700,7 +700,8 @@ class CatalogRepository private constructor(context: Context) {
 
     /**
      * Builds an app from its index entry [json] and one of the releases described there, or
-     * returns null when none of that release's APKs suits this device.
+     * returns null when none of that release's APKs suits this device: its architecture, told
+     * by the file's name, or its Android, told by the index when it has read the file.
      */
     private fun indexedApp(
         json: JSONObject,
@@ -710,7 +711,7 @@ class CatalogRepository private constructor(context: Context) {
     ): StoreApp? {
         val apks = release.getJSONArray("apks").let { array ->
             (0 until array.length()).map { array.getJSONObject(it) }
-        }
+        }.filter { CatalogRules.runsOn(StoreApp.minSdkOf(it), Build.VERSION.SDK_INT) }
         val apk = ApkPicker.pick(apks.map { it.getString("name") }, deviceAbis)
             ?.let { apks[it] }
             ?: return null
@@ -749,6 +750,7 @@ class CatalogRepository private constructor(context: Context) {
             label = if (apk.isNull("label")) null else apk.getString("label"),
             allDownloads = allDownloads,
             signer = StoreApp.indexedSigner(apk),
+            minSdk = StoreApp.minSdkOf(apk),
             icon = AppIcon.of(apk.opt("icon"))
         )
     }

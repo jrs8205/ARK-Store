@@ -19,6 +19,15 @@ class CatalogRulesTest {
     ) = testApp(fullName, packageName, versionCode, prerelease, auto)
 
     @Test
+    fun fileRunsOnAnAndroidNoOlderThanItsLowest() {
+        assertTrue(CatalogRules.runsOn(minSdk = 26, sdk = 26))
+        assertTrue(CatalogRules.runsOn(minSdk = 26, sdk = 35))
+        assertFalse(CatalogRules.runsOn(minSdk = 27, sdk = 26))
+        // A file whose lowest Android is not known is offered, as before it was read.
+        assertTrue(CatalogRules.runsOn(minSdk = null, sdk = 21))
+    }
+
+    @Test
     fun offersThePrereleaseOnlyWhenBetaVersionsAreWanted() {
         val stable = app(versionCode = 5)
         val beta = app(versionCode = 7, prerelease = true)
