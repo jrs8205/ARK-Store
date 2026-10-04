@@ -244,26 +244,32 @@ ARK-Store is a front end to the places where developers publish their own builds
 what the store checks, and what it leaves to you.
 
 **Where a file comes from.** The APK of a published or found app is downloaded over HTTPS
-from the release on GitHub, Codeberg or GitLab that the index points to: nothing stands
-between the developer's release and your device. The APK of an IzzyOnDroid or F-Droid app is
-downloaded from that catalogue, its mirrors included, and the file is checked against the
-SHA-256 checksum the catalogue publishes before it is installed. The index itself is built
-by a workflow in this repository from code anyone can read, `tools/build_index.py`, is
-published on the `index` branch and is downloaded over HTTPS.
+from the release on GitHub, Codeberg or GitLab that the index points to, following the
+redirects of that service. ARK-Store passes no files through servers of its own, but it has
+no way of telling the developer's file from another one validly signed for the same package
+name, so what you install rests on three things: the service that hosts the release and
+serves the file, the index that this repository's workflow builds from code anyone can read,
+`tools/build_index.py`, and publishes on the `index` branch, and HTTPS on the way. The APK of
+an IzzyOnDroid or F-Droid app is downloaded from that catalogue, its mirrors included, and the
+file is checked against the SHA-256 checksum the catalogue publishes before it is installed.
 
 **What is checked before installing.** The downloaded file is opened, and its package name
 must be the one offered. Its signing certificates are compared with every key the installed
-app has had, the present one included: a file signed with a key the app never had is refused
-by the store before Android would refuse it. The details of an installed app say beforehand
-whether the version offered is signed the way it is, because the index records the key each
-file is signed with, read from the APK's signing block; an app installed under the same
+app has had, the present one included: a file none of whose keys the app has ever had is
+refused by the store before it reaches Android. That is a first sieve, not the verdict:
+Android itself decides whether the keys match when it installs. The details of an installed
+app say beforehand whether the version offered is signed the way it is, when the index could
+tell the key the file is signed with from its signing block; an app installed under the same
 package name with another key, or another app altogether, is told apart and not offered an
-update. The install itself goes through Android's package installer, which asks you the first
-time an app is installed and lets a store update an app it installed without asking again.
+update. The install itself goes through Android's package installer, which asks you before
+installing. On Android 12 and later it may let the store update an app the store itself
+installed without asking again, when Android's conditions for that are met; otherwise it
+asks each time.
 
 **What is not checked.** Nobody reviews the apps' code, builds them from source or scans
-them, and the store hosts no files. A first install has no key to compare with, so the
-guarantee is that the file is the one the developer attached to their release, no more. Of
+them, and the store hosts no APKs. A first install has no key to compare with, and the key
+of a downloaded file is not compared with the one the index recorded, so the guarantee is
+that the file is the one the release served, no more. Of
 the places on offer, F-Droid builds apps from source itself and IzzyOnDroid scans the APKs it
 passes on; apps found by searching are only known to be public, licensed and released, and
 the label on their card says so. Every app shows where it comes from and who made it, and its
