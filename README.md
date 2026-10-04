@@ -92,6 +92,8 @@ following a developer who has not added it.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
 - Every app with its own icon, read from the APK or given by its catalogue.
+- The details tell the latest version, when it was published, the size of the file and the
+  Android version the app needs.
 - Stars and download counts from GitHub.
 - Refresh on open, a background check every four hours and a notification for new versions.
 - A warning before installing over an app signed with a different key.

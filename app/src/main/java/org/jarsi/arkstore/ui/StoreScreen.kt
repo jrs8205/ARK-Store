@@ -968,6 +968,13 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
         }
+        app.minSdk?.let { sdk ->
+            DetailLine(
+                stringResource(R.string.detail_requires),
+                AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
+                    ?: stringResource(R.string.requires_api, sdk)
+            )
+        }
         DetailLine(
             stringResource(R.string.detail_size),
             Formatter.formatShortFileSize(context, app.apkSize)

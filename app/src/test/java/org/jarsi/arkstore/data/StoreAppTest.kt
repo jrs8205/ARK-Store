@@ -52,6 +52,22 @@ class StoreAppTest {
     }
 
     @Test
+    fun lowestAndroidVersionIsKeptInTheStoredCopy() {
+        val app = testApp().copy(minSdk = 26)
+        assertEquals(26, StoreApp.fromJson(app.toJson()).minSdk)
+        val unknown = testApp().toJson()
+        unknown.remove("minSdk")
+        assertNull(StoreApp.fromJson(unknown).minSdk)
+    }
+
+    @Test
+    fun lowestAndroidVersionIsReadTheWayTheIndexWritesIt() {
+        assertEquals(26, StoreApp.minSdkOf(JSONObject().put("minSdk", 26)))
+        assertNull(StoreApp.minSdkOf(JSONObject()))
+        assertNull(StoreApp.minSdkOf(JSONObject().put("minSdk", JSONObject.NULL)))
+    }
+
+    @Test
     fun iconIsReadTheWayTheIndexWritesIt() {
         assertEquals(AppIcon("https://x/icons/a.png", null, null), AppIcon.of("https://x/icons/a.png"))
         val layers = JSONObject().put("foreground", "https://x/icons/fg.json").put("background", "#ff112233")

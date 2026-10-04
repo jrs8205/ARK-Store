@@ -39,6 +39,9 @@
     <string name="detail_published">Published</string>
     <string name="detail_size">Size</string>
     <string name="detail_package">Package</string>
+    <string name="detail_requires">Requires</string>
+    <string name="requires_android">Android %1$s or later</string>
+    <string name="requires_api">Android API level %1$d or later</string>
     <string name="detail_notes">Release notes</string>
 
     <string name="channel_updates">App updates</string>

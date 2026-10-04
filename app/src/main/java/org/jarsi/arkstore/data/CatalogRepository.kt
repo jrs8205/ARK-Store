@@ -619,7 +619,7 @@ class CatalogRepository private constructor(context: Context) {
             CatalogRules.CatalogueApk(
                 apk.getLong("versionCode"),
                 abis,
-                apk.optInt("minSdk", 1),
+                StoreApp.minSdkOf(apk) ?: 1,
                 signerOf(apk)
             )
         }
@@ -662,6 +662,7 @@ class CatalogRepository private constructor(context: Context) {
             author = json.optStringOrEmpty("author").takeIf { it.isNotBlank() },
             signer = signerOf(apk),
             sha256 = apk.getString("sha256"),
+            minSdk = StoreApp.minSdkOf(apk),
             // The warnings belong to a version, and the one picked for this device need not
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.

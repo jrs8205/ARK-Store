@@ -36,6 +36,9 @@
     <string name="detail_published">Julkaistu</string>
     <string name="detail_size">Koko</string>
     <string name="detail_package">Paketti</string>
+    <string name="detail_requires">Vaatii</string>
+    <string name="requires_android">Android %1$s tai uudempi</string>
+    <string name="requires_api">Androidin API-taso %1$d tai uudempi</string>
     <string name="detail_notes">Julkaisutiedot</string>
 
     <string name="channel_updates">Sovelluspäivitykset</string>
