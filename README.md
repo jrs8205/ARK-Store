@@ -218,9 +218,10 @@ Install apps from developers you trust.
    repository with the `arkstore` topic. Forks, archived repositories and repositories
    without a recognised license are dropped.
 2. For each repository it takes the newest full release with an `.apk` file attached.
-3. The package name and version are read from the APK's manifest, the name and the icon from
-   its resources; only the zip directory, those entries and the icon are fetched. Icons are
-   kept in the `icons` folder of the `index` branch, vector icons as their paths.
+3. The package name, the version and the lowest Android version are read from the APK's
+   manifest, the name and the icon from its resources; only the zip directory, those entries
+   and the icon are fetched. Icons are kept in the `icons` folder of the `index` branch,
+   vector icons as their paths.
 4. The result is `index.json` on the `index` branch.
 5. The app downloads that file and compares it with what is installed.
 

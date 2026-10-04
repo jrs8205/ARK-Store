@@ -44,6 +44,8 @@ ICON_DENSITY = 480
 IMAGE_SUFFIXES = (".png", ".webp", ".jpg", ".jpeg")
 # The attributes that name an application's icon and the drawable of a layer of one.
 ATTRIBUTE_ICON = 0x01010002
+# android:minSdkVersion of the uses-sdk element.
+ATTRIBUTE_MIN_SDK = 0x0101020C
 ATTRIBUTE_DRAWABLE = 0x01010199
 # The APK signing block sits just before the zip directory and ends with these words. Its
 # pairs with these ids hold the signers of signature schemes v3.1, v3 and v2, in the order
@@ -213,11 +215,12 @@ def inflate(data, limit):
 
 
 def read_manifest(url, size, labels=None, icons=None):
-    """Returns (package, versionCode, versionName, label, signer) from the APK at url,
-    fetching only its zip directory, the compressed AndroidManifest.xml, its signing block
-    and, when the app's name is kept there, its resource table. label is None when the APK
-    does not tell it; signer is the SHA-256 of the certificate the APK is signed with, in hex,
-    or None when that cannot be told (see read_signer).
+    """Returns (package, versionCode, versionName, label, signer, minSdk) from the APK at
+    url, fetching only its zip directory, the compressed AndroidManifest.xml, its signing
+    block and, when the app's name is kept there, its resource table. label is None when the
+    APK does not tell it; signer is the SHA-256 of the certificate the APK is signed with, in
+    hex, or None when that cannot be told (see read_signer); minSdk is the lowest Android API
+    level the app runs on, or None when the manifest does not say it as a number.
 
     labels maps a package to the label already read from another APK of the same release.
     The files of one release differ in the CPU architecture they are built for, not in what
@@ -232,7 +235,7 @@ def read_manifest(url, size, labels=None, icons=None):
         if MANIFEST_FILE not in entries:
             raise ManifestError("manifest not found")
         manifest = read_entry(url, size, entries[MANIFEST_FILE], MAX_MANIFEST)
-        package, version_code, version_name, label, icon = parse_manifest(manifest)
+        package, version_code, version_name, label, icon, min_sdk = parse_manifest(manifest)
     except (struct.error, IndexError, ValueError, zlib.error, UnicodeDecodeError) as error:
         raise ManifestError(str(error)) from error
     table = None
@@ -251,7 +254,7 @@ def read_manifest(url, size, labels=None, icons=None):
     except (ManifestError, struct.error, IndexError) as error:
         print("  no signer from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
         signer = None
-    return package, version_code, version_name, tidy_label(label), signer
+    return package, version_code, version_name, tidy_label(label), signer, min_sdk
 
 
 def read_signer(url, size, directory_start):
@@ -478,14 +481,19 @@ def elements(document, ends=False):
 
 
 def parse_manifest(data):
-    """Returns (package, versionCode, versionName, label, icon) from a binary
+    """Returns (package, versionCode, versionName, label, icon, minSdk) from a binary
     AndroidManifest.xml. label is the application's name as text, the id of the resource that
     holds it, or None; icon the id of the resource that holds the application's icon, or
-    None."""
+    None; minSdk the lowest Android API level the app runs on, 1 when the manifest names none,
+    as Android takes it, or None when it is named as a codename rather than a number."""
     manifest = None
+    min_sdk = 1
     for element, attributes in elements(data):
         if manifest is None and element != "manifest":
             raise ManifestError("unexpected root element")
+        if element == "uses-sdk":
+            min_sdk = lowest_sdk(attributes)
+            continue
         if manifest is not None and element != "application":
             continue
         package = None
@@ -509,13 +517,23 @@ def parse_manifest(data):
             elif name == "package":
                 package = text
         if manifest is not None:
-            return manifest + (label, icon)
+            return manifest + (label, icon, min_sdk)
         if not package:
             raise ManifestError("package name missing")
         manifest = (package, (version_code_major << 32) | version_code, version_name)
     if manifest is None:
         raise ManifestError("manifest element not found")
-    return manifest + (None, None)
+    return manifest + (None, None, min_sdk)
+
+
+def lowest_sdk(attributes):
+    """The Android API level a uses-sdk element's attributes name as the lowest the app runs
+    on: 1 when they name none, None when they name a codename rather than a number."""
+    for resource, _, data_type, value, _ in attributes:
+        if resource == ATTRIBUTE_MIN_SDK:
+            # A number written in decimal or in hexadecimal; anything else is a codename.
+            return value if data_type in (0x10, 0x11) else None
+    return 1
 
 
 def adaptive_layers(document):
@@ -1300,13 +1318,14 @@ def release_info(release, previous_apks, icons=None):
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
         if known and "label" in known and known.get("signerReader") == SIGNER_READER \
-                and (icons is None or "icon" in known):
+                and "minSdk" in known and (icons is None or "icon" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
-            # An entry written before names, signers or icons were read lacks them, and is
-            # read again, as is one whose signer an older reader named (see SIGNER_READER).
+            # An entry written before names, signers, icons or the lowest Android version
+            # were read lacks them, and is read again, as is one whose signer an older reader
+            # named (see SIGNER_READER).
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
-                        known["label"], known["signer"])
+                        known["label"], known["signer"], known["minSdk"])
             icon = known.get("icon")
             # A file of the release added since is read for its name and icon only when
             # this one does not tell them, just as if this one had been read now.
@@ -1334,6 +1353,10 @@ def release_info(release, previous_apks, icons=None):
             # None when it cannot be told, and which reader told it.
             "signer": manifest[4] if len(manifest) > 4 else None,
             "signerReader": SIGNER_READER,
+            # The lowest Android API level the file runs on, as its manifest says it; None
+            # when the manifest does not say it as a number. The app offers a device only
+            # files it can run and tells the version in the details.
+            "minSdk": manifest[5] if len(manifest) > 5 else None,
         }
         if icons is not None:
             # See IconStore.get; None for an app whose icon could not be kept.

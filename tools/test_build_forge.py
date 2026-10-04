@@ -322,7 +322,7 @@ class GitLabTest(unittest.TestCase):
         with mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
                 mock.patch.object(build_forge, "remote_file", side_effect=remote_file), \
                 mock.patch.object(build_index, "read_manifest",
-                                  return_value=("org.example", 3, "1.0", "Example")) as read_manifest:
+                                  return_value=("org.example", 3, "1.0", "Example", None, 21)) as read_manifest:
             self.read_manifest = read_manifest
             return build_forge.examine(PROJECT, previous, NOW, found, build_forge.GitLab)
 
@@ -336,7 +336,7 @@ class GitLabTest(unittest.TestCase):
         self.assertEqual(app["apks"], [{
             "id": build_forge.file_id(7, self.APK, 4321, "one"), "name": "app.apk", "url": self.APK,
             "size": 4321, "packageName": "org.example", "versionCode": 3, "versionName": "1.0",
-            "label": "Example", "signer": None, "signerReader": 2,
+            "label": "Example", "signer": None, "signerReader": 2, "minSdk": 21,
         }])
 
     def test_file_name_comes_from_the_address_when_the_link_is_named_otherwise(self):
