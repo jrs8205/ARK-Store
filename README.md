@@ -188,9 +188,9 @@ What the store checks:
 - The APK of an IzzyOnDroid or F-Droid app is downloaded from the catalogue or its mirrors
   and checked against the catalogue's SHA-256 checksum.
 - The file's package name must be the one offered.
-- The file's signing keys are compared with every key the installed app has had. A file with
-  none of them is refused before it reaches Android. Android makes the final decision on
-  whether the keys match.
+- The file's signing keys are compared with every key the installed app has had. A file whose
+  keys can be read and are all unknown to the app is refused before it reaches Android.
+  Android makes the final decision on whether the keys match.
 - When the index could read a file's signing key, the details say beforehand whether an
   installed app is signed the same way. An app with another key under the same package name,
   or another app altogether, is not offered an update.
