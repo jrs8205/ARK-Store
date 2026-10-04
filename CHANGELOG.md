@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0-beta.3
+
+- The details tell which Android an app needs, as "Requires: Android 8.0 or later", once the
+  index has read it from the APK, and a file the device cannot run is no longer offered
+- The index reads the lowest Android version from every APK, wherever the uses-sdk element
+  stands in the manifest
+- The README says that a file is refused by its keys only when its keys can be read
+
 ## 1.6.0-beta.2
 
 - A list being scrolled at the moment the updates section or an error comes first is left
