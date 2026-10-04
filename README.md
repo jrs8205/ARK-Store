@@ -238,6 +238,37 @@ and what the catalogues that are turned on offer, and installs those files. The 
 list only open-source apps as well. Every app shows where it comes from and who made it, and
 its source is one tap away; install apps from developers you trust.
 
+## What you trust when you install
+
+ARK-Store is a front end to the places where developers publish their own builds. This is
+what the store checks, and what it leaves to you.
+
+**Where a file comes from.** The APK of a published or found app is downloaded over HTTPS
+from the release on GitHub, Codeberg or GitLab that the index points to: nothing stands
+between the developer's release and your device. The APK of an IzzyOnDroid or F-Droid app is
+downloaded from that catalogue, its mirrors included, and the file is checked against the
+SHA-256 checksum the catalogue publishes before it is installed. The index itself is built
+by a workflow in this repository from code anyone can read, `tools/build_index.py`, is
+published on the `index` branch and is downloaded over HTTPS.
+
+**What is checked before installing.** The downloaded file is opened, and its package name
+must be the one offered. Its signing certificates are compared with every key the installed
+app has had, the present one included: a file signed with a key the app never had is refused
+by the store before Android would refuse it. The details of an installed app say beforehand
+whether the version offered is signed the way it is, because the index records the key each
+file is signed with, read from the APK's signing block; an app installed under the same
+package name with another key, or another app altogether, is told apart and not offered an
+update. The install itself goes through Android's package installer, which asks you the first
+time an app is installed and lets a store update an app it installed without asking again.
+
+**What is not checked.** Nobody reviews the apps' code, builds them from source or scans
+them, and the store hosts no files. A first install has no key to compare with, so the
+guarantee is that the file is the one the developer attached to their release, no more. Of
+the places on offer, F-Droid builds apps from source itself and IzzyOnDroid scans the APKs it
+passes on; apps found by searching are only known to be public, licensed and released, and
+the label on their card says so. Every app shows where it comes from and who made it, and its
+source is one tap away: install apps from developers you trust.
+
 ## How it works
 
 1. A workflow in this repository (`.github/workflows/index.yml`) asks GitHub for every
