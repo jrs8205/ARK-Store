@@ -86,14 +86,15 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     ) { catalog, _, isRefreshing, loadError ->
         val packages = InstalledApps.snapshot(application)
         StoreUiState(
-            rows = InstalledApps.merged(application, catalog.apps, packages).map { (app, alsoFrom) ->
-                val installed = InstalledApps.find(application, app, packages)
+            rows = InstalledApps.merged(application, catalog.apps, packages).map { row ->
+                val app = row.app
+                val installed = InstalledApps.find(application, row, packages)
                 AppRow(
                     app,
                     installed,
                     InstalledApps.status(app, installed),
                     catalog.betaVersions[app.fullName],
-                    alsoFrom
+                    row.alsoFrom
                 )
             },
             checkedAt = catalog.checkedAt,

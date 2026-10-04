@@ -58,6 +58,13 @@ def build(entry, source="fdroid"):
 
 
 class BuildAppTest(unittest.TestCase):
+    def test_label_is_localized_metadata_not_the_apk_default_name(self):
+        for source in ("fdroid", "izzy"):
+            with self.subTest(source=source):
+                app = build(package([version(7)], name={"fi": "Laskin", "en-US": "Calculator"}), source)
+                self.assertEqual(app["source"], source)
+                self.assertEqual(app["apks"][0]["label"], "Calculator")
+
     def test_app_is_described_the_way_the_store_reads_it(self):
         app = build(package([version(7)]))
         self.assertEqual(app["fullName"], "fdroid:org.example")

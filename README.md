@@ -114,8 +114,11 @@ None of these are required, but they make your app look better in the store.
 - **One list for everything**: updates available, installed apps and apps you could install.
 - **One tap** to install or update, and **Update all** when several updates are waiting.
   Downloads carry on in the background if you leave the app.
-- **Search** with a clear button, **categories** to narrow the list down, and **sorting** by
-  name, downloads, stars or release date.
+- **Search** with a clear button, **categories** and **places** (GitHub, Codeberg, GitLab,
+  IzzyOnDroid, F-Droid) to narrow the list down, and **sorting** by name, downloads, stars or
+  release date.
+- **Icons**: every app is shown with its own icon, read from its APK by the index or given
+  by its catalogue. An app whose icon cannot be read is shown by its initial.
 - **Numbers from GitHub**: stars and download counts for every app, the number of apps in the
   store, and how many times ARK-Store itself has been downloaded.
 - **Always current**: the list is refreshed whenever the app is opened, and a background
@@ -244,9 +247,11 @@ its source is one tap away; install apps from developers you trust.
 2. For each remaining repository it reads the releases and takes the newest full release with
    an `.apk` file attached.
 3. The package name and version are read from each APK's own manifest, and the app's name
-   from its resource table. Only the zip directory and those two files are fetched, not the
-   whole APK. An app is listed under that name; if it cannot be read, the repository's name
-   is shown instead.
+   and icon from its resource table. Only the zip directory, those two files and the icon
+   are fetched, not the whole APK. An app is listed under that name; if it cannot be read,
+   the repository's name is shown instead. The icon is kept as a file in the `icons` folder
+   of the `index` branch: an image, or, for an icon drawn as a vector, its paths written
+   out for the app to draw. An adaptive icon is kept as its layers.
 4. The result is written to one file, `index.json` on the `index` branch.
 5. The app downloads that file and compares it with what is installed on the device.
 

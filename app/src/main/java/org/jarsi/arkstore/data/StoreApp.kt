@@ -49,8 +49,8 @@ data class StoreApp(
     val versionCode: Long,
     val versionName: String?,
     /**
-     * The name the app gives itself, read from the APK by the store index. Null when the
-     * index has not told it; the repository's name then stands in.
+     * The APK's default name for a repository release, or a translated metadata name for
+     * a catalogue entry. Null when unknown; the repository's name then stands in.
      */
     val label: String? = null,
     /** Downloads of APK files summed over all of the repository's recent releases. */
@@ -64,7 +64,9 @@ data class StoreApp(
     /** SHA-256 the APK file must have, in hex, when the catalogue tells it. */
     val sha256: String? = null,
     /** What a catalogue warns about in the app, such as tracking, in its own words. */
-    val antiFeatures: List<String> = emptyList()
+    val antiFeatures: List<String> = emptyList(),
+    /** The app's icon as the index publishes it, or null when it publishes none. */
+    val icon: AppIcon? = null
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
@@ -119,8 +121,10 @@ data class StoreApp(
         .put("source", source)
         .put("author", author ?: JSONObject.NULL)
         .put("signer", signer ?: JSONObject.NULL)
+        .put("signerReader", if (fromRepository) SIGNER_READER else JSONObject.NULL)
         .put("sha256", sha256 ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
+        .put("icon", icon?.toJson() ?: JSONObject.NULL)
 
     companion object {
         const val SOURCE_GITHUB = "github"
@@ -131,6 +135,17 @@ data class StoreApp(
         val ELSEWHERE = setOf(SOURCE_CODEBERG, SOURCE_GITLAB)
         const val SOURCE_IZZY = "izzy"
         const val SOURCE_FDROID = "fdroid"
+
+        // Matches the index reader that rejects ambiguous and rotated signing keys.
+        private const val SIGNER_READER = 2
+
+        /** Older index entries may name an obsolete key; wait for their files to be read again. */
+        internal fun indexedSigner(json: JSONObject): String? =
+            if (json.optInt("signerReader") == SIGNER_READER && !json.isNull("signer")) {
+                json.getString("signer").lowercase()
+            } else {
+                null
+            }
 
         fun fromJson(json: JSONObject) = StoreApp(
             fullName = json.getString("fullName"),
@@ -158,12 +173,42 @@ data class StoreApp(
             allDownloads = json.optLong("allDownloads", json.optLong("downloads")),
             source = json.optString("source", SOURCE_GITHUB),
             author = if (json.isNull("author")) null else json.getString("author"),
-            signer = if (json.isNull("signer")) null else json.getString("signer"),
+            signer = if (json.optString("source", SOURCE_GITHUB).let { it == SOURCE_GITHUB || it in ELSEWHERE }) {
+                indexedSigner(json)
+            } else {
+                if (json.isNull("signer")) null else json.getString("signer")
+            },
             sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }
-                .orEmpty()
+                .orEmpty(),
+            icon = AppIcon.of(json.opt("icon"))
         )
+    }
+}
+
+/**
+ * How an app's icon is published, as the index tells it. [address] is the address of the
+ * icon: an image, or a vector drawable described as JSON when it ends in ".json". An icon
+ * drawn in layers, an adaptive icon, has no address of its own but a [foreground] and a
+ * [background], each an address like the above, the background possibly a colour as
+ * "#aarrggbb". A layer is 108 units across, of which the middle 72 show.
+ */
+data class AppIcon(val address: String?, val foreground: String?, val background: String?) {
+
+    /** The icon the way an index entry writes it: the address, or the layers. */
+    fun toJson(): Any = address
+        ?: JSONObject().put("foreground", foreground).put("background", background ?: JSONObject.NULL)
+
+    companion object {
+        /** The icon an index entry's "icon" field describes, or null when it describes none. */
+        fun of(value: Any?): AppIcon? = when (value) {
+            is String -> value.takeIf { it.isNotBlank() }?.let { AppIcon(it, null, null) }
+            is JSONObject -> value.optString("foreground").takeIf { it.isNotBlank() }?.let { foreground ->
+                AppIcon(null, foreground, value.optString("background").takeIf { it.isNotBlank() })
+            }
+            else -> null
+        }
     }
 }
 

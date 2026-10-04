@@ -1,0 +1,1 @@
+Jokainen sovellus näytetään omalla kuvakkeellaan, jonka indeksi lukee APK:sta tai luettelo antaa. Kategorioiden alla olevat valinnat rajaavat listan yhden paikan sovelluksiin: GitHub, Codeberg, GitLab, IzzyOnDroid tai F-Droid.

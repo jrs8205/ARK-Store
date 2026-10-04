@@ -120,6 +120,10 @@
     <string name="beta_description">Offer prereleases as updates when a developer has published one. They are newer but less tested.</string>
     <string name="action_settings">Settings</string>
     <string name="settings_title">Settings</string>
+    <string name="appearance_title">Appearance</string>
+    <string name="material_switch">Material surfaces</string>
+    <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. On by default on Android 13 and later; turn it off here if you prefer flat colours or want to save power.</string>
+    <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>
     <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>
@@ -171,8 +175,21 @@
     <string name="install_ready_title">%1$s is ready to install</string>
     <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>
+    <string name="detail_installed_from">Installed from</string>
+    <string name="installer_play" translatable="false">Google Play</string>
+    <string name="installer_fdroid" translatable="false">F-Droid</string>
+    <string name="installer_aurora" translatable="false">Aurora Store</string>
+    <string name="installer_store" translatable="false">ARK-Store</string>
+    <string name="installer_other">another app, or by hand</string>
+    <string name="same_signer_detail">The installed app is signed with the same key as the version offered here, so ARK-Store can update it.</string>
+    <string name="unknown_signer_detail">Whether the installed app is signed with the same key as the version offered here is not known yet. It is checked once the file has been downloaded.</string>
     <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
     <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
+    <string name="other_build_note">Possibly another developer\'s build. Not offered as an update.</string>
+    <string name="other_app_note">A different app with this package name is installed.</string>
+    <string name="action_try_install">Try to install</string>
+    <string name="other_app_detail">What is installed under this package name is %1$s, from %2$s: a different app, signed with another key. This app is not installed, and it cannot be installed while the other is; removing the other removes its data.</string>
+    <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>
     <string name="channel_installs">Ready to install</string>
     <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
 </resources>

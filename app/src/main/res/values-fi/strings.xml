@@ -115,6 +115,10 @@
     <string name="beta_description">Tarjoa esijulkaisut päivityksinä, kun kehittäjä on julkaissut sellaisen. Ne ovat uudempia mutta vähemmän testattuja.</string>
     <string name="action_settings">Asetukset</string>
     <string name="settings_title">Asetukset</string>
+    <string name="appearance_title">Ulkoasu</string>
+    <string name="material_switch">Materiaalipinnat</string>
+    <string name="material_description">Piirtää näytön ja kaiken sillä olevan ylhäältä valaistuna harjattuna metallina näytönohjaimella. Oletuksena päällä Android 13:sta alkaen; voit sammuttaa sen tästä, jos haluat tasaiset värit tai säästää virtaa.</string>
+    <string name="material_unavailable">Ei saatavilla tällä laitteella: näytönohjaimen ajuri ei pystynyt piirtämään pintoja, joten tasaiset värit pysyvät.</string>
     <string name="action_cancel">Peruuta</string>
     <string name="beta_return_note">Kun tämä on pois päältä, tarjolla ovat taas vakaat versiot. Jo asennettu beta pysyy, kunnes seuraava vakaa versio korvaa sen. Jos haluat palata aiemmin, avaa sovelluksen tiedot.</string>
     <string name="newer_installed_note">Uudempi beta on asennettuna. Seuraava vakaa versio korvaa sen.</string>
@@ -160,8 +164,17 @@
     <string name="install_ready_title">%1$s on valmis asennettavaksi</string>
     <string name="install_ready_text">Jatka napauttamalla</string>
     <string name="newer_version_note">Asennettuna on uudempi versio kuin täällä tarjottu.</string>
+    <string name="detail_installed_from">Asennuslähde</string>
+    <string name="installer_other">toinen sovellus tai käsin</string>
+    <string name="same_signer_detail">Asennettu sovellus on allekirjoitettu samalla avaimella kuin täällä tarjottu versio, joten ARK-Store voi päivittää sen.</string>
+    <string name="unknown_signer_detail">Vielä ei tiedetä, onko asennettu sovellus allekirjoitettu samalla avaimella kuin täällä tarjottu versio. Se tarkistetaan, kun tiedosto on ladattu.</string>
     <string name="other_signer_note">Asennettu muualta. ARK-Store ei voi päivittää sitä.</string>
     <string name="other_signer_detail">Asennettu sovellus on allekirjoitettu eri avaimella kuin täällä tarjottu versio, yleensä siksi, että se on asennettu toisesta kaupasta. Android ei anna ARK-Storen päivittää sitä. Jos haluat vaihtaa tähän versioon, poista sovellus ensin ja asenna se sitten täältä. Poisto tyhjentää sovelluksen tiedot.</string>
+    <string name="other_build_note">Mahdollisesti toisen tekijän versio. Ei tarjota päivityksenä.</string>
+    <string name="other_app_note">Samalla paketinnimellä on asennettuna eri sovellus.</string>
+    <string name="action_try_install">Yritä asentaa</string>
+    <string name="other_app_detail">Tällä paketinnimellä on asennettuna %1$s (asennuslähde: %2$s): eri sovellus, eri avaimella allekirjoitettu. Tätä sovellusta ei ole asennettu, eikä sitä voi asentaa, kun toinen on paikallaan; toisen poisto tyhjentää sen tiedot.</string>
+    <string name="other_build_detail">Asennettu sovellus on allekirjoitettu avaimella, jota toinen tätä pakettia tarjoava paikka käyttää, eikä tämän version avainta vielä tiedetä, joten se voi olla toisen tekijän samanniminen versio. ARK-Store ei tarjoa sitä päivityksenä. Voit silti kokeilla: avaimet verrataan, kun tiedosto on ladattu, ja päivitys tehdään vain, jos ne täsmäävät.</string>
     <string name="channel_installs">Valmiina asennettavaksi</string>
     <string name="channel_installs_description">Kertoo, kun ladattu sovellus odottaa, että vahvistat asennuksen</string>
 </resources>

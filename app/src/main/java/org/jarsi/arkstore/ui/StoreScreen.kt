@@ -7,19 +7,22 @@ import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,22 +34,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,15 +58,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.getValue
@@ -73,15 +81,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -93,16 +104,16 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -117,6 +128,7 @@ import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
@@ -129,11 +141,13 @@ import org.jarsi.arkstore.work.UpdateCheckWorker
 fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
+    val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
+    var place by rememberSaveable { mutableStateOf<String?>(null) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -146,10 +160,20 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 ?: SortOrder.NAME
         )
     }
+    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
 
     InstallHaptics(installs)
 
+    // With materials on, the screen itself is a sheet of brushed metal, and the bar and the
+    // list lie on it; see Surfaces.
+    CompositionLocalProvider(LocalMaterial provides (material && Surfaces.ready(context))) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
+    ) {
     Scaffold(
+        containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.background,
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
@@ -161,6 +185,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
         },
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.surface
+                ),
                 title = { Text(stringResource(R.string.app_name)) },
                 actions = {
                     IconButton(
@@ -201,21 +228,43 @@ fun StoreScreen(viewModel: StoreViewModel) {
             )
         }
     ) { padding ->
-        // A category that no longer has apps (a source was removed) must not stay selected.
+        // A category that no longer has apps (a source was removed) must not stay selected,
+        // and neither may a place.
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
-        val visible = state.rows.filter { row ->
-            (activeCategory == null || row.app.category == activeCategory) && matches(row, query)
-        }.sortedWith(sortOrder.comparator)
+        val activePlace = place
+        // The places whose apps are turned on in the settings; GitHub always is.
+        val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
+        // With a search, the apps whose name answers it come first, then those whose
+        // repository, developer or package does, and last those matched by their description
+        // alone; within each the chosen order holds.
+        val words = remember(query) { searchWords(query) }
+        val visible = state.rows.mapNotNull { row ->
+            val shown = (activeCategory == null || row.app.category == activeCategory) &&
+                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace))
+            if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
+        }
+            .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
+            .map { it.first }
+        // A changed search or filter shows its result from the top; a list restored as it
+        // was, after a turn of the screen, stays where it was.
+        val listState = rememberLazyListState()
+        val filterKey = "$query\u0000$activeCategory\u0000$activePlace"
+        var shownFor by rememberSaveable { mutableStateOf(filterKey) }
+        LaunchedEffect(filterKey) {
+            if (shownFor != filterKey) {
+                shownFor = filterKey
+                listState.scrollToItem(0)
+            }
+        }
         val pullState = rememberPullToRefreshState()
         PullThresholdHaptics(pullState)
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            if (state.rows.isNotEmpty()) {
+        // The search, the chips, the count and the order: above the list, so that a card
+        // scrolling out goes under them instead of taking them along, or, in a window too
+        // low to leave the list room beside them, at the top of the list.
+        val header: @Composable () -> Unit = {
+            Column(Modifier.fillMaxWidth()) {
                 SearchField(
                     query = query,
                     onQueryChange = { query = it },
@@ -232,65 +281,93 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     selected = activeCategory,
                     onSelect = { category = it }
                 )
-            }
-            PullToRefreshBox(
-                isRefreshing = state.refreshing,
-                onRefresh = { viewModel.refresh() },
-                state = pullState,
-                modifier = Modifier.fillMaxSize()
-            ) {
-                val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                val installed = visible.filter {
-                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER
-                }
-                val available = visible.filter { it.status == AppStatus.NOT_INSTALLED }
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                PlaceChips(
+                    counts = CatalogRules.PLACES.associateWith { place ->
+                        state.rows.count { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
+                    },
+                    enabled = enabledPlaces,
+                    selected = activePlace,
+                    onSelect = { chosen ->
+                        // A quick way in: choosing a place that is off turns it on as well.
+                        if (chosen != null && chosen !in enabledPlaces) viewModel.setCatalogue(chosen, true)
+                        place = chosen
+                    }
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp)
                 ) {
-                    state.error?.let { error ->
-                        item(key = "error") { ErrorBanner(error) }
+                    Text(
+                        text = if (visible.size == state.rows.size) {
+                            pluralStringResource(
+                                R.plurals.count_apps,
+                                state.rows.size,
+                                state.rows.size
+                            )
+                        } else {
+                            pluralStringResource(
+                                R.plurals.count_apps_filtered,
+                                state.rows.size,
+                                visible.size,
+                                state.rows.size
+                            )
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .weight(1f)
+                            .semantics { liveRegion = LiveRegionMode.Polite }
+                    )
+                    SortMenu(
+                        selected = sortOrder,
+                        onSelect = {
+                            sortOrder = it
+                            preferences.edit { putString(PREF_SORT, it.name) }
+                        }
+                    )
+                }
+            }
+        }
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            val pinned = maxHeight >= PINNED_HEADER_MIN_HEIGHT
+            Column(modifier = Modifier.fillMaxSize()) {
+                if (pinned && state.rows.isNotEmpty()) header()
+                PullToRefreshBox(
+                    isRefreshing = state.refreshing,
+                    onRefresh = { viewModel.refresh() },
+                    state = pullState,
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
+                    val installed = visible.filter {
+                        it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
+                            it.status == AppStatus.OTHER_BUILD
+                    }
+                    val available = visible.filter {
+                        it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
                     }
 
-                    if (state.rows.isNotEmpty()) {
-                        item(key = "count") {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(top = 4.dp)
-                        ) {
-                            Text(
-                                text = if (visible.size == state.rows.size) {
-                                    pluralStringResource(
-                                        R.plurals.count_apps,
-                                        state.rows.size,
-                                        state.rows.size
-                                    )
-                                } else {
-                                    pluralStringResource(
-                                        R.plurals.count_apps_filtered,
-                                        state.rows.size,
-                                        visible.size,
-                                        state.rows.size
-                                    )
-                                },
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .semantics { liveRegion = LiveRegionMode.Polite }
-                            )
-                            SortMenu(
-                                selected = sortOrder,
-                                onSelect = {
-                                    sortOrder = it
-                                    preferences.edit { putString(PREF_SORT, it.name) }
-                                }
-                            )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (!pinned && state.rows.isNotEmpty()) {
+                            // The header keeps its own edges, past the list's side padding.
+                            item(key = "header") { Box(Modifier.pastSidePadding(16.dp)) { header() } }
                         }
-                    }
-                    if (visible.isEmpty()) {
+                        state.error?.let { error ->
+                            item(key = "error") { ErrorBanner(error) }
+                        }
+
+                        if (state.rows.isNotEmpty() && visible.isEmpty()) {
                             item(key = "no-match") {
                                 Text(
                                     text = stringResource(R.string.list_no_match),
@@ -299,98 +376,98 @@ fun StoreScreen(viewModel: StoreViewModel) {
                                 )
                             }
                         }
-                    }
 
-                    if (state.rows.isEmpty()) {
-                        item(key = "empty") {
-                            Text(
-                                text = stringResource(
-                                    when {
-                                        state.refreshing -> R.string.list_loading
-                                        state.error != null -> R.string.list_empty_error
-                                        else -> R.string.list_empty
-                                    }
-                                ),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier
-                                    .padding(vertical = 48.dp)
-                                    .semantics { liveRegion = LiveRegionMode.Polite }
-                            )
-                        }
-                    }
-
-                    section(
-                        key = "updates",
-                        rows = updates,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = {
-                            SectionHeader(
-                                title = pluralStringResource(
-                                    R.plurals.section_updates,
-                                    updates.size,
-                                    updates.size
-                                ),
-                                action = if (updates.size > 1) {
-                                    stringResource(R.string.action_update_all)
-                                } else {
-                                    null
-                                },
-                                onAction = {
-                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    viewModel.installAll(updates.map { it.app })
-                                }
-                            )
-                        }
-                    )
-                    section(
-                        key = "installed",
-                        rows = installed,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = { SectionHeader(stringResource(R.string.section_installed)) }
-                    )
-                    section(
-                        key = "available",
-                        rows = available,
-                        installs = installs,
-                        viewModel = viewModel,
-                        onSelect = { selectedRepo = it },
-                        header = { SectionHeader(stringResource(R.string.section_available)) }
-                    )
-
-                    if (state.checkedAt > 0) {
-                        item(key = "checked") {
-                            state.storeDownloads?.let { downloads ->
+                        if (state.rows.isEmpty()) {
+                            item(key = "empty") {
                                 Text(
-                                    text = pluralStringResource(
-                                        R.plurals.footer_store_downloads,
-                                        downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                                        fullNumber(downloads)
+                                    text = stringResource(
+                                        when {
+                                            state.refreshing -> R.string.list_loading
+                                            state.error != null -> R.string.list_empty_error
+                                            else -> R.string.list_empty
+                                        }
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier
+                                        .padding(vertical = 48.dp)
+                                        .semantics { liveRegion = LiveRegionMode.Polite }
+                                )
+                            }
+                        }
+
+                        section(
+                            key = "updates",
+                            rows = updates,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = {
+                                SectionHeader(
+                                    title = pluralStringResource(
+                                        R.plurals.section_updates,
+                                        updates.size,
+                                        updates.size
+                                    ),
+                                    action = if (updates.size > 1) {
+                                        stringResource(R.string.action_update_all)
+                                    } else {
+                                        null
+                                    },
+                                    onAction = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                        viewModel.installAll(updates.map { it.app })
+                                    }
+                                )
+                            }
+                        )
+                        section(
+                            key = "installed",
+                            rows = installed,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = { SectionHeader(stringResource(R.string.section_installed)) }
+                        )
+                        section(
+                            key = "available",
+                            rows = available,
+                            installs = installs,
+                            viewModel = viewModel,
+                            onSelect = { selectedRepo = it },
+                            header = { SectionHeader(stringResource(R.string.section_available)) }
+                        )
+
+                        if (state.checkedAt > 0) {
+                            item(key = "checked") {
+                                state.storeDownloads?.let { downloads ->
+                                    Text(
+                                        text = pluralStringResource(
+                                            R.plurals.footer_store_downloads,
+                                            downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                            fullNumber(downloads)
+                                        ),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
+                                }
+                                Text(
+                                    text = stringResource(
+                                        R.string.footer_checked,
+                                        DateUtils.getRelativeTimeSpanString(
+                                            state.checkedAt,
+                                            System.currentTimeMillis(),
+                                            DateUtils.MINUTE_IN_MILLIS
+                                        ).toString()
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(top = 16.dp)
+                                    modifier = Modifier.padding(
+                                        top = if (state.storeDownloads == null) 16.dp else 4.dp
+                                    )
                                 )
                             }
-                            Text(
-                                text = stringResource(
-                                    R.string.footer_checked,
-                                    DateUtils.getRelativeTimeSpanString(
-                                        state.checkedAt,
-                                        System.currentTimeMillis(),
-                                        DateUtils.MINUTE_IN_MILLIS
-                                    ).toString()
-                                ),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(
-                                    top = if (state.storeDownloads == null) 16.dp else 4.dp
-                                )
-                            )
                         }
                     }
                 }
@@ -400,12 +477,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
 
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
-        ModalBottomSheet(onDismissRequest = { selectedRepo = null }) {
+        StoreSheet(onDismissRequest = { selectedRepo = null }) {
             DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
         }
     }
     if (showSources) {
-        ModalBottomSheet(
+        StoreSheet(
             onDismissRequest = {
                 showSources = false
                 viewModel.clearSourceError()
@@ -415,10 +492,46 @@ fun StoreScreen(viewModel: StoreViewModel) {
         }
     }
     if (showSettings) {
-        ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsSheet(viewModel)
+        StoreSheet(onDismissRequest = { showSettings = false }) {
+            SettingsSheet(
+                viewModel = viewModel,
+                material = material,
+                onMaterialChange = {
+                    material = it
+                    preferences.edit { putBoolean(PREF_MATERIAL, it) }
+                }
+            )
         }
     }
+    }
+    }
+}
+
+/** A bottom sheet, drawn as a plate of metal when materials are on. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val metal = LocalMaterial.current
+    val color = BottomSheetDefaults.ContainerColor
+    ModalBottomSheet(
+        onDismissRequest = onDismissRequest,
+        containerColor = if (metal) Color.Transparent else color,
+        // The text is set against the plate's colour, whether the container shows it or not.
+        contentColor = contentColorFor(color),
+        // The handle keeps the tap and the accessibility actions Material puts around this
+        // slot. The plate is drawn from here down behind the whole sheet, which clips it to
+        // its shape, so that the plate reaches the top of the sheet in one piece.
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .material(color, Relief.PLATE, radius = 28.dp, reachBelow = 4000.dp)
+            ) {
+                BottomSheetDefaults.DragHandle(modifier = Modifier.align(Alignment.Center))
+            }
+        },
+        content = content
+    )
 }
 
 private fun LazyListScope.section(
@@ -505,22 +618,31 @@ private fun AppCard(
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
         onInstall()
     }
+    val metal = LocalMaterial.current
+    val surface = MaterialTheme.colorScheme.surfaceContainer
 
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainer
-        ),
+        colors = CardDefaults.cardColors(containerColor = surface),
         // The fill alone is too close to the background to show where a card ends in bright
-        // light, so the edge is drawn as well.
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
+        border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        // A metal plate casts a shadow; it is drawn here, outside the clip that bounds the
+        // touch feedback, where the card's own elevation shadow would be clipped away.
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (metal) Modifier.shadow(6.dp, CardDefaults.shape) else Modifier)
             .clip(CardDefaults.shape)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        // The metal is drawn over the card's own fill, inside its shape, so that the card
+        // stays opaque and its shadow falls outside it only.
+        Column(
+            modifier = Modifier
+                .material(surface, Relief.PLATE, radius = 12.dp)
+                .padding(16.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(app.title, app.packageName, row.installed != null)
+                RowIcon(app.title, app.packageName, row.installed != null, app.icon)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(text = app.title, style = MaterialTheme.typography.titleMedium)
@@ -537,20 +659,23 @@ private fun AppCard(
                     is InstallState.Downloading -> Progress(install.progress)
                     InstallState.Installing -> Progress(null)
                     else -> when (row.status) {
-                        AppStatus.UPDATE_AVAILABLE -> Button(onClick = startInstall) {
+                        AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_update))
                         }
-                        AppStatus.NOT_INSTALLED -> Button(onClick = startInstall) {
+                        AppStatus.NOT_INSTALLED -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_install))
                         }
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER -> {
+                        // Another app under this name: nothing to open and nothing to install
+                        // over it; the note below says so.
+                        AppStatus.OTHER_APP -> Unit
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
                                 }
                             }
                             if (launch != null) {
-                                OutlinedButton(
+                                StoreOutlinedButton(
                                     onClick = {
                                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                                         context.startActivity(launch)
@@ -576,6 +701,8 @@ private fun AppCard(
 
             val note = when {
                 row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
+                row.status == AppStatus.OTHER_BUILD -> R.string.other_build_note
+                row.status == AppStatus.OTHER_APP -> R.string.other_app_note
                 row.betaInstalled -> R.string.newer_installed_note
                 row.newerInstalled -> R.string.newer_version_note
                 else -> null
@@ -709,45 +836,6 @@ private fun Progress(progress: Float?) {
 }
 
 @Composable
-private fun AppIcon(name: String, packageName: String?, installed: Boolean) {
-    val context = LocalContext.current
-    val icon = remember(packageName, installed) {
-        if (!installed || packageName == null) {
-            null
-        } else {
-            runCatching {
-                context.packageManager.getApplicationIcon(packageName)
-                    .toBitmap(144, 144)
-                    .asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    if (icon != null) {
-        Image(
-            bitmap = icon,
-            contentDescription = null,
-            modifier = Modifier
-                .size(48.dp)
-                .clip(RoundedCornerShape(12.dp))
-        )
-    } else {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(MaterialTheme.colorScheme.secondary, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSecondary
-            )
-        }
-    }
-}
-
-@Composable
 private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
     val context = LocalContext.current
     val app = row.app
@@ -822,9 +910,16 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             }
         )
         row.installed?.let {
+            val version = it.versionName ?: it.versionCode.toString()
             DetailLine(
                 stringResource(R.string.detail_installed),
-                it.versionName ?: it.versionCode.toString()
+                // Another app under this name is named, so that the version is not taken for
+                // this app's.
+                if (it.otherApp && it.label != null) "${it.label} · $version" else version
+            )
+            DetailLine(
+                stringResource(R.string.detail_installed_from),
+                stringResource(installerName(it.installer, context.packageName))
             )
         }
         formatDate(app.publishedAt)?.let {
@@ -849,17 +944,33 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.padding(top = 16.dp)
         ) {
-            OutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
+            StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
                 Text(stringResource(R.string.action_view_source))
             }
-            if (row.installed != null && app.packageName != null) {
+            // Not for another app under this name: that would be the other app's removal.
+            if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
                 TextButton(onClick = { uninstall(context, app.packageName) }) {
                     Text(stringResource(R.string.action_uninstall))
                 }
             }
         }
 
-        if (row.status == AppStatus.OTHER_SIGNER) {
+        if (row.status == AppStatus.OTHER_APP && row.installed != null) {
+            Text(
+                text = stringResource(
+                    R.string.other_app_detail,
+                    row.installed.label.orEmpty(),
+                    stringResource(installerName(row.installed.installer, context.packageName))
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            // The way out when the names misled: the keys are compared again after the
+            // download, and the file installs when they match after all.
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_try_install))
+            }
+        } else if (row.status == AppStatus.OTHER_SIGNER) {
             Text(
                 text = stringResource(R.string.other_signer_detail),
                 style = MaterialTheme.typography.bodyMedium,
@@ -867,11 +978,33 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             )
             // The way out when a later release is signed with the right key after all: the
             // attempt compares the keys again and forgets the conflict when they match.
-            OutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(R.string.action_retry))
             }
+        } else if (row.status == AppStatus.OTHER_BUILD) {
+            // Another project's build, as far as is known: not offered as the update, but
+            // the keys are compared after the download for whoever tries.
+            Text(
+                text = stringResource(R.string.other_build_detail),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_update))
+            }
+        } else if (row.installed != null && row.status == AppStatus.UPDATE_AVAILABLE) {
+            // Whether the update will go through: known from the keys when the place that
+            // offers the file tells how it is signed, otherwise only once it is downloaded.
+            Text(
+                text = stringResource(
+                    if (row.installed.sameSigner) R.string.same_signer_detail else R.string.unknown_signer_detail
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
         }
-        if (row.betaInstalled && app.packageName != null) {
+        // Not for another app under this name: its version says nothing about a beta.
+        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
             ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
         }
     }
@@ -900,7 +1033,7 @@ private fun ReturnToStable(packageName: String, isStore: Boolean) {
         style = MaterialTheme.typography.bodyMedium
     )
     if (!isStore) {
-        OutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+        StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
             Text(stringResource(R.string.action_return_to_stable))
         }
     }
@@ -959,6 +1092,7 @@ private fun versionLine(row: AppRow): String {
             installed.versionName ?: installed.versionCode.toString(),
             row.app.displayVersion
         )
+        row.status == AppStatus.OTHER_APP -> row.app.displayVersion
         installed != null -> installed.versionName ?: row.app.displayVersion
         else -> row.app.displayVersion
     }
@@ -967,19 +1101,134 @@ private fun versionLine(row: AppRow): String {
 /** A short label on a card: a prerelease, or an app nobody published to the store. */
 @Composable
 private fun Badge(text: String) {
+    val color = MaterialTheme.colorScheme.tertiaryContainer
     Text(
         text = text,
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onTertiaryContainer,
         modifier = Modifier
             .padding(top = 2.dp, bottom = 2.dp)
-            .background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp))
+            .background(color)
+            .material(color, Relief.RAISED, radius = 8.dp, grain = 0.3f)
             .padding(horizontal = 8.dp, vertical = 2.dp)
     )
 }
 
+/**
+ * A filled button; raised metal of the primary colour when materials are on. The metal is
+ * drawn inside the button's own surface, which keeps its size: the touch target Material
+ * adds around it stays clear.
+ */
 @Composable
-private fun SettingsSheet(viewModel: StoreViewModel) {
+private fun StoreButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    val metal = LocalMaterial.current
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        colors = if (metal) {
+            ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+        } else {
+            ButtonDefaults.buttonColors()
+        },
+        contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
+    ) {
+        ButtonFace(MaterialTheme.colorScheme.primary, metal, content)
+    }
+}
+
+/** An outlined button; raised metal of the surface's colour when materials are on. */
+@Composable
+private fun StoreOutlinedButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit
+) {
+    val metal = LocalMaterial.current
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = true),
+        contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
+    ) {
+        ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
+    }
+}
+
+/** The face of a button: its content, on metal of the colour [base] when [metal]. */
+@Composable
+private fun RowScope.ButtonFace(base: Color, metal: Boolean, content: @Composable RowScope.() -> Unit) {
+    if (!metal) {
+        content()
+        return
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .defaultMinSize(minWidth = ButtonDefaults.MinWidth, minHeight = ButtonDefaults.MinHeight)
+            .material(base, Relief.RAISED, radius = null, grain = 0.5f)
+            .padding(ButtonDefaults.ContentPadding),
+        content = content
+    )
+}
+
+/**
+ * The colouring of a row of chips: the categories in the secondary tone, the places in the
+ * tertiary tone that the badges naming a place on the cards have too.
+ */
+private enum class ChipTone { CATEGORY, PLACE }
+
+/** A chip of a row of choices; raised metal, pressed in when chosen, when materials are on. */
+@Composable
+private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, tone: ChipTone = ChipTone.CATEGORY) {
+    val haptics = LocalHapticFeedback.current
+    val metal = LocalMaterial.current
+    val scheme = MaterialTheme.colorScheme
+    val container = when (tone) {
+        ChipTone.CATEGORY -> if (selected) scheme.secondaryContainer else scheme.surfaceContainerHigh
+        ChipTone.PLACE -> if (selected) scheme.tertiary else scheme.tertiaryContainer
+    }
+    val content = when (tone) {
+        ChipTone.CATEGORY -> if (selected) scheme.onSecondaryContainer else scheme.onSurfaceVariant
+        ChipTone.PLACE -> if (selected) scheme.onTertiary else scheme.onTertiaryContainer
+    }
+    // Built on the selectable surface a filter chip is built on, so that the metal can be
+    // drawn inside the chip's own 32 dp surface: the touch target around it stays clear.
+    Surface(
+        selected = selected,
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            onClick()
+        },
+        shape = FilterChipDefaults.shape,
+        color = if (metal) Color.Transparent else container,
+        contentColor = content,
+        border = if (metal || selected) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        modifier = Modifier.semantics { role = Role.Checkbox }
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .material(container, if (selected) Relief.RECESSED else Relief.RAISED, radius = 8.dp, grain = 0.4f)
+                .defaultMinSize(minHeight = FilterChipDefaults.Height)
+                .padding(start = if (selected) 8.dp else 16.dp, end = 16.dp)
+        ) {
+            if (selected) {
+                SelectedMark()
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text = label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMaterialChange: (Boolean) -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1000,6 +1249,21 @@ private fun SettingsSheet(viewModel: StoreViewModel) {
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
+        if (Surfaces.supported) {
+            // A device whose graphics driver could not draw the materials keeps the flat
+            // colours, and the switch says so rather than disappearing.
+            val unavailable = Surfaces.failed(LocalContext.current)
+            SettingSwitch(
+                heading = stringResource(R.string.appearance_title),
+                label = stringResource(R.string.material_switch),
+                description = stringResource(
+                    if (unavailable) R.string.material_unavailable else R.string.material_description
+                ),
+                checked = material && !unavailable,
+                enabled = !unavailable,
+                onCheckedChange = onMaterialChange
+            )
+        }
         NotificationSetting()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
@@ -1040,7 +1304,7 @@ private fun NotificationSetting() {
         style = MaterialTheme.typography.bodyLarge,
         modifier = Modifier.padding(top = 8.dp)
     )
-    OutlinedButton(
+    StoreOutlinedButton(
         onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
             runCatching {
@@ -1143,7 +1407,8 @@ private fun SettingSwitch(
     label: String,
     description: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     val haptics = LocalHapticFeedback.current
     if (heading != null) {
@@ -1162,6 +1427,7 @@ private fun SettingSwitch(
             .fillMaxWidth()
             .toggleable(
                 value = checked,
+                enabled = enabled,
                 role = Role.Switch,
                 onValueChange = {
                     haptics.performHapticFeedback(
@@ -1181,7 +1447,7 @@ private fun SettingSwitch(
             )
         }
         Spacer(Modifier.width(16.dp))
-        Switch(checked = checked, onCheckedChange = null)
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 
@@ -1305,6 +1571,26 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 
 private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
+private const val PREF_MATERIAL = "material"
+
+/**
+ * The height of the list's room below which the search, the chips and the count scroll
+ * with the list instead of staying above it: together they take about 200 dp, and the
+ * list needs room of its own in a low window or with a large font.
+ */
+private val PINNED_HEADER_MIN_HEIGHT = 480.dp
+
+/**
+ * Lays the content out [side] wider on each side than the room given, for a thing in a
+ * list that keeps its own edges past the list's side padding.
+ */
+private fun Modifier.pastSidePadding(side: Dp): Modifier = layout { measurable, constraints ->
+    val extra = (side * 2).roundToPx()
+    val placeable = measurable.measure(
+        constraints.copy(minWidth = constraints.maxWidth + extra, maxWidth = constraints.maxWidth + extra)
+    )
+    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
+}
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
@@ -1373,10 +1659,22 @@ private fun SortMenu(selected: SortOrder, onSelect: (SortOrder) -> Unit) {
 private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
+    Box(modifier = modifier) {
+    // Pressed into the surface, with the outline as its lip. The field keeps half a line of
+    // small text above the outline for the floating label, whatever the font size, so the
+    // metal starts where the outline does.
+    val labelRoom = with(LocalDensity.current) { MaterialTheme.typography.bodySmall.lineHeight.toDp() / 2 }
+    Box(
+        modifier = Modifier
+            .matchParentSize()
+            .padding(top = labelRoom)
+            .clip(RoundedCornerShape(28.dp))
+            .material(MaterialTheme.colorScheme.surfaceContainerLow, Relief.RECESSED, radius = 28.dp, grain = 0.4f)
+    )
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier,
+        modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         shape = RoundedCornerShape(28.dp),
         label = { Text(stringResource(R.string.search_hint)) },
@@ -1404,6 +1702,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
         // The list is filtered while typing, so the search key only puts the keyboard away.
         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() })
     )
+    }
 }
 
 @Composable
@@ -1414,68 +1713,63 @@ private fun CategoryChips(
     selected: String?,
     onSelect: (String?) -> Unit
 ) {
-    val haptics = LocalHapticFeedback.current
     // One category tells nothing the full list does not.
     if (categories.size < 2) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 4.dp)
+        modifier = Modifier.padding(top = 16.dp)
     ) {
         item(key = "all") {
-            FilterChip(
+            ChoiceChip(
                 selected = selected == null,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    onSelect(null)
-                },
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected == null,
-                    borderColor = MaterialTheme.colorScheme.outline
-                ),
-                leadingIcon = if (selected == null) {
-                    { SelectedMark() }
-                } else {
-                    null
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.category_chip,
-                            stringResource(R.string.category_all),
-                            total
-                        )
-                    )
-                }
+                label = stringResource(R.string.category_chip, stringResource(R.string.category_all), total),
+                onClick = { onSelect(null) }
             )
         }
         items(categories, key = { it }) { id ->
-            FilterChip(
+            ChoiceChip(
                 selected = selected == id,
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
-                    onSelect(if (selected == id) null else id)
-                },
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = selected == id,
-                    borderColor = MaterialTheme.colorScheme.outline
-                ),
-                leadingIcon = if (selected == id) {
-                    { SelectedMark() }
-                } else {
-                    null
-                },
-                label = {
-                    Text(
-                        stringResource(
-                            R.string.category_chip,
-                            stringResource(categoryLabel(id)),
-                            counts[id] ?: 0
-                        )
-                    )
-                }
+                label = stringResource(R.string.category_chip, stringResource(categoryLabel(id)), counts[id] ?: 0),
+                onClick = { onSelect(if (selected == id) null else id) }
+            )
+        }
+    }
+}
+
+/**
+ * A chip for each place apps are offered from, to see one place's apps alone. A place that
+ * is turned off in the settings, among [enabled] it is not, is named without a count;
+ * choosing it is the quick way to turn it on.
+ */
+@Composable
+private fun PlaceChips(
+    counts: Map<String, Int>,
+    enabled: Set<String>,
+    selected: String?,
+    onSelect: (String?) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        item(key = "all") {
+            ChoiceChip(
+                selected = selected == null,
+                label = stringResource(R.string.category_all),
+                onClick = { onSelect(null) },
+                tone = ChipTone.PLACE
+            )
+        }
+        items(CatalogRules.PLACES, key = { it }) { place ->
+            val count = counts[place] ?: 0
+            val name = stringResource(sourceName(place))
+            ChoiceChip(
+                selected = selected == place,
+                label = if (place in enabled || count > 0) stringResource(R.string.category_chip, name, count) else name,
+                onClick = { onSelect(if (selected == place) null else place) },
+                tone = ChipTone.PLACE
             )
         }
     }
@@ -1547,6 +1841,15 @@ private fun sourceName(source: String): Int = when (source) {
     else -> R.string.source_github
 }
 
+/** The name of the app that installed a package, [installer], for what the system tells. */
+private fun installerName(installer: String?, self: String): Int = when (installer) {
+    "com.android.vending" -> R.string.installer_play
+    "org.fdroid.fdroid", "org.fdroid.basic", "org.fdroid.fdroid.privileged" -> R.string.installer_fdroid
+    "com.aurora.store" -> R.string.installer_aurora
+    self -> R.string.installer_store
+    else -> R.string.installer_other
+}
+
 /** The badge that tells an app was not published to the store by its developer, if any. */
 private fun sourceBadge(app: StoreApp): Int? = when {
     !app.fromRepository -> sourceName(app.source)
@@ -1556,15 +1859,27 @@ private fun sourceBadge(app: StoreApp): Int? = when {
     else -> null
 }
 
-private fun matches(row: AppRow, query: String): Boolean {
-    val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
-    if (words.isEmpty()) return true
+/** The words of a search, each of which an app must carry somewhere. */
+private fun searchWords(query: String): List<String> =
+    query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+/**
+ * How well [row] answers a search for [words]: 0 when its name carries them all, 1 when its
+ * name together with its repository, developer and package does, 2 when its description is
+ * needed as well; null when it does not answer. No words match every app by name.
+ */
+private fun matchRank(row: AppRow, words: List<String>): Int? {
+    if (words.isEmpty()) return 0
     val app = row.app
-    val text = listOf(
-        app.title, app.repo, app.developer, app.description, app.packageName.orEmpty()
-    )
-        .joinToString(" ")
-    return words.all { text.contains(it, ignoreCase = true) }
+    fun String.carries() = words.all { contains(it, ignoreCase = true) }
+    val name = app.title
+    val identity = "$name ${app.repo} ${app.developer} ${app.packageName.orEmpty()}"
+    return when {
+        name.carries() -> 0
+        identity.carries() -> 1
+        "$identity ${app.description}".carries() -> 2
+        else -> null
+    }
 }
 
 private fun categoryLabel(id: String): Int = when (id) {

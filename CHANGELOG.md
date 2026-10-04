@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.5.0-beta.4
+
+- The material surfaces are on by default on Android 13 and later: the screen and everything
+  on it are brushed metal lit from above. The setting under Appearance turns them off for
+  flat colours or to save power. Measured with the release build on a Pixel 8a and a Galaxy
+  Z Flip 4, the metal costs nothing measurable in scrolling, and the text keeps a contrast
+  of at least 7:1 on it, light and dark
+
+## 1.5.0-beta.3
+
+- The number of apps and the order stay above the list with the search and the chips, so
+  that a card scrolling out goes under them; in a window too low for that they scroll with
+  the list
+- A search puts the apps it names first, then those whose repository, developer or package
+  it names, and shows the result from the top
+- The original of a fork that kept its package name is listed on its own, found from the
+  repository the catalogues name as its source, and a build of another project is not
+  offered as the installed app's update: its key, not known yet, is compared once the file
+  has been downloaded. Another app altogether installed under an app's package name, such
+  as Google's own under microG Companion's, is shown as what it is, with nothing to open,
+  update or remove
+- The index names no key for a file whose key has been rotated, since such a file updates
+  an app signed with the key before as well, and reads the keys of the files it knows once
+  again
+- Material surfaces: the metal is tried once off screen before it is drawn, and a device
+  whose graphics driver cannot draw it keeps the flat colours and says so in the settings;
+  the background is drawn once into an image, the shaders are shared and the lighting is
+  computed in half precision, so that scrolling is smoother. Still an experiment, off by
+  default
+
+## 1.5.0-beta.2
+
+- An experiment behind a setting: with "Material surfaces" on, the screen and everything on
+  it, the search field, the chips, the buttons, the badges, the cards and the sheets, are
+  drawn as brushed metal lit from above. The graphics processor computes the light, the
+  grain and the bevelled edge for every pixel, so the edge follows each shape. Needs Android 13
+- The place chips are always shown, in a tone of their own and with a choice of all places;
+  the chip of a place that is off in the settings turns it on
+- The details say where an installed app came from, Google Play, F-Droid, Aurora Store,
+  ARK-Store or another app, and whether it is signed with the same key as the version offered
+  here, so that ARK-Store can update it
+- The index names the key each file is signed with, read from the APK's signing block, and
+  only when every signature scheme in the block agrees
+- The lists of IzzyOnDroid and F-Droid are built again once so that their icons appear
+- More room between the search field, the chips and the list, and the search field's
+  background lines up with its outline
+
+## 1.5.0-beta.1
+
+- Every app is shown with its own icon: the index reads it from the APK, as an image or, for
+  an icon drawn as a vector, as the paths the app then draws itself, and keeps it beside the
+  lists; IzzyOnDroid and F-Droid give theirs. An app whose icon cannot be read is shown by
+  its initial, not by a symbol or an emoji its name happens to begin with
+- Chips under the categories narrow the list to the apps of one place: GitHub, Codeberg,
+  GitLab, IzzyOnDroid or F-Droid
+
 ## 1.4.0
 
 The work of the 1.4.0 beta versions, now for everyone:

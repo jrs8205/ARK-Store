@@ -3,10 +3,13 @@ package org.jarsi.arkstore.data
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
 import java.security.MessageDigest
+import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 data class InstalledVersion(
     val versionCode: Long,
@@ -17,7 +20,28 @@ data class InstalledVersion(
      */
     val otherSigner: Boolean = false,
     /** This very version was installed by the store as a beta. */
-    val beta: Boolean = false
+    val beta: Boolean = false,
+    /** The installed app is known to be signed with the same key as the one offered here. */
+    val sameSigner: Boolean = false,
+    /**
+     * The file offered here is another project's build of the package, as far as is known:
+     * the installed app carries a key another place is known to use, and this file's key is
+     * not known. Not a conflict seen, see [otherSigner], but no update to offer either.
+     */
+    val otherBuild: Boolean = false,
+    /**
+     * The package that installed the app, such as "com.android.vending" for Google Play, or
+     * null when the system does not tell: an app installed by hand, or by a tool.
+     */
+    val installer: String? = null,
+    /** The name the installed app goes by on the device, when it could be read. */
+    val label: String? = null,
+    /**
+     * What is installed under this package name is another app altogether: signed with
+     * another key and going by another name, like Google's own app whose package name an
+     * app offered here has taken for itself. The app offered here is not installed at all.
+     */
+    val otherApp: Boolean = false
 )
 
 enum class AppStatus {
@@ -26,7 +50,20 @@ enum class AppStatus {
     UP_TO_DATE,
 
     /** A newer version is offered, but the installed app is signed with a different key. */
-    OTHER_SIGNER
+    OTHER_SIGNER,
+
+    /**
+     * A newer version is offered by another project than the one whose key the installed
+     * app carries, as far as is known: not offered as the update, though its key, not known
+     * yet, may turn out to match.
+     */
+    OTHER_BUILD,
+
+    /**
+     * Another app altogether is installed under this package name, signed with another key
+     * and going by another name; this app is not installed, and cannot be while that is.
+     */
+    OTHER_APP
 }
 
 object InstalledApps {
@@ -66,23 +103,111 @@ object InstalledApps {
             }
         }
         val versionCode = PackageInfoCompat.getLongVersionCode(info)
-        return InstalledVersion(
-            versionCode,
-            info.versionName,
-            otherSigner = hasConflict(context, app, packageName) || signedOtherwise(context, app, packageName),
-            beta = betas(context).getLong(packageName, -1) == versionCode
+        // The index and the catalogues tell how their files are signed, so whether the
+        // installed app is signed the same way is known without downloading anything.
+        val signers = app.signer?.let { presentSigners(context.packageManager, packageName) }
+        val names = labelsOf(context, info)
+        return compareIdentity(
+            app,
+            InstalledVersion(
+                versionCode,
+                info.versionName,
+                otherSigner = hasConflict(context, app, packageName),
+                beta = betas(context).getLong(packageName, -1) == versionCode,
+                installer = installerOf(context, packageName, info.lastUpdateTime),
+                label = names?.shown
+            ),
+            signers,
+            names?.own
         )
     }
 
+    /** Compares current signing and default names, retaining a remembered conflict until disproved. */
+    internal fun compareIdentity(
+        app: StoreApp,
+        installed: InstalledVersion,
+        signers: Set<String>?,
+        defaultLabel: String?
+    ): InstalledVersion {
+        val sameSigner = CatalogRules.sameSigner(app.signer, signers)
+        val differentSigner = app.signer != null && !signers.isNullOrEmpty() && !sameSigner
+        // Repository labels come from APK resources. Catalogue labels are translated
+        // metadata, and a repository name standing in for a missing label is not an APK name.
+        val offeredLabel = app.label?.trim()?.takeIf { app.fromRepository && it.isNotEmpty() }
+        val installedLabel = defaultLabel?.trim()?.takeIf { it.isNotEmpty() }
+        return installed.copy(
+            sameSigner = sameSigner,
+            otherSigner = differentSigner || (!sameSigner && installed.otherSigner),
+            otherApp = differentSigner && offeredLabel != null && installedLabel != null &&
+                !installedLabel.equals(offeredLabel, ignoreCase = true)
+        )
+    }
+
+    /** The names an installed app goes by: [shown] in the device's language, [own] in its own default one. */
+    private class Labels(val shown: String?, val own: String?)
+
+    private val labels = ConcurrentHashMap<String, Labels>()
+
     /**
-     * Whether the installed [packageName] is known to be signed with another key than the
-     * file offered as [app]. A catalogue tells how its files are signed, so this is known
-     * without downloading anything.
+     * The names the installed app [info] goes by, or null when they cannot be read.
+     * Remembered per installation ([PackageInfo.lastUpdateTime]) and per language of the
+     * device, since the list asks for every installed app whenever it is shown.
      */
-    private fun signedOtherwise(context: Context, app: StoreApp, packageName: String): Boolean {
-        val offered = app.signer ?: return false
-        val installed = presentSigners(context.packageManager, packageName) ?: return false
-        return offered !in installed
+    private fun labelsOf(context: Context, info: PackageInfo): Labels? {
+        val application = info.applicationInfo ?: return null
+        val language = context.resources.configuration.locales.toLanguageTags()
+        val key = "${info.packageName}:${info.lastUpdateTime}:$language"
+        labels[key]?.let { return it }
+        val shown = try {
+            application.loadLabel(context.packageManager).toString().trim().ifEmpty { null }
+        } catch (_: RuntimeException) {
+            null
+        }
+        val own = try {
+            if (application.labelRes == 0) {
+                application.nonLocalizedLabel?.toString()?.trim()?.ifEmpty { null }
+            } else {
+                val plain = Configuration(context.resources.configuration).apply { setLocale(Locale.ROOT) }
+                context.createPackageContext(info.packageName, 0)
+                    .createConfigurationContext(plain)
+                    .resources.getString(application.labelRes).trim().ifEmpty { null }
+            }
+        } catch (_: RuntimeException) {
+            null
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+        val names = Labels(shown, own)
+        labels[key] = names
+        return names
+    }
+
+    private val installers = ConcurrentHashMap<String, String>()
+
+    /**
+     * The package that installed [packageName], or null when the system does not tell.
+     * Remembered per installation ([lastUpdateTime]), since the list asks for every
+     * installed app whenever it is shown.
+     */
+    fun installerOf(context: Context, packageName: String, lastUpdateTime: Long): String? {
+        val key = "$packageName:$lastUpdateTime"
+        val known = installers[key]
+        if (known != null) return known.ifEmpty { null }
+        val installer = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(packageName)
+                    .let { it.installingPackageName ?: it.initiatingPackageName }
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(packageName)
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+        installers[key] = installer.orEmpty()
+        return installer
     }
 
     /**
@@ -97,18 +222,33 @@ object InstalledApps {
         if (packageName in installed) presentSigners(context.packageManager, packageName) else null
     }
 
+    /**
+     * [find] for a row of the list: a row that is another project's build of the installed
+     * package ([CatalogRules.Merged.otherBuild]) is not offered as its update. A key seen to
+     * differ stays what it is; a key not known is left unknown, not taken for a conflict.
+     */
+    internal fun find(
+        context: Context,
+        row: CatalogRules.Merged,
+        installed: Map<String, PackageInfo>? = null
+    ): InstalledVersion? = find(context, row.app, installed)?.let {
+        if (row.otherBuild && !it.otherSigner && !it.sameSigner) it.copy(otherBuild = true) else it
+    }
+
     fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
+        installed.otherApp -> AppStatus.OTHER_APP
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
         installed.otherSigner -> AppStatus.OTHER_SIGNER
+        installed.otherBuild -> AppStatus.OTHER_BUILD
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
     fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
         val installed = snapshot(context)
-        return merged(context, apps, installed).map { it.app }.filter {
-            status(it, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
-        }
+        return merged(context, apps, installed).filter {
+            status(it.app, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
+        }.map { it.app }
     }
 
     /**

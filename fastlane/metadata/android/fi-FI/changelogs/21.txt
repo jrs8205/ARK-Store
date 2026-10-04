@@ -1,0 +1,1 @@
+Materiaalipinnat ovat oletuksena päällä Android 13:sta alkaen: näyttö ja kaikki sillä oleva on ylhäältä valaistua harjattua metallia. Ulkoasun asetus sammuttaa ne. Release-käännöksellä mitattuna metalli ei hidasta vieritystä havaittavasti, ja tekstin kontrasti pysyy vähintään 7:1.

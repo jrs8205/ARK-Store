@@ -1,0 +1,1 @@
+Every app is shown with its own icon, read from its APK by the index or given by its catalogue. Chips under the categories narrow the list to the apps of one place: GitHub, Codeberg, GitLab, IzzyOnDroid or F-Droid.
