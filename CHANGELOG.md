@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0-beta.1
+
+- The updates a refresh has just found are seen at once. A list at its top stays at its top
+  when a section comes first, the updates found or an error, instead of keeping its first
+  item in place and leaving the new section hidden above it until the list is scrolled up.
+  A list scrolled further down stays where it is
+- The README explains what is and is not checked when an app is installed
+
 ## 1.5.0
 
 The work of the 1.5.0 beta versions, now for everyone:
