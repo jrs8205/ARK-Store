@@ -57,7 +57,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21,
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -81,6 +81,21 @@ class BuildAppTest(unittest.TestCase):
             app = build_index.build_app(REPO, previous)
         reader.assert_called_once()
         self.assertEqual(app["apks"][0]["minSdk"], 26)
+        self.assertEqual(app["apks"][0]["sdkReader"], build_index.SDK_READER)
+
+    def test_apk_whose_lowest_android_version_an_older_reader_read_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 35)) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["minSdk"], 35)
+        self.assertEqual(app["apks"][0]["sdkReader"], build_index.SDK_READER)
 
     def test_apk_known_without_a_label_is_read_again(self):
         previous = {7: {
@@ -98,7 +113,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
-            "signer": "ab" * 32, "signerReader": 2, "minSdk": 21,
+            "signer": "ab" * 32, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -137,7 +152,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21,
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
 
@@ -161,7 +176,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21, "icon": "https://x/icons/org.example-abc.png",
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "icon": "https://x/icons/org.example-abc.png",
         }}
         releases = [dict(release()[0], assets=release()[0]["assets"] + [asset("app-arm64.apk", 8)])]
         icons = build_index.IconStore("unused", "https://x/icons")
@@ -176,7 +191,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21, "icon": None,
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "icon": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
         with mock.patch.object(build_index, "api", return_value=release()), \
@@ -266,23 +281,25 @@ def manifest_element(name, attributes):
     return chunk(0x0102, struct.pack("<Ii", 1, -1), body)
 
 
-def manifest(label, icon=None, min_sdk=None):
+def manifest(label, icon=None, min_sdk=None, sdk_last=False):
     """A binary manifest of org.example, version 3, whose application has the given label
     attribute as (type, data), or none, and refers to the icon resource icon, if any. With
     min_sdk, a uses-sdk element names the lowest Android version, as a number or as
-    (type, data)."""
+    (type, data), before the application element, or after it with sdk_last."""
     strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain", "icon",
                "minSdkVersion", "uses-sdk"]
     resource_map = chunk(0x0180, b"", struct.pack("<9I", 0x0101021B, 0x01010001, 0, 0, 0, 0, 0, 0x01010002,
                                                   0x0101020C))
     elements = manifest_element(3, [(0, 0x10, 3), (2, 0x03, 5)])
+    uses_sdk = b""
     if min_sdk is not None:
         version = min_sdk if isinstance(min_sdk, tuple) else (0x10, min_sdk)
-        elements += manifest_element(9, [(8,) + version])
+        uses_sdk = manifest_element(9, [(8,) + version])
     attributes = [(1,) + label] if label else []
     if icon:
         attributes.append((7, 0x01, icon))
-    elements += manifest_element(4, attributes)
+    application = manifest_element(4, attributes)
+    elements += application + uses_sdk if sdk_last else uses_sdk + application
     return chunk(0x0003, b"", string_pool(strings) + resource_map + elements)
 
 
@@ -414,6 +431,11 @@ class ManifestTest(unittest.TestCase):
 
     def test_lowest_android_version_comes_from_uses_sdk(self):
         self.assertEqual(build_index.parse_manifest(manifest(None, min_sdk=26))[5], 26)
+
+    def test_lowest_android_version_is_read_after_the_application_too(self):
+        # Elements of the manifest come in the order the developer wrote them.
+        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6), min_sdk=35, sdk_last=True)),
+                         ("org.example", 3, None, "Plain", None, 35))
 
     def test_manifest_without_uses_sdk_runs_on_every_android(self):
         self.assertEqual(build_index.parse_manifest(manifest(None))[5], 1)

@@ -60,6 +60,11 @@ PROOF_OF_ROTATION = 0x3BA06F8C
 # reader named is read again, since the reader may have named a key it should not have.
 # Raise it whenever read_signer changes what it names.
 SIGNER_READER = 2
+# The version of the reader of the lowest Android version, written beside each minSdk: a
+# file an older reader read is read again. The first reader missed a uses-sdk element that
+# came after the application element and wrote 1 for it. Raise it whenever lowest_sdk or
+# the way parse_manifest finds the element changes what is written.
+SDK_READER = 1
 USER_AGENT = "ARK-Store-index"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -487,14 +492,17 @@ def parse_manifest(data):
     None; minSdk the lowest Android API level the app runs on, 1 when the manifest names none,
     as Android takes it, or None when it is named as a codename rather than a number."""
     manifest = None
+    application = None
     min_sdk = 1
+    # The children of the manifest element come in the order they were written, so the
+    # whole document is read: uses-sdk can follow application.
     for element, attributes in elements(data):
         if manifest is None and element != "manifest":
             raise ManifestError("unexpected root element")
         if element == "uses-sdk":
             min_sdk = lowest_sdk(attributes)
             continue
-        if manifest is not None and element != "application":
+        if manifest is not None and (element != "application" or application is not None):
             continue
         package = None
         version_code = 0
@@ -517,13 +525,14 @@ def parse_manifest(data):
             elif name == "package":
                 package = text
         if manifest is not None:
-            return manifest + (label, icon, min_sdk)
+            application = (label, icon)
+            continue
         if not package:
             raise ManifestError("package name missing")
         manifest = (package, (version_code_major << 32) | version_code, version_name)
     if manifest is None:
         raise ManifestError("manifest element not found")
-    return manifest + (None, None, min_sdk)
+    return manifest + (application or (None, None)) + (min_sdk,)
 
 
 def lowest_sdk(attributes):
@@ -1318,12 +1327,12 @@ def release_info(release, previous_apks, icons=None):
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
         if known and "label" in known and known.get("signerReader") == SIGNER_READER \
-                and "minSdk" in known and (icons is None or "icon" in known):
+                and known.get("sdkReader") == SDK_READER and (icons is None or "icon" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
             # An entry written before names, signers, icons or the lowest Android version
-            # were read lacks them, and is read again, as is one whose signer an older reader
-            # named (see SIGNER_READER).
+            # were read lacks them, and is read again, as is one whose signer or lowest
+            # Android version an older reader named (see SIGNER_READER and SDK_READER).
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
                         known["label"], known["signer"], known["minSdk"])
             icon = known.get("icon")
@@ -1357,6 +1366,7 @@ def release_info(release, previous_apks, icons=None):
             # when the manifest does not say it as a number. The app offers a device only
             # files it can run and tells the version in the details.
             "minSdk": manifest[5] if len(manifest) > 5 else None,
+            "sdkReader": SDK_READER,
         }
         if icons is not None:
             # See IconStore.get; None for an app whose icon could not be kept.
