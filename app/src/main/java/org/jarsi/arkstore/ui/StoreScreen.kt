@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -72,7 +73,9 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -352,6 +355,19 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     val available = visible.filter {
                         it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
                     }
+                    // The key of the list's first item, in the order the content below gives
+                    // them; see KeepTop.
+                    val firstKey = when {
+                        !pinned && state.rows.isNotEmpty() -> "header"
+                        state.error != null -> "error"
+                        state.rows.isNotEmpty() && visible.isEmpty() -> "no-match"
+                        state.rows.isEmpty() -> "empty"
+                        updates.isNotEmpty() -> "header-updates"
+                        installed.isNotEmpty() -> "header-installed"
+                        available.isNotEmpty() -> "header-available"
+                        else -> "checked"
+                    }
+                    KeepTop(listState, firstKey)
 
                     LazyColumn(
                         state = listState,
@@ -532,6 +548,27 @@ private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable Column
         },
         content = content
     )
+}
+
+/**
+ * Keeps a list that is at its top at its top when another item comes first. A lazy list
+ * keeps its first visible item in place, by its key, when items are added above it, so the
+ * section of updates a refresh has just found, or an error, would appear above the list
+ * out of sight: the store would open to the apps installed, and the updates would be seen
+ * only by scrolling up. The first item is read in composition, before the list has been laid
+ * out with the new items, and the list is asked for its top before that layout. A list
+ * scrolled further down stays where it is.
+ */
+@Composable
+private fun KeepTop(listState: LazyListState, firstKey: String) {
+    val atTop by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex == 0 } }
+    val shown = remember { arrayOf(firstKey) }
+    if (shown[0] != firstKey) {
+        SideEffect {
+            shown[0] = firstKey
+            if (atTop) listState.requestScrollToItem(0)
+        }
+    }
 }
 
 private fun LazyListScope.section(
