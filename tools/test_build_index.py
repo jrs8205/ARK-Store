@@ -57,7 +57,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2,
+            "signer": None, "signerReader": 2, "minSdk": 21,
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -68,6 +68,19 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual(apk["url"], "https://example.invalid/new.apk")
         self.assertEqual((apk["packageName"], apk["versionCode"]), ("org.example", 4))
         self.assertEqual(apk["label"], "Example")
+        self.assertEqual(apk["minSdk"], 21)
+
+    def test_apk_known_without_a_lowest_android_version_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()),                 mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 26)) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["minSdk"], 26)
 
     def test_apk_known_without_a_label_is_read_again(self):
         previous = {7: {
@@ -85,7 +98,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
-            "signer": "ab" * 32, "signerReader": 2,
+            "signer": "ab" * 32, "signerReader": 2, "minSdk": 21,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -124,7 +137,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2,
+            "signer": None, "signerReader": 2, "minSdk": 21,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
 
@@ -148,7 +161,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "icon": "https://x/icons/org.example-abc.png",
+            "signer": None, "signerReader": 2, "minSdk": 21, "icon": "https://x/icons/org.example-abc.png",
         }}
         releases = [dict(release()[0], assets=release()[0]["assets"] + [asset("app-arm64.apk", 8)])]
         icons = build_index.IconStore("unused", "https://x/icons")
@@ -163,7 +176,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "icon": None,
+            "signer": None, "signerReader": 2, "minSdk": 21, "icon": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
         with mock.patch.object(build_index, "api", return_value=release()), \
@@ -253,12 +266,19 @@ def manifest_element(name, attributes):
     return chunk(0x0102, struct.pack("<Ii", 1, -1), body)
 
 
-def manifest(label, icon=None):
+def manifest(label, icon=None, min_sdk=None):
     """A binary manifest of org.example, version 3, whose application has the given label
-    attribute as (type, data), or none, and refers to the icon resource icon, if any."""
-    strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain", "icon"]
-    resource_map = chunk(0x0180, b"", struct.pack("<8I", 0x0101021B, 0x01010001, 0, 0, 0, 0, 0, 0x01010002))
+    attribute as (type, data), or none, and refers to the icon resource icon, if any. With
+    min_sdk, a uses-sdk element names the lowest Android version, as a number or as
+    (type, data)."""
+    strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain", "icon",
+               "minSdkVersion", "uses-sdk"]
+    resource_map = chunk(0x0180, b"", struct.pack("<9I", 0x0101021B, 0x01010001, 0, 0, 0, 0, 0, 0x01010002,
+                                                  0x0101020C))
     elements = manifest_element(3, [(0, 0x10, 3), (2, 0x03, 5)])
+    if min_sdk is not None:
+        version = min_sdk if isinstance(min_sdk, tuple) else (0x10, min_sdk)
+        elements += manifest_element(9, [(8,) + version])
     attributes = [(1,) + label] if label else []
     if icon:
         attributes.append((7, 0x01, icon))
@@ -381,16 +401,25 @@ class VectorTest(unittest.TestCase):
 
 class ManifestTest(unittest.TestCase):
     def test_label_written_out_is_returned_as_text(self):
-        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6))), ("org.example", 3, None, "Plain", None))
+        self.assertEqual(build_index.parse_manifest(manifest((0x03, 6))), ("org.example", 3, None, "Plain", None, 1))
 
     def test_label_kept_in_a_resource_is_returned_as_its_id(self):
         self.assertEqual(build_index.parse_manifest(manifest((0x01, 0x7F020001)))[3], 0x7F020001)
 
     def test_application_without_a_label_has_none(self):
-        self.assertEqual(build_index.parse_manifest(manifest(None)), ("org.example", 3, None, None, None))
+        self.assertEqual(build_index.parse_manifest(manifest(None)), ("org.example", 3, None, None, None, 1))
 
     def test_icon_is_returned_as_the_id_of_its_resource(self):
         self.assertEqual(build_index.parse_manifest(manifest(None, icon=0x7F030000))[4], 0x7F030000)
+
+    def test_lowest_android_version_comes_from_uses_sdk(self):
+        self.assertEqual(build_index.parse_manifest(manifest(None, min_sdk=26))[5], 26)
+
+    def test_manifest_without_uses_sdk_runs_on_every_android(self):
+        self.assertEqual(build_index.parse_manifest(manifest(None))[5], 1)
+
+    def test_lowest_android_version_given_as_a_codename_is_unknown(self):
+        self.assertIsNone(build_index.parse_manifest(manifest(None, min_sdk=(0x03, 6)))[5])
 
     def test_adaptive_icon_names_the_resources_of_its_layers(self):
         self.assertEqual(
@@ -526,7 +555,11 @@ class ReadManifestTest(unittest.TestCase):
 
     def test_label_is_looked_up_in_the_resource_table(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
-        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App", None))
+        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App", None, 1))
+
+    def test_lowest_android_version_is_read_with_the_rest(self):
+        files = {b"AndroidManifest.xml": manifest((0x03, 6), min_sdk=24)}
+        self.assertEqual(self.read(files)[5], 24)
 
     def test_label_read_from_another_apk_of_the_release_is_reused(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
@@ -535,9 +568,9 @@ class ReadManifestTest(unittest.TestCase):
 
     def test_unreadable_resource_table_costs_only_the_label(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": b"junk" * 8}
-        self.assertEqual(self.read(files), ("org.example", 3, None, None, None))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1))
         files.pop(b"resources.arsc")
-        self.assertEqual(self.read(files), ("org.example", 3, None, None, None))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1))
 
     def test_signer_is_the_certificate_of_the_signing_block(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6))}
@@ -600,7 +633,7 @@ class ReadManifestTest(unittest.TestCase):
 
         with mock.patch.object(build_index, "read_range", side_effect=read_range):
             result = build_index.read_manifest("https://example.invalid/a.apk", len(apk))
-        self.assertEqual(result, ("org.example", 3, None, None, None))
+        self.assertEqual(result, ("org.example", 3, None, None, None, 1))
 
     def test_label_is_tidied(self):
         self.assertEqual(build_index.tidy_label("  Two\n words "), "Two words")
