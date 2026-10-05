@@ -89,6 +89,10 @@
     </plurals>
     <string name="category_chip" translatable="false">%1$s (%2$d)</string>
     <string name="category_all">All</string>
+    <string name="bookmarks_chip">Bookmarks</string>
+    <string name="action_bookmark">Bookmark</string>
+    <string name="action_unbookmark">Remove bookmark</string>
+    <string name="bookmarked">Bookmarked</string>
     <string name="category_communication">Communication</string>
     <string name="category_productivity">Productivity</string>
     <string name="category_tools">Tools</string>

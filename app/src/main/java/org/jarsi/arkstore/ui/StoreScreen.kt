@@ -137,6 +137,7 @@ import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.StoreApp
@@ -151,12 +152,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
+    val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var place by rememberSaveable { mutableStateOf<String?>(null) }
+    var onlyBookmarks by rememberSaveable { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -253,6 +256,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
         val activePlace = place
+        // The last bookmark taken away ends the bookmark filter rather than emptying the list.
+        val bookmarkCount = state.rows.count { Bookmarks.key(it.app) in bookmarked }
+        val activeBookmarks = onlyBookmarks && bookmarkCount > 0
         // The places whose apps are turned on in the settings; GitHub always is.
         val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
         // With a search, the apps whose name answers it come first, then those whose
@@ -261,7 +267,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val words = remember(query) { searchWords(query) }
         val visible = state.rows.mapNotNull { row ->
             val shown = (activeCategory == null || row.app.category == activeCategory) &&
-                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace))
+                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
+                (!activeBookmarks || Bookmarks.key(row.app) in bookmarked)
             if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
         }
             .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
@@ -269,7 +276,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // A changed search or filter shows its result from the top; a list restored as it
         // was, after a turn of the screen, stays where it was.
         val listState = rememberLazyListState()
-        val filterKey = "$query\u0000$activeCategory\u0000$activePlace"
+        val filterKey = "$query\u0000$activeCategory\u0000$activePlace\u0000$activeBookmarks"
         var shownFor by rememberSaveable { mutableStateOf(filterKey) }
         LaunchedEffect(filterKey) {
             if (shownFor != filterKey) {
@@ -298,7 +305,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     counts = state.rows.groupingBy { it.app.category }.eachCount(),
                     total = state.rows.size,
                     selected = activeCategory,
-                    onSelect = { category = it }
+                    onSelect = { category = it },
+                    bookmarks = bookmarkCount,
+                    onlyBookmarks = activeBookmarks,
+                    onBookmarksToggle = { onlyBookmarks = !activeBookmarks }
                 )
                 PlaceChips(
                     counts = CatalogRules.PLACES.associateWith { place ->
@@ -435,6 +445,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "updates",
                         rows = updates,
                         installs = installs,
+                        bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
                         header = {
@@ -460,6 +471,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "installed",
                         rows = installed,
                         installs = installs,
+                        bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_installed)) }
@@ -468,6 +480,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "available",
                         rows = available,
                         installs = installs,
+                        bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
                         header = { SectionHeader(stringResource(R.string.section_available)) }
@@ -512,7 +525,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
         StoreSheet(onDismissRequest = { selectedRepo = null }) {
-            DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
+            DetailsSheet(
+                selected,
+                onInstall = { viewModel.install(selected.app) },
+                bookmarked = Bookmarks.key(selected.app) in bookmarked,
+                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) }
+            )
         }
     }
     if (showSources) {
@@ -604,6 +622,7 @@ private fun LazyListScope.section(
     key: String,
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
+    bookmarked: Set<String>,
     viewModel: StoreViewModel,
     onSelect: (String) -> Unit,
     header: @Composable () -> Unit
@@ -614,6 +633,7 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
+            bookmarked = Bookmarks.key(row.app) in bookmarked,
             onInstall = { viewModel.install(row.app) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -673,6 +693,7 @@ private fun ErrorBanner(error: LoadError) {
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
+    bookmarked: Boolean,
     onInstall: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -711,7 +732,22 @@ private fun AppCard(
                 RowIcon(app.title, app.packageName, row.installed != null, app.icon)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = app.title, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = app.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (bookmarked) {
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bookmark_filled),
+                                contentDescription = stringResource(R.string.bookmarked),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     if (app.prerelease) Badge(stringResource(R.string.badge_beta))
                     sourceBadge(app)?.let { Badge(stringResource(it)) }
                     Text(
@@ -904,9 +940,16 @@ private fun Progress(progress: Float?) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
+private fun DetailsSheet(
+    row: AppRow,
+    onInstall: () -> Unit,
+    bookmarked: Boolean,
+    onBookmarkToggle: () -> Unit
+) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val app = row.app
 
     Column(
@@ -1016,12 +1059,33 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             Text(text = app.releaseNotes.trim(), style = MaterialTheme.typography.bodyMedium)
         }
 
-        Row(
+        // Three buttons do not fit one row on a phone, so they wrap to the next line rather
+        // than squeezing the last one to a column of letters.
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(top = 16.dp)
         ) {
             StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
                 Text(stringResource(R.string.action_view_source))
+            }
+            TextButton(
+                onClick = {
+                    haptics.performHapticFeedback(
+                        if (bookmarked) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn
+                    )
+                    onBookmarkToggle()
+                }
+            ) {
+                Icon(
+                    painter = painterResource(
+                        if (bookmarked) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(if (bookmarked) R.string.action_unbookmark else R.string.action_bookmark))
             }
             // Not for another app under this name: that would be the other app's removal.
             if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
@@ -1833,10 +1897,13 @@ private fun CategoryChips(
     counts: Map<String, Int>,
     total: Int,
     selected: String?,
-    onSelect: (String?) -> Unit
+    onSelect: (String?) -> Unit,
+    bookmarks: Int,
+    onlyBookmarks: Boolean,
+    onBookmarksToggle: () -> Unit
 ) {
     // One category tells nothing the full list does not.
-    if (categories.size < 2) return
+    if (categories.size < 2 && bookmarks == 0) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1844,10 +1911,24 @@ private fun CategoryChips(
     ) {
         item(key = "all") {
             ChoiceChip(
-                selected = selected == null,
+                selected = selected == null && !onlyBookmarks,
                 label = stringResource(R.string.category_chip, stringResource(R.string.category_all), total),
-                onClick = { onSelect(null) }
+                onClick = {
+                    onSelect(null)
+                    if (onlyBookmarks) onBookmarksToggle()
+                }
             )
+        }
+        // The bookmarks narrow the list across the categories, so the chip stands with them
+        // but leaves the chosen category as it is.
+        if (bookmarks > 0) {
+            item(key = "bookmarks") {
+                ChoiceChip(
+                    selected = onlyBookmarks,
+                    label = stringResource(R.string.category_chip, stringResource(R.string.bookmarks_chip), bookmarks),
+                    onClick = onBookmarksToggle
+                )
+            }
         }
         items(categories, key = { it }) { id ->
             ChoiceChip(

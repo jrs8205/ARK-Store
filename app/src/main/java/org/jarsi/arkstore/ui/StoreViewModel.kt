@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.HttpStatusException
@@ -119,6 +120,13 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The other catalogues whose apps are shown, by their source names. */
     val catalogues: StateFlow<Set<String>> = repository.catalogues
+
+    private val bookmarks = Bookmarks(application)
+
+    /** The keys of the bookmarked apps, see [Bookmarks.key]. */
+    val bookmarked: StateFlow<Set<String>> = bookmarks.keys
+
+    fun toggleBookmark(app: StoreApp) = bookmarks.toggle(app)
 
     fun setCatalogue(source: String, include: Boolean) {
         repository.setCatalogue(source, include)

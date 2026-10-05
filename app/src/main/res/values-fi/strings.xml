@@ -84,6 +84,10 @@
         <item quantity="other">Näytetään %1$d / %2$d sovellusta</item>
     </plurals>
     <string name="category_all">Kaikki</string>
+    <string name="bookmarks_chip">Kirjanmerkit</string>
+    <string name="action_bookmark">Lisää kirjanmerkki</string>
+    <string name="action_unbookmark">Poista kirjanmerkki</string>
+    <string name="bookmarked">Kirjanmerkitty</string>
     <string name="category_communication">Viestintä</string>
     <string name="category_productivity">Tuottavuus</string>
     <string name="category_tools">Työkalut</string>
