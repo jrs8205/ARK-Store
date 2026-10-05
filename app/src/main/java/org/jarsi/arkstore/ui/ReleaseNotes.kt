@@ -36,8 +36,14 @@ internal object ReleaseNotes {
     private val code = Regex("""`([^`]+)`""")
     private val bold = Regex("""(\*\*|__)(?=\S)(.+?)(?<=\S)\1""")
 
-    /** Stands in for a code span while the text around it is cleaned and marked. */
+    /**
+     * The first of the private-use characters that stand in for the code spans, by their
+     * index, while the text around them is cleaned and marked; one that the cleaning takes
+     * away with its image or tag then leaves the others in their places. The notes are
+     * cleared of private-use characters first, as they have no glyph to show anyway.
+     */
     private const val HELD = ''
+    private val privateUse = Regex("""[-]""")
 
     fun parse(markdown: String): List<Line> {
         val lines = ArrayList<Line>()
@@ -114,24 +120,36 @@ internal object ReleaseNotes {
      */
     fun spans(text: String): List<Span> {
         val codes = ArrayList<String>()
-        val held = text.replace(code) { codes += it.groupValues[1]; HELD.toString() }
+        val held = text.replace(privateUse, "").replace(code) {
+            codes += it.groupValues[1]
+            (HELD + codes.lastIndex).toString()
+        }
         val plain = held
             .replace(image, "")
             .replace(tag, "")
             .replace(link) { it.groupValues[1] }
             .replace(autoLink) { it.groupValues[1] }
         val spans = ArrayList<Span>()
-        var next = 0
         for (span in marked(plain, bold = false)) {
             var at = 0
-            while (at < span.text.length) {
-                val held = span.text.indexOf(HELD, at).takeIf { it >= 0 && next < codes.size } ?: span.text.length
-                if (held > at) spans += span.copy(text = span.text.substring(at, held))
-                if (held < span.text.length) spans += Span(codes[next++], bold = span.bold, code = true)
-                at = held + 1
+            span.text.forEachIndexed { index, char ->
+                if (char in HELD..'' && char - HELD < codes.size) {
+                    if (index > at) spans += span.copy(text = span.text.substring(at, index))
+                    spans += Span(codes[char - HELD], bold = span.bold, code = true)
+                    at = index + 1
+                }
             }
+            if (at < span.text.length) spans += span.copy(text = span.text.substring(at))
         }
-        return merge(spans)
+        return trimmed(merge(spans))
+    }
+
+    /** [spans] without the space an image or a tag taken away leaves at either end. */
+    private fun trimmed(spans: List<Span>): List<Span> {
+        val out = spans.toMutableList()
+        if (out.isNotEmpty() && !out.first().code) out[0] = out.first().let { it.copy(text = it.text.trimStart()) }
+        if (out.isNotEmpty() && !out.last().code) out[out.lastIndex] = out.last().let { it.copy(text = it.text.trimEnd()) }
+        return out.filter { it.text.isNotEmpty() }
     }
 
     /** [text] split at its bold marks; what is bold may hold bold again. */

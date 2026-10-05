@@ -105,7 +105,12 @@ class ReleaseNotesTest {
         assertEquals(Span("[label](url)", code = true), ReleaseNotes.spans("Use `[label](url)` syntax.")[1])
         // While a link's text is still read for its marks.
         assertEquals(listOf(Span("x", bold = true)), ReleaseNotes.spans("[**x**](https://example.com)"))
-        assertEquals(listOf(Span("ab")), ReleaseNotes.spans("ab"))
+        // A code span taken away with its image does not shift the ones after it.
+        val line = ReleaseNotes.parse("![`logo`](icon.png) Run `app --safe` then `exit`").single()
+        assertEquals("Run app --safe then exit", line.text)
+        assertEquals(listOf(Span("app --safe", code = true), Span("exit", code = true)), line.spans.filter { it.code })
+        // Private-use characters, which stand in for the code spans meanwhile, are not text.
+        assertEquals(listOf(Span("ab")), ReleaseNotes.spans("ab"))
     }
 
     @Test
