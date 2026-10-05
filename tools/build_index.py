@@ -496,13 +496,22 @@ def parse_manifest(data):
     manifest = None
     application = None
     min_sdk = 1
+    # How many elements are open: 1 inside the root element.
+    depth = 0
     # The children of the manifest element come in the order they were written, so the
     # whole document is read: uses-sdk can follow application.
-    for element, attributes in elements(data):
+    for element, attributes in elements(data, ends=True):
+        if attributes is None:
+            depth -= 1
+            continue
+        depth += 1
         if manifest is None and element != "manifest":
             raise ManifestError("unexpected root element")
         if element == "uses-sdk":
-            min_sdk = lowest_sdk(attributes)
+            # Only as a child of the manifest element: Android skips one nested deeper,
+            # inside the application element say.
+            if depth == 2:
+                min_sdk = lowest_sdk(attributes)
             continue
         if manifest is not None and (element != "application" or application is not None):
             continue
@@ -947,6 +956,11 @@ class StringPool:
         self.utf8 = bool(flags & 0x100)
         if self.count < 0 or self.count > (chunk_size - header_size) // 4:
             raise ManifestError("string pool out of range")
+        # Each string decoded once, by where it lies: a hostile document can refer to a
+        # string of tens of thousands of characters tens of thousands of times, through as
+        # many indexes, and decoding it at every reference would cost billions of
+        # characters. Keyed by position, the cache holds at most the pool's own content.
+        self.decoded = {}
 
     def get(self, index):
         if index < 0 or index >= self.count:
@@ -955,6 +969,14 @@ class StringPool:
         at = self.chunk + self.strings_start + offset
         if offset < 0 or at >= self.limit:
             return None
+        if at in self.decoded:
+            return self.decoded[at]
+        text = self.decode(at)
+        self.decoded[at] = text
+        return text
+
+    def decode(self, at):
+        """The string that begins at position at, or None when it runs past the pool."""
         data = self.data
         if self.utf8:
             at += 2 if data[at] & 0x80 else 1

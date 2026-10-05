@@ -5,6 +5,7 @@ import json
 import os
 import struct
 import tempfile
+import time
 import unittest
 import urllib.error
 import zlib
@@ -321,11 +322,13 @@ def manifest_element(name, attributes):
     return chunk(0x0102, struct.pack("<Ii", 1, -1), body)
 
 
-def manifest(label, icon=None, min_sdk=None, sdk_last=False):
+def manifest(label, icon=None, min_sdk=None, sdk_last=False, nested_sdk=None):
     """A binary manifest of org.example, version 3, whose application has the given label
     attribute as (type, data), or none, and refers to the icon resource icon, if any. With
     min_sdk, a uses-sdk element names the lowest Android version, as a number or as
-    (type, data), before the application element, or after it with sdk_last."""
+    (type, data), before the application element, or after it with sdk_last. With
+    nested_sdk, a uses-sdk element inside the application element names that, which
+    Android does not read."""
     strings = ["versionCode", "label", "package", "manifest", "application", "org.example", "Plain", "icon",
                "minSdkVersion", "uses-sdk"]
     resource_map = chunk(0x0180, b"", struct.pack("<9I", 0x0101021B, 0x01010001, 0, 0, 0, 0, 0, 0x01010002,
@@ -334,13 +337,16 @@ def manifest(label, icon=None, min_sdk=None, sdk_last=False):
     uses_sdk = b""
     if min_sdk is not None:
         version = min_sdk if isinstance(min_sdk, tuple) else (0x10, min_sdk)
-        uses_sdk = manifest_element(9, [(8,) + version])
+        uses_sdk = manifest_element(9, [(8,) + version]) + end_element(9)
+    nested = b""
+    if nested_sdk is not None:
+        nested = manifest_element(9, [(8, 0x10, nested_sdk)]) + end_element(9)
     attributes = [(1,) + label] if label else []
     if icon:
         attributes.append((7, 0x01, icon))
-    application = manifest_element(4, attributes)
+    application = manifest_element(4, attributes) + nested + end_element(4)
     elements += application + uses_sdk if sdk_last else uses_sdk + application
-    return chunk(0x0003, b"", string_pool(strings) + resource_map + elements)
+    return chunk(0x0003, b"", string_pool(strings) + resource_map + elements + end_element(3))
 
 
 def adaptive_icon(background, foreground):
@@ -479,6 +485,31 @@ class ManifestTest(unittest.TestCase):
 
     def test_manifest_without_uses_sdk_runs_on_every_android(self):
         self.assertEqual(build_index.parse_manifest(manifest(None))[5], 1)
+
+    def test_uses_sdk_inside_another_element_does_not_count(self):
+        # Android reads uses-sdk as a child of the manifest element only; one inside the
+        # application element is skipped. aapt2 refuses such a manifest unless told to only
+        # warn, so the file is an odd one, and is read as Android would.
+        self.assertEqual(build_index.parse_manifest(manifest(None, min_sdk=26, nested_sdk=35))[5], 26)
+        self.assertEqual(build_index.parse_manifest(manifest(None, nested_sdk=35))[5], 1)
+
+    def test_elements_after_the_application_are_not_decoded_for_nothing(self):
+        # A hostile manifest: tens of thousands of elements after the application, every one
+        # named by a string of tens of thousands of characters and carrying it as a value.
+        # Decoding the string at every reference would cost billions of characters.
+        big = "x" * 30000
+        strings = ["versionCode", "package", "manifest", "org.example", "application", big]
+        resource_map = chunk(0x0180, b"", struct.pack("<6I", 0x0101021B, 0, 0, 0, 0, 0))
+        elements = manifest_element(2, [(0, 0x10, 3), (1, 0x03, 3)])
+        elements += manifest_element(4, []) + end_element(4)
+        elements += (manifest_element(5, [(5, 0x03, 5)]) + end_element(5)) * 40000
+        document = chunk(0x0003, b"", string_pool(strings) + resource_map + elements + end_element(2))
+        self.assertLess(len(document), build_index.MAX_MANIFEST)
+        started = time.perf_counter()
+        parsed = build_index.parse_manifest(document)
+        seconds = time.perf_counter() - started
+        self.assertEqual(parsed[:2], ("org.example", 3))
+        self.assertLess(seconds, 1.0, "took %.2f s" % seconds)
 
     def test_lowest_android_version_given_as_a_codename_is_kept_as_the_codename(self):
         # A preview of Android is named by its codename, which only that preview runs.
