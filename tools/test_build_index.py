@@ -83,6 +83,46 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual(app["apks"][0]["minSdk"], 26)
         self.assertEqual(app["apks"][0]["sdkReader"], build_index.SDK_READER)
 
+    def test_lowest_android_version_given_as_a_codename_is_written_beside_the_number(self):
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, "Baklava")):
+            app = build_index.build_app(REPO, {})
+        apk = app["apks"][0]
+        self.assertIsNone(apk["minSdk"])
+        self.assertEqual(apk["minSdkCodename"], "Baklava")
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 26)):
+            app = build_index.build_app(REPO, {})
+        self.assertEqual((app["apks"][0]["minSdk"], app["apks"][0]["minSdkCodename"]), (26, None))
+
+    def test_apk_known_with_a_codename_keeps_it(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": None, "minSdkCodename": "Baklava", "sdkReader": 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_not_called()
+        self.assertEqual((app["apks"][0]["minSdk"], app["apks"][0]["minSdkCodename"]), (None, "Baklava"))
+
+    def test_apk_known_without_a_number_or_a_codename_is_read_again(self):
+        # The first reader wrote None for a codename, telling it apart from nothing.
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": None, "sdkReader": 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, "Baklava")) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["minSdkCodename"], "Baklava")
+
     def test_apk_whose_lowest_android_version_an_older_reader_read_is_read_again(self):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
@@ -440,8 +480,9 @@ class ManifestTest(unittest.TestCase):
     def test_manifest_without_uses_sdk_runs_on_every_android(self):
         self.assertEqual(build_index.parse_manifest(manifest(None))[5], 1)
 
-    def test_lowest_android_version_given_as_a_codename_is_unknown(self):
-        self.assertIsNone(build_index.parse_manifest(manifest(None, min_sdk=(0x03, 6)))[5])
+    def test_lowest_android_version_given_as_a_codename_is_kept_as_the_codename(self):
+        # A preview of Android is named by its codename, which only that preview runs.
+        self.assertEqual(build_index.parse_manifest(manifest(None, min_sdk=(0x03, 6)))[5], "Plain")
 
     def test_adaptive_icon_names_the_resources_of_its_layers(self):
         self.assertEqual(
