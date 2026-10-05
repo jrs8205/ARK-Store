@@ -50,6 +50,53 @@ class ReleaseNotesTest {
     }
 
     @Test
+    fun aLineLeftEmptyByItsImageIsNotShown() {
+        val lines = ReleaseNotes.parse("![shot](a.png)\n- ![b](b.png)\nOne\n![c](c.png)\nTwo")
+        assertEquals(listOf("One Two"), lines.map { it.text })
+    }
+
+    @Test
+    fun fencedCodeKeepsItsLinesInMonospace() {
+        val lines = ReleaseNotes.parse("Install:\n```sh\nadb install app.apk\n\n  adb shell pm grant x\n```\nDone")
+        assertEquals(
+            listOf("Install:", "adb install app.apk", "  adb shell pm grant x", "Done"),
+            lines.map { it.text }
+        )
+        assertEquals(listOf(Span("adb install app.apk", code = true)), lines[1].spans)
+        assertEquals(Kind.TEXT, lines[1].kind)
+        // A fence left open runs to the end.
+        assertEquals(listOf("a", "b"), ReleaseNotes.parse("~~~\na\nb").map { it.text })
+    }
+
+    @Test
+    fun anIndentedLineContinuesItsBullet() {
+        val lines = ReleaseNotes.parse("- Wake-up keeps going even when\n  the phone is locked.\nNext")
+        assertEquals(listOf(Kind.BULLET, Kind.TEXT), lines.map { it.kind })
+        assertEquals("Wake-up keeps going even when the phone is locked.", lines[0].text)
+        assertEquals("Next", lines[1].text)
+    }
+
+    @Test
+    fun aHeadingKeepsAHashOfItsOwn() {
+        assertEquals("Support for C#", ReleaseNotes.parse("## Support for C#")[0].text)
+        assertEquals("Closed", ReleaseNotes.parse("## Closed ##")[0].text)
+    }
+
+    @Test
+    fun boldAroundCodeIsBoldCode() {
+        assertEquals(
+            listOf(Span("Run ", bold = true), Span("adb install", bold = true, code = true)),
+            ReleaseNotes.spans("**Run `adb install`**")
+        )
+    }
+
+    @Test
+    fun anAngleBracketInTextIsNotATag() {
+        assertEquals("works if a<b and c>d", ReleaseNotes.spans("works if a<b and c>d").joinToString("") { it.text })
+        assertEquals("xy", ReleaseNotes.spans("x<br/>y<b><img src=\"a.png\" width=100>").joinToString("") { it.text })
+    }
+
+    @Test
     fun unmatchedMarksStayAsWritten() {
         assertEquals(listOf(Span("a ** b `c")), ReleaseNotes.spans("a ** b `c"))
         assertEquals("2 * 3 * 4", ReleaseNotes.parse("2 * 3 * 4")[0].text)

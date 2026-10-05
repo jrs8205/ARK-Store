@@ -953,16 +953,15 @@ private fun Progress(progress: Float?) {
 @Composable
 private fun ReleaseNotesText(markdown: String) {
     val lines = remember(markdown) { ReleaseNotes.parse(markdown) }
-    val code = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         lines.forEach { line ->
             val text = buildAnnotatedString {
                 line.spans.forEach { span ->
-                    when {
-                        span.code -> withStyle(SpanStyle(fontFamily = code.fontFamily)) { append(span.text) }
-                        span.bold -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(span.text) }
-                        else -> append(span.text)
-                    }
+                    val style = SpanStyle(
+                        fontFamily = if (span.code) FontFamily.Monospace else null,
+                        fontWeight = if (span.bold) FontWeight.SemiBold else null
+                    )
+                    withStyle(style) { append(span.text) }
                 }
             }
             when (line.kind) {
