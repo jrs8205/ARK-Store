@@ -84,6 +84,8 @@ following a developer who has not added it.
   `versionCode`) is offered only to users with **Show beta versions** on, marked Beta. Drafts
   are ignored.
 - Forks and archived repositories are skipped.
+- A release whose `minSdkVersion` is the codename of an Android preview is offered to that
+  preview only.
 
 ## For users
 
@@ -92,8 +94,10 @@ following a developer who has not added it.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
 - Every app with its own icon, read from the APK or given by its catalogue.
-- The details tell the latest version, when it was published, the size of the file and the
-  Android version the app needs.
+- The details tell the latest version, when it was published, the size of the file and, when
+  it is newer than the store itself needs, the Android version the app needs. An installed app
+  whose newest version needs a newer Android than the device has stays in the list, with a
+  note; one not installed is left out.
 - Stars and download counts from GitHub.
 - Refresh on open, a background check every four hours and a notification for new versions.
 - A warning before installing over an app signed with a different key.
