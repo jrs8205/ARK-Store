@@ -116,10 +116,15 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -940,6 +945,39 @@ private fun Progress(progress: Float?) {
     }
 }
 
+/** Release notes with their headings, bullets, bold and code shown as such. */
+@Composable
+private fun ReleaseNotesText(markdown: String) {
+    val lines = remember(markdown) { ReleaseNotes.parse(markdown) }
+    val code = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { line ->
+            val text = buildAnnotatedString {
+                line.spans.forEach { span ->
+                    when {
+                        span.code -> withStyle(SpanStyle(fontFamily = code.fontFamily)) { append(span.text) }
+                        span.bold -> withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(span.text) }
+                        else -> append(span.text)
+                    }
+                }
+            }
+            when (line.kind) {
+                ReleaseNotes.Kind.HEADING -> Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                ReleaseNotes.Kind.BULLET -> Row {
+                    Text(text = "\u2022", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+                }
+                ReleaseNotes.Kind.TEXT -> Text(text = text, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DetailsSheet(
@@ -1056,7 +1094,7 @@ private fun DetailsSheet(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
             )
-            Text(text = app.releaseNotes.trim(), style = MaterialTheme.typography.bodyMedium)
+            ReleaseNotesText(app.releaseNotes)
         }
 
         // Three buttons do not fit one row on a phone, so they wrap to the next line rather
