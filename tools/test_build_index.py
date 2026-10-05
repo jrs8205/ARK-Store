@@ -511,6 +511,33 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(parsed[:2], ("org.example", 3))
         self.assertLess(seconds, 1.0, "took %.2f s" % seconds)
 
+    def test_string_pool_whose_strings_overlap_is_rejected(self):
+        # Offsets into the middle of one another's data make every start a long string of its
+        # own to decode and keep, far beyond what the pool holds. aapt2 never writes such a
+        # pool, so the file is refused rather than decoded on.
+        names = ["versionCode", "package", "manifest", "org.example"]
+        offsets = b""
+        data = b""
+        for text in names:
+            offsets += struct.pack("<I", len(data))
+            data += struct.pack("<H", len(text)) + text.encode("utf-16-le") + b"\0\0"
+        region = len(data)
+        # Read as a UTF-16 length, 0x7f7f says 32639 characters follow, from any start.
+        data += b"\x7f" * 70000
+        starts = 2048
+        for i in range(starts):
+            offsets += struct.pack("<I", region + 2 * i)
+        header = struct.pack("<IIIII", len(names) + starts, 0, 0, 28 + len(offsets), 0)
+        pool = chunk(0x0001, header, offsets + data)
+        resource_map = chunk(0x0180, b"", struct.pack("<4I", 0x0101021B, 0, 0, 0))
+        elements = manifest_element(2, [(0, 0x10, 3), (1, 0x03, 3)])
+        for i in range(starts):
+            elements += manifest_element(len(names) + i, []) + end_element(len(names) + i)
+        document = chunk(0x0003, b"", pool + resource_map + elements + end_element(2))
+        self.assertLess(len(document), build_index.MAX_MANIFEST)
+        with self.assertRaises(build_index.ManifestError):
+            build_index.parse_manifest(document)
+
     def test_lowest_android_version_given_as_a_codename_is_kept_as_the_codename(self):
         # A preview of Android is named by its codename, which only that preview runs.
         self.assertEqual(build_index.parse_manifest(manifest(None, min_sdk=(0x03, 6)))[5], "Plain")

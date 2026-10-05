@@ -959,8 +959,13 @@ class StringPool:
         # Each string decoded once, by where it lies: a hostile document can refer to a
         # string of tens of thousands of characters tens of thousands of times, through as
         # many indexes, and decoding it at every reference would cost billions of
-        # characters. Keyed by position, the cache holds at most the pool's own content.
+        # characters. Keyed by position, the cache holds the pool's own content, and no
+        # more: a pool whose strings, decoded, outgrow it has offsets into the middle of one
+        # another's data, which aapt2 never writes, and the file is refused rather than
+        # decoded on. A UTF-16 pool decodes to half its bytes in characters, a UTF-8 one to
+        # at most as many.
         self.decoded = {}
+        self.characters_left = chunk_size
 
     def get(self, index):
         if index < 0 or index >= self.count:
@@ -972,6 +977,10 @@ class StringPool:
         if at in self.decoded:
             return self.decoded[at]
         text = self.decode(at)
+        if text is not None:
+            self.characters_left -= len(text)
+            if self.characters_left < 0:
+                raise ManifestError("string pool decodes to more than it holds")
         self.decoded[at] = text
         return text
 
