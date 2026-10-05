@@ -77,7 +77,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -94,10 +93,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -136,7 +132,6 @@ import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
 import java.time.format.FormatStyle
 import java.util.Locale
-import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
@@ -183,6 +178,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     // in as it scrolls up, when the setting says so; see CollapsingTop.
     val top = remember { CollapsingTop() }
     LaunchedEffect(hideTop) { if (!hideTop) top.offset = 0f }
+    top.minRoomBelow = with(LocalDensity.current) { MIN_LIST_ROOM.roundToPx() }
     val topConnection = remember(top, hideTop) { top.connection(hideTop) }
 
     InstallHaptics(installs)
@@ -262,7 +258,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val activeCategory = category?.takeIf { it in categories }
         val activePlace = place
         // The last bookmark taken away ends the bookmark filter rather than emptying the list.
-        val bookmarkCount = state.rows.count { Bookmarks.key(it.app) in bookmarked }
+        val bookmarkCount = state.rows.count { Bookmarks.marked(it.app, bookmarked) }
+        // Taking the last bookmark away ends the bookmark filter for good, so that the next
+        // bookmark does not bring it back by itself.
+        LaunchedEffect(bookmarkCount) { if (bookmarkCount == 0) onlyBookmarks = false }
         val activeBookmarks = onlyBookmarks && bookmarkCount > 0
         // The places whose apps are turned on in the settings; GitHub always is.
         val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
@@ -273,7 +272,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val visible = state.rows.mapNotNull { row ->
             val shown = (activeCategory == null || row.app.category == activeCategory) &&
                 (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
-                (!activeBookmarks || Bookmarks.key(row.app) in bookmarked)
+                (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
             if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
         }
             .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
@@ -533,7 +532,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
             DetailsSheet(
                 selected,
                 onInstall = { viewModel.install(selected.app) },
-                bookmarked = Bookmarks.key(selected.app) in bookmarked,
+                bookmarked = Bookmarks.marked(selected.app, bookmarked),
                 onBookmarkToggle = { viewModel.toggleBookmark(selected.app) }
             )
         }
@@ -638,7 +637,7 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
-            bookmarked = Bookmarks.key(row.app) in bookmarked,
+            bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -1784,37 +1783,8 @@ private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
 private const val PREF_HIDE_TOP = "hide_top"
 
-/**
- * How far the top of the screen, the bar with the search and the filters, has slid up out
- * of view. The list below it scrolls as usual; what it would scroll by goes first into
- * sliding the top away, downwards, or back into view, upwards, so the top is never further
- * than a short scroll up away. A fling takes the top with it the same way.
- */
-private class CollapsingTop {
-    /** Pixels, from 0 (all shown) down to minus the top's [height]. */
-    var offset by mutableFloatStateOf(0f)
-
-    /** The top's full height in pixels, as last laid out. */
-    var height = 0
-
-    /** The connection to give the list's ancestor; [enabled] false leaves the top alone. */
-    fun connection(enabled: Boolean) = object : NestedScrollConnection {
-        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
-            if (!enabled || height == 0 || available.y == 0f) return Offset.Zero
-            val before = offset
-            offset = (before + available.y).coerceIn(-height.toFloat(), 0f)
-            return Offset(0f, offset - before)
-        }
-    }
-}
-
-/** Lays the top out as high as is still in view, and the rest above the edge. */
-private fun Modifier.collapsing(top: CollapsingTop): Modifier = layout { measurable, constraints ->
-    val placeable = measurable.measure(constraints)
-    top.height = placeable.height
-    val offset = top.offset.roundToInt().coerceIn(-placeable.height, 0)
-    layout(placeable.width, placeable.height + offset) { placeable.placeRelative(0, offset) }
-}
+/** The room the list keeps below the top however high the top is; see CollapsingTop. */
+private val MIN_LIST_ROOM = 200.dp
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
