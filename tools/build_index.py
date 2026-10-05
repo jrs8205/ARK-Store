@@ -225,7 +225,8 @@ def read_manifest(url, size, labels=None, icons=None):
     block and, when the app's name is kept there, its resource table. label is None when the
     APK does not tell it; signer is the SHA-256 of the certificate the APK is signed with, in
     hex, or None when that cannot be told (see read_signer); minSdk is the lowest Android API
-    level the app runs on, or None when the manifest does not say it as a number.
+    level the app runs on, or the codename of the preview of Android the manifest names
+    instead of a number.
 
     labels maps a package to the label already read from another APK of the same release.
     The files of one release differ in the CPU architecture they are built for, not in what
@@ -490,7 +491,8 @@ def parse_manifest(data):
     AndroidManifest.xml. label is the application's name as text, the id of the resource that
     holds it, or None; icon the id of the resource that holds the application's icon, or
     None; minSdk the lowest Android API level the app runs on, 1 when the manifest names none,
-    as Android takes it, or None when it is named as a codename rather than a number."""
+    as Android takes it, or the codename of the preview of Android it names instead of a
+    number, as text."""
     manifest = None
     application = None
     min_sdk = 1
@@ -537,11 +539,14 @@ def parse_manifest(data):
 
 def lowest_sdk(attributes):
     """The Android API level a uses-sdk element's attributes name as the lowest the app runs
-    on: 1 when they name none, None when they name a codename rather than a number."""
-    for resource, _, data_type, value, _ in attributes:
+    on: 1 when they name none, or the codename, as text, when they name a preview of Android
+    by its codename rather than a number. Only that preview runs such a file."""
+    for resource, _, data_type, value, text in attributes:
         if resource == ATTRIBUTE_MIN_SDK:
-            # A number written in decimal or in hexadecimal; anything else is a codename.
-            return value if data_type in (0x10, 0x11) else None
+            # A number written in decimal or in hexadecimal, or a string, the codename.
+            if data_type in (0x10, 0x11):
+                return value
+            return text if data_type == 0x03 else None
     return 1
 
 
@@ -1327,14 +1332,17 @@ def release_info(release, previous_apks, icons=None):
     for asset in apk_assets(release):
         known = previous_apks.get(asset["id"])
         if known and "label" in known and known.get("signerReader") == SIGNER_READER \
-                and known.get("sdkReader") == SDK_READER and (icons is None or "icon" in known):
+                and known.get("sdkReader") == SDK_READER and (icons is None or "icon" in known) \
+                and (known.get("minSdk") is not None or "minSdkCodename" in known):
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
             # An entry written before names, signers, icons or the lowest Android version
             # were read lacks them, and is read again, as is one whose signer or lowest
-            # Android version an older reader named (see SIGNER_READER and SDK_READER).
+            # Android version an older reader named (see SIGNER_READER and SDK_READER). One
+            # written before codenames were kept has None for a codename, and is read again.
+            lowest = known["minSdk"] if known.get("minSdkCodename") is None else known["minSdkCodename"]
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
-                        known["label"], known["signer"], known["minSdk"])
+                        known["label"], known["signer"], lowest)
             icon = known.get("icon")
             # A file of the release added since is read for its name and icon only when
             # this one does not tell them, just as if this one had been read now.
@@ -1349,6 +1357,7 @@ def release_info(release, previous_apks, icons=None):
                 print("  skipping %s: %s" % (asset["name"], error), file=sys.stderr)
                 continue
             icon = icons.get(manifest[0]) if icons is not None else None
+        lowest = manifest[5] if len(manifest) > 5 else None
         apk = {
             "id": asset["id"],
             "name": asset["name"],
@@ -1362,10 +1371,12 @@ def release_info(release, previous_apks, icons=None):
             # None when it cannot be told, and which reader told it.
             "signer": manifest[4] if len(manifest) > 4 else None,
             "signerReader": SIGNER_READER,
-            # The lowest Android API level the file runs on, as its manifest says it; None
-            # when the manifest does not say it as a number. The app offers a device only
-            # files it can run and tells the version in the details.
-            "minSdk": manifest[5] if len(manifest) > 5 else None,
+            # The lowest Android API level the file runs on, as its manifest says it, or the
+            # codename of the preview of Android it names instead, which only that preview
+            # runs. The app offers a device only files it can run and tells the version in
+            # the details.
+            "minSdk": lowest if isinstance(lowest, int) else None,
+            "minSdkCodename": lowest if isinstance(lowest, str) else None,
             "sdkReader": SDK_READER,
         }
         if icons is not None:
