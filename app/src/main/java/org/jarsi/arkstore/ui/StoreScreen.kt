@@ -196,14 +196,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
-        modifier = Modifier
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
-                }
+        modifier = Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
             }
-            .nestedScroll(topConnection)
+        }
     ) { padding ->
         // The bar is laid out with the search and the filters below, so that the whole top
         // can slide away together; the status bar's room stays, given by the padding.
@@ -373,6 +371,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     .fillMaxWidth()
                     .clipToBounds()
                     .collapsing(top)
+                    // A keyboard or a D-pad can focus a button or the search field that has
+                    // slid out of view; the top comes back so that the focus is seen.
+                    .onFocusChanged { if (it.hasFocus) top.offset = 0f }
             ) {
                 Column(Modifier.fillMaxWidth()) {
                     bar()
@@ -408,7 +409,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
 
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    // The top takes its share of the list's scrolling from here, inside the
+                    // pull to refresh, so that a pull reversed retracts the indicator first.
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(topConnection),
                     contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {

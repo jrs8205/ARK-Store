@@ -33,13 +33,47 @@ class CollapsingTopTest {
     }
 
     @Test
-    fun listKeepsItsRoomInALowWindow() {
+    fun lowWindowKeepsTheListItsRoomAndScrollsTheTopThroughItsWholeHeight() {
         val top = top(600, room = 500, minRoom = 200)
-        assertEquals(300, top.height)
+        assertEquals(300, top.viewport)
         assertEquals(300, top.shown(600, 500))
-        top.consume(-1000f)
+        assertEquals(0, top.placement)
+        // The bar goes up first, and the rows below it come into view in its place.
+        assertEquals(-200f, top.consume(-200f))
+        assertEquals(300, top.shown(600, 500))
+        assertEquals(-200, top.placement)
+        assertEquals(-400f, top.consume(-1000f))
         assertEquals(0, top.shown(600, 500))
-        assertEquals(-300f, top.offset)
+        assertEquals(-600f, top.offset)
+        // And comes back the same way.
+        assertEquals(350f, top.consume(350f))
+        assertEquals(300, top.shown(600, 500))
+        assertEquals(-250, top.placement)
+    }
+
+    @Test
+    fun topKeptInPlaceStillScrollsWhatDoesNotFit() {
+        val top = top(600, room = 500, minRoom = 200)
+        assertEquals(-300f, top.consume(-1000f, hide = false))
+        assertEquals(300, top.shown(600, 500))
+        assertEquals(-300, top.placement)
+        assertEquals(0f, top.consume(-10f, hide = false))
+        assertEquals(300f, top.consume(400f, hide = false))
+        // A top that fits is not moved at all.
+        assertEquals(0f, top(300).consume(-100f, hide = false))
+    }
+
+    @Test
+    fun aTopLeftHalfwaySettlesToTheNearerEdge() {
+        val top = top(300)
+        assertEquals(null, top.settleTarget(hide = true))
+        top.consume(-100f)
+        assertEquals(0f, top.settleTarget(hide = true))
+        top.consume(-100f)
+        assertEquals(-300f, top.settleTarget(hide = true))
+        // Not when kept in place, nor in a low window, where part of it is the point.
+        assertEquals(null, top.settleTarget(hide = false))
+        assertEquals(null, top(600, room = 500, minRoom = 200).apply { consume(-200f) }.settleTarget(hide = true))
     }
 
     @Test
