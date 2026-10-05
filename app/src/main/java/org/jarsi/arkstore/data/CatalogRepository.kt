@@ -849,7 +849,7 @@ class CatalogRepository private constructor(context: Context) {
             // The asset id changes whenever a file is replaced, so a known id means a known APK.
             // One known from before the lowest Android was read is read again for it; should
             // that fail, what was known of it stays.
-            val knownApp = previous.firstOrNull { it.assetId == assetId && it.packageName != null }
+            val knownApp = CatalogRules.knownApk(previous, assetId)
             val known = knownApp?.apkInfo
             val info = if (known != null && known.lowestAndroidKnown) {
                 known

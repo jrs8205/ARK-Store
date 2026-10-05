@@ -83,6 +83,18 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun storedAppThatKnowsTheFilesLowestAndroidGoesBeforeOneThatKnowsOnlyItsIdentity() {
+        // The store's own copy from before the lowest Android was read, and the index entry
+        // of the same file after it: the index entry is what is known of the file.
+        val identity = app(versionCode = 3).copy(assetId = 7)
+        val indexed = app(versionCode = 3).copy(assetId = 7, minSdk = 35)
+        assertSame(indexed, CatalogRules.knownApk(listOf(identity, indexed), 7))
+        assertSame(identity, CatalogRules.knownApk(listOf(identity), 7))
+        assertNull(CatalogRules.knownApk(listOf(identity.copy(packageName = null)), 7))
+        assertNull(CatalogRules.knownApk(listOf(indexed), 8))
+    }
+
+    @Test
     fun appThisAndroidCannotRunIsListedOnlyWhenItIsInstalled() {
         assertFalse(CatalogRules.listed(AppStatus.NOT_INSTALLED, runs = false))
         // Another app under the package name: this one is not installed.
