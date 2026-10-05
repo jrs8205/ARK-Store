@@ -51,8 +51,9 @@ internal class CollapsingTop {
     /** How many pixels the list keeps however high the top is; set from the layout. */
     var minRoomBelow = 0
 
-    /** Whether the top is on its way to an edge; a touch that moves it ends that. */
-    private var settling = false
+    /** Whether the top is on its way to an edge; a touch or a focus that moves it ends that. */
+    var settling = false
+        private set
 
     /** The lowest offset the top may have as it is now. */
     private val floor: Float get() = if (hide) -height.toFloat() else (viewport - height).toFloat()
@@ -85,8 +86,9 @@ internal class CollapsingTop {
      */
     fun reveal(top: Float, bottom: Float, visible: Int) {
         if (height == 0) return
-        val by = if (top < 0f) -top else if (bottom > visible) visible - bottom else return
+        // A settling under way would take the focused control out of view again.
         settling = false
+        val by = if (top < 0f) -top else if (bottom > visible) visible - bottom else return
         offset = (offset.coerceIn(floor, 0f) + by).coerceIn(floor, 0f)
     }
 
@@ -102,10 +104,16 @@ internal class CollapsingTop {
         return if (at > -height / 2f) 0f else -height.toFloat()
     }
 
-    /** Eases the top to its [settleTarget], unless a touch or [show] moves it meanwhile. */
-    suspend fun settle() {
-        val target = settleTarget() ?: return
+    /** Marks the top as on its way to its [settleTarget] and gives it, or null when it stays. */
+    fun startSettling(): Float? {
+        val target = settleTarget() ?: return null
         settling = true
+        return target
+    }
+
+    /** Eases the top to its [settleTarget], unless a touch, a focus or [show] moves it meanwhile. */
+    suspend fun settle() {
+        val target = startSettling() ?: return
         animate(offset, target, animationSpec = SETTLE) { value, _ ->
             if (!settling) throw CancellationException("moved")
             offset = value
@@ -142,15 +150,17 @@ internal class CollapsingTop {
 
 /**
  * Lays the top out as high as is still in view, and the rest above the edge, and slides
- * it to show a child that asks to be seen, such as a control the keyboard focuses.
+ * it to show a child that asks to be seen, such as a control the keyboard focuses. The
+ * revealing node sits outside the layout, so that it measures a child against the part
+ * in view, not against the whole of the top it is placed in.
  */
 internal fun Modifier.collapsing(top: CollapsingTop): Modifier = this
+    .then(RevealElement(top))
     .layout { measurable, constraints ->
         val placeable = measurable.measure(constraints.copy(minHeight = 0))
         val shown = top.shown(placeable.height, constraints.maxHeight)
         layout(placeable.width, shown) { placeable.placeRelative(0, top.placement) }
     }
-    .then(RevealElement(top))
 
 private data class RevealElement(val top: CollapsingTop) : ModifierNodeElement<RevealNode>() {
     override fun create() = RevealNode(top)

@@ -115,6 +115,17 @@ class CollapsingTopTest {
     }
 
     @Test
+    fun focusOnAChildAlreadyInViewEndsTheSettling() {
+        val top = top(300)
+        top.consume(-200f)
+        assertEquals(-300f, top.startSettling())
+        assertEquals(true, top.settling)
+        top.reveal(20f, 60f, 100)
+        assertEquals(false, top.settling)
+        assertEquals(-200f, top.offset)
+    }
+
+    @Test
     fun nothingHappensWithoutAHeightOrAScroll() {
         assertEquals(0f, CollapsingTop().consume(-10f))
         assertEquals(0f, top(100).consume(0f))
