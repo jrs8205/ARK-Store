@@ -177,9 +177,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
     // The bar, the search and the filters slide out of view as the list scrolls down and back
     // in as it scrolls up, when the setting says so; see CollapsingTop.
     val top = remember { CollapsingTop() }
-    LaunchedEffect(hideTop) { if (!hideTop) top.offset = 0f }
+    top.hide = hideTop
     top.minRoomBelow = with(LocalDensity.current) { MIN_LIST_ROOM.roundToPx() }
-    val topConnection = remember(top, hideTop) { top.connection(hideTop) }
+    LaunchedEffect(hideTop) { if (!hideTop) top.show() }
+    val topConnection = remember(top) { top.connection() }
 
     InstallHaptics(installs)
 
@@ -372,9 +373,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     .fillMaxWidth()
                     .clipToBounds()
                     .collapsing(top)
-                    // A keyboard or a D-pad can focus a button or the search field that has
-                    // slid out of view; the top comes back so that the focus is seen.
-                    .onFocusChanged { if (it.hasFocus) top.offset = 0f }
             ) {
                 Column(Modifier.fillMaxWidth()) {
                     bar()

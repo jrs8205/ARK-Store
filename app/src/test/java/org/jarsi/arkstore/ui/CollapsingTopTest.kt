@@ -5,7 +5,8 @@ import org.junit.Test
 
 class CollapsingTopTest {
 
-    private fun top(height: Int, room: Int = 2000, minRoom: Int = 0) = CollapsingTop().apply {
+    private fun top(height: Int, room: Int = 2000, minRoom: Int = 0, hide: Boolean = true) = CollapsingTop().apply {
+        this.hide = hide
         minRoomBelow = minRoom
         shown(height, room)
     }
@@ -53,27 +54,64 @@ class CollapsingTopTest {
 
     @Test
     fun topKeptInPlaceStillScrollsWhatDoesNotFit() {
-        val top = top(600, room = 500, minRoom = 200)
-        assertEquals(-300f, top.consume(-1000f, hide = false))
+        val top = top(600, room = 500, minRoom = 200, hide = false)
+        assertEquals(-300f, top.consume(-1000f))
         assertEquals(300, top.shown(600, 500))
         assertEquals(-300, top.placement)
-        assertEquals(0f, top.consume(-10f, hide = false))
-        assertEquals(300f, top.consume(400f, hide = false))
+        assertEquals(0f, top.consume(-10f))
+        assertEquals(300f, top.consume(400f))
         // A top that fits is not moved at all.
-        assertEquals(0f, top(300).consume(-100f, hide = false))
+        assertEquals(0f, top(300, hide = false).consume(-100f))
+    }
+
+    @Test
+    fun topKeptInPlaceFillsItsViewportWhenItsContentShrinks() {
+        val top = top(600, room = 500, minRoom = 200, hide = false)
+        top.consume(-300f)
+        // Shorter content: the old offset would leave a gap below the content, so the
+        // placement is held to the new floor at once, not at the next scroll.
+        assertEquals(300, top.shown(500, 500))
+        assertEquals(-200, top.placement)
+        assertEquals(1f, top.consume(1f))
+        assertEquals(300, top.shown(500, 500))
     }
 
     @Test
     fun aTopLeftHalfwaySettlesToTheNearerEdge() {
         val top = top(300)
-        assertEquals(null, top.settleTarget(hide = true))
+        assertEquals(null, top.settleTarget())
         top.consume(-100f)
-        assertEquals(0f, top.settleTarget(hide = true))
+        assertEquals(0f, top.settleTarget())
         top.consume(-100f)
-        assertEquals(-300f, top.settleTarget(hide = true))
+        assertEquals(-300f, top.settleTarget())
         // Not when kept in place, nor in a low window, where part of it is the point.
-        assertEquals(null, top.settleTarget(hide = false))
-        assertEquals(null, top(600, room = 500, minRoom = 200).apply { consume(-200f) }.settleTarget(hide = true))
+        top.hide = false
+        assertEquals(null, top.settleTarget())
+        assertEquals(null, top(600, room = 500, minRoom = 200).apply { consume(-200f) }.settleTarget())
+    }
+
+    @Test
+    fun showBringsTheWholeTopBack() {
+        val top = top(300)
+        top.consume(-200f)
+        top.show()
+        assertEquals(0f, top.offset)
+    }
+
+    @Test
+    fun revealSlidesTheTopJustFarEnoughToShowAChild() {
+        val top = top(300, room = 300, minRoom = 200)
+        top.consume(-200f)
+        assertEquals(100, top.shown(300, 300))
+        // A child below the viewport's lower edge: the top slides up by what is missing.
+        top.reveal(80f, 120f, 100)
+        assertEquals(-220f, top.offset)
+        // A child above the edge: it slides down by what is missing.
+        top.reveal(-30f, 10f, 100)
+        assertEquals(-190f, top.offset)
+        // A child in view: nothing moves.
+        top.reveal(20f, 60f, 100)
+        assertEquals(-190f, top.offset)
     }
 
     @Test
