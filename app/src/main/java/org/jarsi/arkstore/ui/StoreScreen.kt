@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -77,6 +77,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -84,13 +85,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -114,7 +120,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -126,6 +131,7 @@ import java.time.format.DateTimeFormatter
 import java.text.NumberFormat
 import java.time.format.FormatStyle
 import java.util.Locale
+import kotlin.math.roundToInt
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
@@ -164,6 +170,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
         )
     }
     var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
+    var hideTop by remember { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    // The bar, the search and the filters slide out of view as the list scrolls down and back
+    // in as it scrolls up, when the setting says so; see CollapsingTop.
+    val top = remember { CollapsingTop() }
+    LaunchedEffect(hideTop) { if (!hideTop) top.offset = 0f }
+    val topConnection = remember(top, hideTop) { top.connection(hideTop) }
 
     InstallHaptics(installs)
 
@@ -180,14 +192,20 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
-        modifier = Modifier.pointerInput(Unit) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
+        modifier = Modifier
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
+                }
             }
-        },
-        topBar = {
+            .nestedScroll(topConnection)
+    ) { padding ->
+        // The bar is laid out with the search and the filters below, so that the whole top
+        // can slide away together; the status bar's room stays, given by the padding.
+        val bar: @Composable () -> Unit = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.surface
                 ),
@@ -230,7 +248,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 }
             )
         }
-    ) { padding ->
         // A category that no longer has apps (a source was removed) must not stay selected,
         // and neither may a place.
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
@@ -264,8 +281,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         PullThresholdHaptics(pullState)
 
         // The search, the chips, the count and the order: above the list, so that a card
-        // scrolling out goes under them instead of taking them along, or, in a window too
-        // low to leave the list room beside them, at the top of the list.
+        // scrolling out goes under them instead of taking them along.
         val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth()) {
                 SearchField(
@@ -333,157 +349,159 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 }
             }
         }
-        BoxWithConstraints(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            val pinned = maxHeight >= PINNED_HEADER_MIN_HEIGHT
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (pinned && state.rows.isNotEmpty()) header()
-                PullToRefreshBox(
-                    isRefreshing = state.refreshing,
-                    onRefresh = { viewModel.refresh() },
-                    state = pullState,
-                    modifier = Modifier.fillMaxSize()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clipToBounds()
+                    .collapsing(top)
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    bar()
+                    if (state.rows.isNotEmpty()) header()
+                }
+            }
+            PullToRefreshBox(
+                isRefreshing = state.refreshing,
+                onRefresh = { viewModel.refresh() },
+                state = pullState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
+                val installed = visible.filter {
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
+                        it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
+                }
+                val available = visible.filter {
+                    it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
+                }
+                // The key of the list's first item, in the order the content below gives
+                // them; see KeepTop.
+                val firstKey = when {
+                    state.error != null -> "error"
+                    state.rows.isNotEmpty() && visible.isEmpty() -> "no-match"
+                    state.rows.isEmpty() -> "empty"
+                    updates.isNotEmpty() -> "header-updates"
+                    installed.isNotEmpty() -> "header-installed"
+                    available.isNotEmpty() -> "header-available"
+                    else -> "checked"
+                }
+                KeepTop(listState, firstKey)
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                    val installed = visible.filter {
-                        it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
-                            it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
+                    state.error?.let { error ->
+                        item(key = "error") { ErrorBanner(error) }
                     }
-                    val available = visible.filter {
-                        it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
+
+                    if (state.rows.isNotEmpty() && visible.isEmpty()) {
+                        item(key = "no-match") {
+                            Text(
+                                text = stringResource(R.string.list_no_match),
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(vertical = 32.dp)
+                            )
+                        }
                     }
-                    // The key of the list's first item, in the order the content below gives
-                    // them; see KeepTop.
-                    val firstKey = when {
-                        !pinned && state.rows.isNotEmpty() -> "header"
-                        state.error != null -> "error"
-                        state.rows.isNotEmpty() && visible.isEmpty() -> "no-match"
-                        state.rows.isEmpty() -> "empty"
-                        updates.isNotEmpty() -> "header-updates"
-                        installed.isNotEmpty() -> "header-installed"
-                        available.isNotEmpty() -> "header-available"
-                        else -> "checked"
-                    }
-                    KeepTop(listState, firstKey)
 
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (!pinned && state.rows.isNotEmpty()) {
-                            // The header keeps its own edges, past the list's side padding.
-                            item(key = "header") { Box(Modifier.pastSidePadding(16.dp)) { header() } }
-                        }
-                        state.error?.let { error ->
-                            item(key = "error") { ErrorBanner(error) }
-                        }
-
-                        if (state.rows.isNotEmpty() && visible.isEmpty()) {
-                            item(key = "no-match") {
-                                Text(
-                                    text = stringResource(R.string.list_no_match),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(vertical = 32.dp)
-                                )
-                            }
-                        }
-
-                        if (state.rows.isEmpty()) {
-                            item(key = "empty") {
-                                Text(
-                                    text = stringResource(
-                                        when {
-                                            state.refreshing -> R.string.list_loading
-                                            state.error != null -> R.string.list_empty_error
-                                            else -> R.string.list_empty
-                                        }
-                                    ),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .padding(vertical = 48.dp)
-                                        .semantics { liveRegion = LiveRegionMode.Polite }
-                                )
-                            }
-                        }
-
-                        section(
-                            key = "updates",
-                            rows = updates,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = {
-                                SectionHeader(
-                                    title = pluralStringResource(
-                                        R.plurals.section_updates,
-                                        updates.size,
-                                        updates.size
-                                    ),
-                                    action = if (updates.size > 1) {
-                                        stringResource(R.string.action_update_all)
-                                    } else {
-                                        null
-                                    },
-                                    onAction = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                        viewModel.installAll(updates.map { it.app })
+                    if (state.rows.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                text = stringResource(
+                                    when {
+                                        state.refreshing -> R.string.list_loading
+                                        state.error != null -> R.string.list_empty_error
+                                        else -> R.string.list_empty
                                     }
-                                )
-                            }
-                        )
-                        section(
-                            key = "installed",
-                            rows = installed,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = { SectionHeader(stringResource(R.string.section_installed)) }
-                        )
-                        section(
-                            key = "available",
-                            rows = available,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = { SectionHeader(stringResource(R.string.section_available)) }
-                        )
+                                ),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .padding(vertical = 48.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite }
+                            )
+                        }
+                    }
 
-                        if (state.checkedAt > 0) {
-                            item(key = "checked") {
-                                state.storeDownloads?.let { downloads ->
-                                    Text(
-                                        text = pluralStringResource(
-                                            R.plurals.footer_store_downloads,
-                                            downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                                            fullNumber(downloads)
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 16.dp)
-                                    )
+                    section(
+                        key = "updates",
+                        rows = updates,
+                        installs = installs,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = {
+                            SectionHeader(
+                                title = pluralStringResource(
+                                    R.plurals.section_updates,
+                                    updates.size,
+                                    updates.size
+                                ),
+                                action = if (updates.size > 1) {
+                                    stringResource(R.string.action_update_all)
+                                } else {
+                                    null
+                                },
+                                onAction = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    viewModel.installAll(updates.map { it.app })
                                 }
+                            )
+                        }
+                    )
+                    section(
+                        key = "installed",
+                        rows = installed,
+                        installs = installs,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = { SectionHeader(stringResource(R.string.section_installed)) }
+                    )
+                    section(
+                        key = "available",
+                        rows = available,
+                        installs = installs,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = { SectionHeader(stringResource(R.string.section_available)) }
+                    )
+
+                    if (state.checkedAt > 0) {
+                        item(key = "checked") {
+                            state.storeDownloads?.let { downloads ->
                                 Text(
-                                    text = stringResource(
-                                        R.string.footer_checked,
-                                        DateUtils.getRelativeTimeSpanString(
-                                            state.checkedAt,
-                                            System.currentTimeMillis(),
-                                            DateUtils.MINUTE_IN_MILLIS
-                                        ).toString()
+                                    text = pluralStringResource(
+                                        R.plurals.footer_store_downloads,
+                                        downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                        fullNumber(downloads)
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(
-                                        top = if (state.storeDownloads == null) 16.dp else 4.dp
-                                    )
+                                    modifier = Modifier.padding(top = 16.dp)
                                 )
                             }
+                            Text(
+                                text = stringResource(
+                                    R.string.footer_checked,
+                                    DateUtils.getRelativeTimeSpanString(
+                                        state.checkedAt,
+                                        System.currentTimeMillis(),
+                                        DateUtils.MINUTE_IN_MILLIS
+                                    ).toString()
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(
+                                    top = if (state.storeDownloads == null) 16.dp else 4.dp
+                                )
+                            )
                         }
                     }
                 }
@@ -515,6 +533,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 onMaterialChange = {
                     material = it
                     preferences.edit { putBoolean(PREF_MATERIAL, it) }
+                },
+                hideTop = hideTop,
+                onHideTopChange = {
+                    hideTop = it
+                    preferences.edit { putBoolean(PREF_HIDE_TOP, it) }
                 }
             )
         }
@@ -1300,7 +1323,13 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, to
 }
 
 @Composable
-private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMaterialChange: (Boolean) -> Unit) {
+private fun SettingsSheet(
+    viewModel: StoreViewModel,
+    material: Boolean,
+    onMaterialChange: (Boolean) -> Unit,
+    hideTop: Boolean,
+    onHideTopChange: (Boolean) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1321,12 +1350,19 @@ private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMateri
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
+        SettingSwitch(
+            heading = stringResource(R.string.appearance_title),
+            label = stringResource(R.string.hide_top_switch),
+            description = stringResource(R.string.hide_top_description),
+            checked = hideTop,
+            onCheckedChange = onHideTopChange
+        )
         if (Surfaces.supported) {
             // A device whose graphics driver could not draw the materials keeps the flat
             // colours, and the switch says so rather than disappearing.
             val unavailable = Surfaces.failed(LocalContext.current)
             SettingSwitch(
-                heading = stringResource(R.string.appearance_title),
+                heading = null,
                 label = stringResource(R.string.material_switch),
                 description = stringResource(
                     if (unavailable) R.string.material_unavailable else R.string.material_description
@@ -1644,24 +1680,38 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
+private const val PREF_HIDE_TOP = "hide_top"
 
 /**
- * The height of the list's room below which the search, the chips and the count scroll
- * with the list instead of staying above it: together they take about 200 dp, and the
- * list needs room of its own in a low window or with a large font.
+ * How far the top of the screen, the bar with the search and the filters, has slid up out
+ * of view. The list below it scrolls as usual; what it would scroll by goes first into
+ * sliding the top away, downwards, or back into view, upwards, so the top is never further
+ * than a short scroll up away. A fling takes the top with it the same way.
  */
-private val PINNED_HEADER_MIN_HEIGHT = 480.dp
+private class CollapsingTop {
+    /** Pixels, from 0 (all shown) down to minus the top's [height]. */
+    var offset by mutableFloatStateOf(0f)
 
-/**
- * Lays the content out [side] wider on each side than the room given, for a thing in a
- * list that keeps its own edges past the list's side padding.
- */
-private fun Modifier.pastSidePadding(side: Dp): Modifier = layout { measurable, constraints ->
-    val extra = (side * 2).roundToPx()
-    val placeable = measurable.measure(
-        constraints.copy(minWidth = constraints.maxWidth + extra, maxWidth = constraints.maxWidth + extra)
-    )
-    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
+    /** The top's full height in pixels, as last laid out. */
+    var height = 0
+
+    /** The connection to give the list's ancestor; [enabled] false leaves the top alone. */
+    fun connection(enabled: Boolean) = object : NestedScrollConnection {
+        override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+            if (!enabled || height == 0 || available.y == 0f) return Offset.Zero
+            val before = offset
+            offset = (before + available.y).coerceIn(-height.toFloat(), 0f)
+            return Offset(0f, offset - before)
+        }
+    }
+}
+
+/** Lays the top out as high as is still in view, and the rest above the edge. */
+private fun Modifier.collapsing(top: CollapsingTop): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    top.height = placeable.height
+    val offset = top.offset.roundToInt().coerceIn(-placeable.height, 0)
+    layout(placeable.width, placeable.height + offset) { placeable.placeRelative(0, offset) }
 }
 
 /** The order of apps within each section of the list. */

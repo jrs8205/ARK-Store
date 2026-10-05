@@ -120,6 +120,8 @@
     <string name="action_settings">Asetukset</string>
     <string name="settings_title">Asetukset</string>
     <string name="appearance_title">Ulkoasu</string>
+    <string name="hide_top_switch">Piilota yläosa vieritettäessä</string>
+    <string name="hide_top_description">Otsikkopalkki, haku ja suodattimet liukuvat pois näkyvistä, kun listaa vierittää alaspäin, ja palaavat heti, kun vierittää ylöspäin. Pois päältä ne pysyvät listan yläpuolella.</string>
     <string name="material_switch">Materiaalipinnat</string>
     <string name="material_description">Piirtää näytön ja kaiken sillä olevan ylhäältä valaistuna harjattuna metallina näytönohjaimella. Oletuksena päällä Android 13:sta alkaen; voit sammuttaa sen tästä, jos haluat tasaiset värit tai säästää virtaa.</string>
     <string name="material_unavailable">Ei saatavilla tällä laitteella: näytönohjaimen ajuri ei pystynyt piirtämään pintoja, joten tasaiset värit pysyvät.</string>
