@@ -117,6 +117,31 @@ class ApkManifestReaderTest {
         assertEquals("Baklava", info.minSdkCodename)
     }
 
+    @Test
+    fun elementsAfterTheRootAreNotDecodedForNothing() {
+        // A hostile manifest: tens of thousands of elements and attributes after the root,
+        // every one named by a string of tens of thousands of characters. Decoding each
+        // would cost gigabytes; only what the reader looks for is decoded.
+        val big = "x".repeat(30_000)
+        val strings = listOf("versionCode", "package", "manifest", "org.example", big)
+        val resourceMap = chunk(
+            0x0180, ByteArray(0), le(20).putInt(0x0101021B).putInt(0).putInt(0).putInt(0).putInt(0).array()
+        )
+        val root = element(2, listOf(Triple(0, 0x10, 3), Triple(1, 0x03, 3)))
+        val filler = element(4, listOf(Triple(4, 0x03, 4)))
+        val body = ByteArrayOutputStream()
+        body.write(stringPool(strings))
+        body.write(resourceMap)
+        body.write(root)
+        repeat(40_000) { body.write(filler) }
+        val started = System.nanoTime()
+        val info = ApkManifestReader.parseManifest(chunk(0x0003, ByteArray(0), body.toByteArray()))
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assertEquals("org.example", info.packageName)
+        assertEquals(1, info.minSdk)
+        assertTrue("took $millis ms", millis < 1000)
+    }
+
     /** A manifest whose string pool claims [stringCount] strings but holds none. */
     private fun manifestWithStringCount(stringCount: Int): ByteArray {
         val pool = le(28).putShort(0x0001).putShort(28).putInt(28)
