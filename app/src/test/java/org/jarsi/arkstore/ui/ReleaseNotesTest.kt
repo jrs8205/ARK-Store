@@ -97,6 +97,48 @@ class ReleaseNotesTest {
     }
 
     @Test
+    fun codeKeepsTagsAndLinksAsWritten() {
+        assertEquals(
+            listOf(Span("Use "), Span("<br>", code = true), Span(" to insert a line break.")),
+            ReleaseNotes.spans("Use `<br>` to insert a line break.")
+        )
+        assertEquals(Span("[label](url)", code = true), ReleaseNotes.spans("Use `[label](url)` syntax.")[1])
+        // While a link's text is still read for its marks.
+        assertEquals(listOf(Span("x", bold = true)), ReleaseNotes.spans("[**x**](https://example.com)"))
+        assertEquals(listOf(Span("ab")), ReleaseNotes.spans("ab"))
+    }
+
+    @Test
+    fun aFenceClosesOnlyWithItsOwnKind() {
+        val lines = ReleaseNotes.parse("~~~sh\necho hi\n```\necho bye\n~~~\nDone")
+        assertEquals(listOf("echo hi", "```", "echo bye", "Done"), lines.map { it.text })
+        assertEquals(listOf(true, true, true, false), lines.map { it.spans.single().code })
+        // A longer fence holds a shorter one as content.
+        assertEquals(listOf("```", "x", "```"), ReleaseNotes.parse("````\n```\nx\n```\n````").map { it.text })
+    }
+
+    @Test
+    fun notesAreCutAtTheLengthTheIndexKeeps() {
+        val text = ReleaseNotes.parse("a".repeat(5000)).single().text
+        assertEquals(4000, text.length)
+    }
+
+    @Test
+    fun hostileInputIsReadInGoodTime() {
+        val inputs = listOf(
+            "<img" + "  a=\"a\" ".repeat(24) + "!",
+            "# x" + " ".repeat(3990) + "z",
+            "**a ".repeat(1000),
+            "<a " + "b='c' ".repeat(600) + "d",
+            "[x](" + "y".repeat(3990)
+        )
+        val started = System.nanoTime()
+        inputs.forEach { ReleaseNotes.parse(it) }
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assert(millis < 1000) { "took $millis ms" }
+    }
+
+    @Test
     fun unmatchedMarksStayAsWritten() {
         assertEquals(listOf(Span("a ** b `c")), ReleaseNotes.spans("a ** b `c"))
         assertEquals("2 * 3 * 4", ReleaseNotes.parse("2 * 3 * 4")[0].text)
