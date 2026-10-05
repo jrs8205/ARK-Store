@@ -104,8 +104,8 @@ internal object CatalogRules {
      * [deviceAbis] and Android [sdk], or null when none is built for its architecture: the
      * highest version among those the device can run. A file that names no architecture runs
      * on all of them. When none of the files for the architecture runs on its Android, the
-     * newest of them is named all the same, as the version an installed app would need a
-     * newer Android for; see [listed].
+     * choice is made among all of them the same way, as the version an installed app would
+     * need a newer Android for; see [listed].
      *
      * [installedSigners] are the certificates the app is installed with, or null when it is
      * not installed. Android updates an app only with a file signed like the installed one,
@@ -121,12 +121,11 @@ internal object CatalogRules {
         val forDevice = apks.withIndex().filter { (_, apk) ->
             apk.abis.isEmpty() || apk.abis.any { it in deviceAbis }
         }
-        val runnable = forDevice.filter { (_, apk) -> apk.minSdk <= sdk }
-        if (runnable.isEmpty()) return forDevice.maxByOrNull { (_, apk) -> apk.versionCode }?.index
+        val candidates = forDevice.filter { (_, apk) -> apk.minSdk <= sdk }.ifEmpty { forDevice }
         val updating = installedSigners?.let { signers ->
-            runnable.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
+            candidates.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
         }
-        return (updating?.takeIf { it.isNotEmpty() } ?: runnable)
+        return (updating?.takeIf { it.isNotEmpty() } ?: candidates)
             .maxByOrNull { (_, apk) -> apk.versionCode }
             ?.index
     }
@@ -190,7 +189,10 @@ internal object CatalogRules {
      * Android updates an app only with a file signed like the installed one, so then a place
      * whose file is known to be signed that way goes first, and one whose signature is not
      * known before any that is known to differ. [installedSigners] gives the certificates of
-     * an installed package, or null.
+     * an installed package, or null. A place whose file runs on [android] goes before one
+     * whose file does not, within those rules: a catalogue's older version is offered when
+     * the developer's newest needs a newer Android, and only when every place's file needs
+     * one is the first in line shown as such.
      *
      * Repositories of one place are never folded into one another: two of them releasing the
      * same package are two developers' builds, and stay two rows as long as a repository is
@@ -205,7 +207,11 @@ internal object CatalogRules {
      * the rows of the other projects are marked as [Merged.otherBuild]: a fork whose key is
      * not known yet must not be offered as the update of the original.
      */
-    fun merged(apps: List<StoreApp>, installedSigners: (String) -> Set<String>?): List<Merged> {
+    fun merged(
+        apps: List<StoreApp>,
+        android: Android,
+        installedSigners: (String) -> Set<String>?
+    ): List<Merged> {
         val result = ArrayList<Merged>(apps.size)
         val byPackage = LinkedHashMap<String, MutableList<StoreApp>>()
         for (app in apps) {
@@ -228,7 +234,7 @@ internal object CatalogRules {
             }
             for (project in projects) {
                 val otherBuild = own.isNotEmpty() && own.none { it === project }
-                result += fold(project, signers).map { if (otherBuild) it.copy(otherBuild = true) else it }
+                result += fold(project, signers, android).map { if (otherBuild) it.copy(otherBuild = true) else it }
             }
         }
         return result
@@ -267,10 +273,11 @@ internal object CatalogRules {
     private const val REPOSITORIES = ""
 
     /** The rows of one project of one package; see [merged]. */
-    private fun fold(offers: List<StoreApp>, signers: Set<String>?): List<Merged> {
+    private fun fold(offers: List<StoreApp>, signers: Set<String>?, android: Android): List<Merged> {
         if (offers.size == 1) return listOf(Merged(offers[0], emptyList()))
         val inLine = offers.sortedWith(
-            compareBy<StoreApp>(::rank)
+            compareBy<StoreApp> { !runsOn(it, android) }
+                .thenBy(::rank)
                 .thenByDescending { if (it.fromRepository) it.versionCode else 0 }
                 .thenBy { it.source != StoreApp.SOURCE_GITHUB }
         )

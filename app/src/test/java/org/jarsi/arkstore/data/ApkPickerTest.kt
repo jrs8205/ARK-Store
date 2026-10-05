@@ -22,6 +22,17 @@ class ApkPickerTest {
     }
 
     @Test
+    fun fileTheDeviceCanRunIsPickedBeforeOneItCannot() {
+        val files = listOf("app-arm64-v8a.apk", "app-x86.apk", "app-universal.apk")
+        assertEquals(2, ApkPicker.pickRunnable(files, listOf(false, true, true), arm64Phone))
+        assertEquals(0, ApkPicker.pickRunnable(files, listOf(true, true, true), arm64Phone))
+        // Only the x86 file runs on this Android, and it is not for this device: the arm64
+        // file is named all the same, as the version that needs a newer Android.
+        assertEquals(0, ApkPicker.pickRunnable(files, listOf(false, true, false), arm64Phone))
+        assertNull(ApkPicker.pickRunnable(listOf("app-x86.apk"), listOf(false), arm64Phone))
+    }
+
+    @Test
     fun rejectsFilesBuiltOnlyForOtherArchitectures() {
         assertNull(ApkPicker.pick(listOf("app-x86_64.apk", "app-x86.apk"), arm64Phone))
         assertNull(ApkPicker.pick(emptyList(), arm64Phone))

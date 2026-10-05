@@ -2,7 +2,9 @@ package org.jarsi.arkstore.data
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StoreAppTest {
@@ -68,6 +70,16 @@ class StoreAppTest {
         assertEquals("Baklava", StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", "Baklava")))
         assertNull(StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", JSONObject.NULL)))
         assertNull(StoreApp.minSdkCodenameOf(JSONObject()))
+    }
+
+    @Test
+    fun identityOfAStoredAppIsWhatItsManifestSaid() {
+        val app = testApp(packageName = "org.example", versionCode = 4).copy(versionName = "1.4", minSdk = 26)
+        assertEquals(ApkInfo("org.example", 4, "1.4", 26, null), app.apkInfo)
+        assertNull(testApp(packageName = null).apkInfo)
+        assertTrue(app.apkInfo!!.lowestAndroidKnown)
+        assertFalse(ApkInfo("org.example", 4, "1.4").lowestAndroidKnown)
+        assertTrue(ApkInfo("org.example", 4, "1.4", null, "Baklava").lowestAndroidKnown)
     }
 
     @Test

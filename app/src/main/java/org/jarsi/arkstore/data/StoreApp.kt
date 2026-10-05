@@ -104,6 +104,10 @@ data class StoreApp(
     val displayVersion: String
         get() = versionName ?: tag.removePrefix("v")
 
+    /** What the APK's manifest said of it, or null when the manifest could not be read. */
+    val apkInfo: ApkInfo?
+        get() = packageName?.let { ApkInfo(it, versionCode, versionName, minSdk, minSdkCodename) }
+
     fun toJson(): JSONObject = JSONObject()
         .put("fullName", fullName)
         .put("description", description)

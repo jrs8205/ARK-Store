@@ -224,7 +224,7 @@ object InstalledApps {
         context: Context,
         apps: List<StoreApp>,
         installed: Map<String, PackageInfo> = snapshot(context)
-    ): List<CatalogRules.Merged> = CatalogRules.merged(apps) { packageName ->
+    ): List<CatalogRules.Merged> = CatalogRules.merged(apps, CatalogRules.Android.THIS) { packageName ->
         if (packageName in installed) presentSigners(context.packageManager, packageName) else null
     }
 

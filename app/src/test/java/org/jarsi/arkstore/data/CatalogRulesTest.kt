@@ -150,8 +150,32 @@ class CatalogRulesTest {
         app(fullName = "$source:$packageName", packageName = packageName)
             .copy(source = source, signer = signer)
 
-    private fun merged(apps: List<StoreApp>, installed: Set<String>? = null) =
-        CatalogRules.merged(apps) { installed }
+    private fun merged(
+        apps: List<StoreApp>,
+        installed: Set<String>? = null,
+        android: CatalogRules.Android = this.android
+    ) = CatalogRules.merged(apps, android) { installed }
+
+    @Test
+    fun placeWhoseFileThisAndroidRunsGoesBeforeOneWhoseFileItDoesNot() {
+        // GitHub's newest needs Android 35 while F-Droid still offers one for 26: on Android
+        // 34 the latter is the row, and the former is listed as another place offering the app.
+        val github = app(versionCode = 3).copy(minSdk = 35, signer = "k")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "k").copy(versionCode = 2, minSdk = 26)
+        val row = merged(listOf(github, fdroid), android = CatalogRules.Android(34)).single()
+        assertSame(fdroid, row.app)
+        assertEquals(listOf(StoreApp.SOURCE_GITHUB), row.alsoFrom)
+        assertSame(github, merged(listOf(github, fdroid), android = CatalogRules.Android(35)).single().app)
+        // When neither runs, the first in line stays, as the version that needs a newer Android.
+        assertSame(github, merged(listOf(github, fdroid), android = CatalogRules.Android(21)).single().app)
+        // A place whose file is signed like the installed app still goes first, runnable or not:
+        // the other could not update the app whatever its Android.
+        val other = catalogue(StoreApp.SOURCE_IZZY, "x").copy(versionCode = 2, minSdk = 26)
+        assertSame(
+            github,
+            merged(listOf(github, other), installed = setOf("k"), android = CatalogRules.Android(34)).single().app
+        )
+    }
 
     @Test
     fun appOfACatalogueIsShownOnlyWhileTheCatalogueIsOn() {
@@ -382,6 +406,19 @@ class CatalogRulesTest {
         // A file whose signature is not known may still turn out to fit.
         val unknown = listOf(apk(9, null), apk(8, "old"))
         assertEquals(0, CatalogRules.pickCatalogueApk(unknown, abis, sdk = 34, installedSigners = setOf("old")))
+    }
+
+    @Test
+    fun fileSignedLikeTheInstalledAppIsPreferredEvenWhenNoneRunsOnThisAndroid() {
+        // The version named as needing a newer Android is the one of the installed app's own
+        // line of keys, not another developer's that could never update it.
+        val files = listOf(
+            CatalogRules.CatalogueApk(2, emptyList(), 35, "a"),
+            CatalogRules.CatalogueApk(3, emptyList(), 99, "b")
+        )
+        val abis = listOf("arm64-v8a")
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("a")))
+        assertEquals(1, CatalogRules.pickCatalogueApk(files, abis, sdk = 34))
     }
 
     @Test

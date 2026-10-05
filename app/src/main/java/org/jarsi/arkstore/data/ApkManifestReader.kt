@@ -17,7 +17,11 @@ data class ApkInfo(
     val versionName: String?,
     val minSdk: Int? = null,
     val minSdkCodename: String? = null
-)
+) {
+    /** Whether the lowest Android is known, as a level or as a preview's codename. */
+    val lowestAndroidKnown: Boolean
+        get() = minSdk != null || minSdkCodename != null
+}
 
 /** Random access to a remote or local file. */
 fun interface RangeSource {
