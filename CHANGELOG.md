@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.6.0
+
+- The title bar, the search and the filters slide out of view as the list scrolls down and
+  come back as soon as it scrolls up, and settle to one edge or the other when a gesture
+  leaves them half-way; a switch in the settings, under Appearance, keeps them above the
+  list. In a window too low for all of them they slide through the room there is, so that
+  every row can be reached, and a control the keyboard focuses brings its row into view
+- Bookmarks: an app can be bookmarked from its details, a bookmarked app carries a mark in
+  the list, and a Bookmarks chip among the categories shows the bookmarked apps alone. The
+  bookmarks stay on the device and follow the app's package, whatever place offers it
+- Release notes are shown with their headings, bullets, fenced code, bold and code, instead
+  of as the Markdown they are written in, and are read in time linear in their length
+- The details tell which Android an app needs, as "Requires: Android 8.0 or later", when it
+  is newer than the store itself needs, and a file the device cannot run is not offered. An
+  installed app whose newest version needs a newer Android stays in the list, with a note
+  and no update button; one not installed is left out. A release built for a preview of
+  Android is offered to that preview only
+- The index reads the lowest Android version from every APK, and releases read straight
+  from GitHub have theirs read from the manifest too. The manifest readers read uses-sdk
+  only as a child of the manifest element, decode only the strings they look for, and
+  refuse a string pool that decodes to more than it holds
+- The updates a refresh has just found are seen at once: a list at its top stays at its top
+  when a section comes first, while a list being scrolled, or scrolled further down, is left
+  alone
+- The README explains what is and is not checked when an app is installed
+
 ## 1.6.0-beta.5
 
 - The title bar, the search and the filters slide out of view as the list scrolls down and
