@@ -66,12 +66,22 @@ class ApkManifestReaderTest {
         return chunk(0x0102, le(8).putInt(1).putInt(-1).array(), body.array())
     }
 
+    /** The end tag of the element named by string [name]. */
+    private fun endElement(name: Int): ByteArray =
+        chunk(0x0103, le(8).putInt(1).putInt(-1).array(), le(8).putInt(-1).putInt(name).array())
+
     /**
      * A binary manifest of org.example, version 3, with an application element and, when
      * [minSdk] or [codename] is given, a uses-sdk element naming the lowest Android before
-     * the application, or after it with [sdkLast].
+     * the application, or after it with [sdkLast]. With [nestedSdk], a uses-sdk element
+     * inside the application element names that, which Android does not read.
      */
-    private fun manifest(minSdk: Int? = null, codename: String? = null, sdkLast: Boolean = false): ByteArray {
+    private fun manifest(
+        minSdk: Int? = null,
+        codename: String? = null,
+        sdkLast: Boolean = false,
+        nestedSdk: Int? = null
+    ): ByteArray {
         val strings = listOf(
             "versionCode", "package", "manifest", "org.example", "minSdkVersion", "uses-sdk",
             "application", codename.orEmpty()
@@ -82,13 +92,23 @@ class ApkManifestReaderTest {
         )
         val root = element(2, listOf(Triple(0, 0x10, 3), Triple(1, 0x03, 3)))
         val usesSdk = when {
-            codename != null -> element(5, listOf(Triple(4, 0x03, 7)))
-            minSdk != null -> element(5, listOf(Triple(4, 0x10, minSdk)))
+            codename != null -> element(5, listOf(Triple(4, 0x03, 7))) + endElement(5)
+            minSdk != null -> element(5, listOf(Triple(4, 0x10, minSdk))) + endElement(5)
             else -> ByteArray(0)
         }
-        val application = element(6, emptyList())
+        val nested = nestedSdk?.let { element(5, listOf(Triple(4, 0x10, it))) + endElement(5) } ?: ByteArray(0)
+        val application = element(6, emptyList()) + nested + endElement(6)
         val elements = if (sdkLast) application + usesSdk else usesSdk + application
-        return chunk(0x0003, ByteArray(0), stringPool(strings) + resourceMap + root + elements)
+        return chunk(0x0003, ByteArray(0), stringPool(strings) + resourceMap + root + elements + endElement(2))
+    }
+
+    @Test
+    fun usesSdkInsideAnotherElementDoesNotCount() {
+        // Android reads uses-sdk as a child of the manifest element only; one inside the
+        // application element is skipped. aapt2 refuses such a manifest unless told to only
+        // warn, so the file is an odd one, and is read as Android would.
+        assertEquals(26, read(zipWithManifest(manifest(minSdk = 26, nestedSdk = 35))).minSdk)
+        assertEquals(1, read(zipWithManifest(manifest(nestedSdk = 35))).minSdk)
     }
 
     @Test

@@ -47,6 +47,7 @@ object ApkManifestReader {
     private const val CHUNK_STRING_POOL = 0x0001
     private const val CHUNK_RESOURCE_MAP = 0x0180
     private const val CHUNK_START_ELEMENT = 0x0102
+    private const val CHUNK_END_ELEMENT = 0x0103
     private const val FLAG_UTF8 = 0x100
     private const val TYPE_STRING = 0x03
     private const val TYPE_INT_DEC = 0x10
@@ -182,9 +183,10 @@ object ApkManifestReader {
     /**
      * Parses the binary XML manifest: the root element's attributes for the package and the
      * version, and those of the uses-sdk element, wherever it stands among the root's
-     * children, for the lowest Android. Only the strings looked for are decoded: a hostile
-     * file can hold tens of thousands of elements named by strings of tens of thousands of
-     * characters each, and decoding them all would cost gigabytes.
+     * children, for the lowest Android. One nested deeper, inside the application element
+     * say, does not count: Android skips it there. Only the strings looked for are decoded:
+     * a hostile file can hold tens of thousands of elements named by strings of tens of
+     * thousands of characters each, and decoding them all would cost gigabytes.
      */
     @Throws(IOException::class)
     internal fun parseManifest(bytes: ByteArray): ApkInfo = guarded { parseManifestUnchecked(bytes) }
@@ -197,6 +199,8 @@ object ApkManifestReader {
         // A manifest that names no lowest Android runs on every one, as Android takes it.
         var minSdk: Int? = 1
         var codename: String? = null
+        // How many elements are open: 1 inside the root element.
+        var depth = 0
 
         var position = 8
         while (position + 8 <= bytes.size) {
@@ -214,14 +218,16 @@ object ApkManifestReader {
                 CHUNK_RESOURCE_MAP -> resourceIds = IntArray((chunkSize - headerSize) / 4) {
                     xml.getInt(position + headerSize + it * 4)
                 }
+                CHUNK_END_ELEMENT -> depth--
                 CHUNK_START_ELEMENT -> {
                     val body = position + headerSize
                     val pool = strings ?: throw IOException("String pool missing")
                     val name = xml.getInt(body + 4)
+                    depth++
                     if (identity == null) {
                         if (!pool.matches(name, "manifest")) throw IOException("Unexpected root element")
                         identity = identityOf(pool, attributes(xml, resourceIds, body, position + chunkSize))
-                    } else if (pool.matches(name, "uses-sdk")) {
+                    } else if (depth == 2 && pool.matches(name, "uses-sdk")) {
                         // The children of the manifest element come in the order they were
                         // written, so the whole document is read: uses-sdk can follow
                         // application. Of several, the last one counts.
