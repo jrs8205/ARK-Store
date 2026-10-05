@@ -1,0 +1,1 @@
+Asennettu sovellus, jonka uusin versio vaatii uudemman Androidin, pysyy listassa huomautuksen kera; asentamaton jää pois. Android-versio kerrotaan vain, kun se on uudempi kuin kaupan oma vaatimus, ja myös suoraan GitHubista luetut julkaisut kertovat sen.

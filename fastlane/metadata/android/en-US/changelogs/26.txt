@@ -1,0 +1,1 @@
+An installed app whose newest version needs a newer Android stays in the list with a note; one not installed is left out. The Android version is told only when it is newer than the store itself needs, and releases read straight from GitHub tell it too.

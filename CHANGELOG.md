@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.6.0-beta.4
+
+- An installed app whose newest version needs a newer Android than the device has stays in
+  the list, with a note and no update button; one not installed is left out. A place still
+  offering a version the device can run is preferred over one that does not
+- The Android version is told in the details only when it is newer than the store itself
+  needs; a release built for a preview of Android, named by its codename, is offered to
+  that preview only
+- Releases read straight from GitHub, from sources and for the store's own row, have their
+  lowest Android read from the APK's manifest too
+- The manifest readers read uses-sdk only as a child of the manifest element, decode only
+  the strings they look for, and refuse a string pool that decodes to more than it holds
+- The index keeps the codename of a preview Android an APK needs
+
 ## 1.6.0-beta.3
 
 - The details tell which Android an app needs, as "Requires: Android 8.0 or later", once the
