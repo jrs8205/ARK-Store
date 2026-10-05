@@ -6,8 +6,18 @@ import java.nio.ByteOrder
 import java.util.zip.DataFormatException
 import java.util.zip.Inflater
 
-/** Identity of an APK as declared in its manifest. */
-data class ApkInfo(val packageName: String, val versionCode: Long, val versionName: String?)
+/**
+ * Identity of an APK as declared in its manifest, with the lowest Android it runs on: the
+ * API level [minSdk], 1 when the manifest names none, or the preview of Android it names by
+ * its codename instead, [minSdkCodename]; both null when they are not known.
+ */
+data class ApkInfo(
+    val packageName: String,
+    val versionCode: Long,
+    val versionName: String?,
+    val minSdk: Int? = null,
+    val minSdkCodename: String? = null
+)
 
 /** Random access to a remote or local file. */
 fun interface RangeSource {
@@ -15,8 +25,9 @@ fun interface RangeSource {
 }
 
 /**
- * Reads the package name and version of an APK without downloading it in full: only the zip
- * central directory and the compressed AndroidManifest.xml entry are fetched.
+ * Reads the package name, the version and the lowest Android of an APK without downloading it
+ * in full: only the zip central directory and the compressed AndroidManifest.xml entry are
+ * fetched.
  */
 object ApkManifestReader {
 
@@ -34,9 +45,12 @@ object ApkManifestReader {
     private const val CHUNK_START_ELEMENT = 0x0102
     private const val FLAG_UTF8 = 0x100
     private const val TYPE_STRING = 0x03
+    private const val TYPE_INT_DEC = 0x10
+    private const val TYPE_INT_HEX = 0x11
     private const val ATTR_VERSION_CODE = 0x0101021b
     private const val ATTR_VERSION_NAME = 0x0101021c
     private const val ATTR_VERSION_CODE_MAJOR = 0x01010576
+    private const val ATTR_MIN_SDK = 0x0101020c
 
     /**
      * The file comes from the network and may be malformed or hostile, so every failure to
@@ -159,7 +173,11 @@ object ApkManifestReader {
         }
     }
 
-    /** Parses the binary XML manifest far enough to read the root element's attributes. */
+    /**
+     * Parses the binary XML manifest: the root element's attributes for the package and the
+     * version, and those of the uses-sdk element, wherever it stands among the root's
+     * children, for the lowest Android.
+     */
     @Throws(IOException::class)
     internal fun parseManifest(bytes: ByteArray): ApkInfo = guarded { parseManifestUnchecked(bytes) }
 
@@ -167,6 +185,10 @@ object ApkManifestReader {
         val xml = le(bytes)
         var strings: StringPool? = null
         var resourceIds = IntArray(0)
+        var identity: ApkInfo? = null
+        // A manifest that names no lowest Android runs on every one, as Android takes it.
+        var minSdk: Int? = 1
+        var codename: String? = null
 
         var position = 8
         while (position + 8 <= bytes.size) {
@@ -188,51 +210,86 @@ object ApkManifestReader {
                     val body = position + headerSize
                     val pool = strings ?: throw IOException("String pool missing")
                     val elementName = pool[xml.getInt(body + 4)]
-                    if (elementName != "manifest") throw IOException("Unexpected root element")
-                    val attributeStart = xml.getShort(body + 8).toInt() and 0xffff
-                    val attributeSize = xml.getShort(body + 10).toInt() and 0xffff
-                    val attributeCount = xml.getShort(body + 12).toInt() and 0xffff
-                    if (attributeSize < 20 ||
-                        body + attributeStart + attributeCount.toLong() * attributeSize >
-                        position + chunkSize
-                    ) {
-                        throw IOException("Attributes out of range")
-                    }
-
-                    var packageName: String? = null
-                    var versionCode = 0L
-                    var versionCodeMajor = 0L
-                    var versionName: String? = null
-                    for (i in 0 until attributeCount) {
-                        val attribute = body + attributeStart + i * attributeSize
-                        val nameIndex = xml.getInt(attribute + 4)
-                        val rawValue = xml.getInt(attribute + 8)
-                        val dataType = xml.get(attribute + 15).toInt() and 0xff
-                        val data = xml.getInt(attribute + 16)
-                        val text = when {
-                            dataType == TYPE_STRING -> pool[data]
-                            rawValue >= 0 -> pool[rawValue]
-                            else -> null
-                        }
-                        when (resourceIds.getOrElse(nameIndex) { 0 }) {
-                            ATTR_VERSION_CODE -> versionCode = data.toUnsigned()
-                            ATTR_VERSION_CODE_MAJOR -> versionCodeMajor = data.toUnsigned()
-                            ATTR_VERSION_NAME -> versionName = text
-                            else -> if (pool[nameIndex] == "package") {
-                                packageName = text
+                    if (identity == null) {
+                        if (elementName != "manifest") throw IOException("Unexpected root element")
+                        identity = identityOf(attributes(xml, pool, resourceIds, body, position + chunkSize))
+                    } else if (elementName == "uses-sdk") {
+                        // The children of the manifest element come in the order they were
+                        // written, so the whole document is read: uses-sdk can follow
+                        // application. Of several, the last one counts.
+                        minSdk = 1
+                        codename = null
+                        for (attribute in attributes(xml, pool, resourceIds, body, position + chunkSize)) {
+                            if (attribute.resource != ATTR_MIN_SDK) continue
+                            when (attribute.dataType) {
+                                TYPE_INT_DEC, TYPE_INT_HEX -> minSdk = attribute.data
+                                // A preview of Android, named by its codename.
+                                TYPE_STRING -> {
+                                    minSdk = null
+                                    codename = attribute.text
+                                }
+                                else -> minSdk = null
                             }
                         }
                     }
-                    return ApkInfo(
-                        packageName = packageName ?: throw IOException("Package name missing"),
-                        versionCode = (versionCodeMajor shl 32) or versionCode,
-                        versionName = versionName
-                    )
                 }
             }
             position += chunkSize
         }
-        throw IOException("Manifest element not found")
+        val info = identity ?: throw IOException("Manifest element not found")
+        return info.copy(minSdk = minSdk, minSdkCodename = codename)
+    }
+
+    private class Attribute(val resource: Int, val name: String?, val dataType: Int, val data: Int, val text: String?)
+
+    /** The attributes of the start element whose body begins at [body] and whose chunk ends at [end]. */
+    private fun attributes(
+        xml: ByteBuffer,
+        pool: StringPool,
+        resourceIds: IntArray,
+        body: Int,
+        end: Int
+    ): List<Attribute> {
+        val attributeStart = xml.getShort(body + 8).toInt() and 0xffff
+        val attributeSize = xml.getShort(body + 10).toInt() and 0xffff
+        val attributeCount = xml.getShort(body + 12).toInt() and 0xffff
+        if (attributeSize < 20 || body + attributeStart + attributeCount.toLong() * attributeSize > end) {
+            throw IOException("Attributes out of range")
+        }
+        return List(attributeCount) { i ->
+            val attribute = body + attributeStart + i * attributeSize
+            val nameIndex = xml.getInt(attribute + 4)
+            val rawValue = xml.getInt(attribute + 8)
+            val dataType = xml.get(attribute + 15).toInt() and 0xff
+            val data = xml.getInt(attribute + 16)
+            val text = when {
+                dataType == TYPE_STRING -> pool[data]
+                rawValue >= 0 -> pool[rawValue]
+                else -> null
+            }
+            Attribute(resourceIds.getOrElse(nameIndex) { 0 }, pool[nameIndex], dataType, data, text)
+        }
+    }
+
+    /** The package and version the root element's [attributes] declare. */
+    private fun identityOf(attributes: List<Attribute>): ApkInfo {
+        var packageName: String? = null
+        var versionCode = 0L
+        var versionCodeMajor = 0L
+        var versionName: String? = null
+        for (attribute in attributes) {
+            when (attribute.resource) {
+                ATTR_VERSION_CODE -> versionCode = attribute.data.toUnsigned()
+                ATTR_VERSION_CODE_MAJOR -> versionCodeMajor = attribute.data.toUnsigned()
+                ATTR_VERSION_NAME -> versionName = attribute.text
+                else -> if (attribute.name == "package") packageName = attribute.text
+            }
+        }
+        return ApkInfo(
+            packageName = packageName ?: throw IOException("Package name missing"),
+            versionCode = (versionCodeMajor shl 32) or versionCode,
+            versionName = versionName
+        )
     }
 
     /**

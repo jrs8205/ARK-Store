@@ -847,9 +847,13 @@ class CatalogRepository private constructor(context: Context) {
             val url = apk.getString("browser_download_url")
             val size = apk.getLong("size")
             // The asset id changes whenever a file is replaced, so a known id means a known APK.
-            val known = previous.firstOrNull { it.assetId == assetId && it.packageName != null }
+            // One known from before the lowest Android was read is read again for it.
+            val known = previous.firstOrNull {
+                it.assetId == assetId && it.packageName != null &&
+                    (it.minSdk != null || it.minSdkCodename != null)
+            }
             val info = if (known != null) {
-                ApkInfo(known.packageName!!, known.versionCode, known.versionName)
+                ApkInfo(known.packageName!!, known.versionCode, known.versionName, known.minSdk, known.minSdkCodename)
             } else {
                 try {
                     ApkManifestReader.read(size) { start, length ->
@@ -882,6 +886,8 @@ class CatalogRepository private constructor(context: Context) {
                 packageName = info?.packageName,
                 versionCode = info?.versionCode ?: 0,
                 versionName = info?.versionName,
+                minSdk = info?.minSdk,
+                minSdkCodename = info?.minSdkCodename,
                 // Only the index reads an app's name. A release newer than the index is
                 // taken to be called what the one before it was.
                 label = known?.label
@@ -924,7 +930,9 @@ class CatalogRepository private constructor(context: Context) {
                 app.copy(
                     packageName = info.packageName,
                     versionCode = info.versionCode,
-                    versionName = info.versionName
+                    versionName = info.versionName,
+                    minSdk = info.minSdk,
+                    minSdkCodename = info.minSdkCodename
                 )
             }
         }
