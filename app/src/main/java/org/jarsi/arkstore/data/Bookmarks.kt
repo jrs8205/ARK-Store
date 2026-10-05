@@ -17,10 +17,8 @@ class Bookmarks(context: Context) {
     private val preferences = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     private val _keys = MutableStateFlow(preferences.getStringSet(PREF_KEYS, null).orEmpty().toSet())
 
-    /** The keys of the bookmarked apps; see [key]. */
+    /** The keys of the bookmarked apps; see [keysOf]. */
     val keys: StateFlow<Set<String>> = _keys.asStateFlow()
-
-    fun contains(app: StoreApp): Boolean = marked(app, _keys.value)
 
     /** Bookmarks [app], or takes the bookmark away when it has one. */
     fun toggle(app: StoreApp) {
@@ -42,8 +40,8 @@ class Bookmarks(context: Context) {
         fun marked(app: StoreApp, keys: Set<String>): Boolean = keysOf(app).any { it in keys }
 
         /**
-         * [keys] with [app] bookmarked, or with its bookmark taken away when it has one. A
-         * bookmark kept under the full name moves to the package once that is known.
+         * [keys] with [app] bookmarked, under its package when that is known, or with its
+         * bookmark taken away when it has one under either key.
          */
         fun toggled(keys: Set<String>, app: StoreApp): Set<String> {
             val own = keysOf(app)

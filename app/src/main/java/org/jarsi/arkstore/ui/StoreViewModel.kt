@@ -123,7 +123,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     private val bookmarks = Bookmarks(application)
 
-    /** The keys of the bookmarked apps, see [Bookmarks.key]. */
+    /** The keys of the bookmarked apps, see [Bookmarks.keysOf]. */
     val bookmarked: StateFlow<Set<String>> = bookmarks.keys
 
     fun toggleBookmark(app: StoreApp) = bookmarks.toggle(app)

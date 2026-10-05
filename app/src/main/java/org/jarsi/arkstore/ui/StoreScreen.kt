@@ -255,11 +255,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
         val activePlace = place
-        // The last bookmark taken away ends the bookmark filter rather than emptying the list.
         val bookmarkCount = state.rows.count { Bookmarks.marked(it.app, bookmarked) }
         // Taking the last bookmark away ends the bookmark filter for good, so that the next
-        // bookmark does not bring it back by itself.
-        LaunchedEffect(bookmarkCount) { if (bookmarkCount == 0) onlyBookmarks = false }
+        // bookmark does not bring it back by itself. A list still loading has no bookmarks
+        // yet and is left alone, so that a filter restored with the screen stays.
+        val loaded = state.rows.isNotEmpty()
+        LaunchedEffect(bookmarkCount, loaded) { if (loaded && bookmarkCount == 0) onlyBookmarks = false }
         val activeBookmarks = onlyBookmarks && bookmarkCount > 0
         // The places whose apps are turned on in the settings; GitHub always is.
         val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
@@ -1914,8 +1915,10 @@ private fun CategoryChips(
     onlyBookmarks: Boolean,
     onBookmarksToggle: () -> Unit
 ) {
-    // One category tells nothing the full list does not.
-    if (categories.size < 2 && bookmarks == 0) return
+    // One category tells nothing the full list does not; the row is still there for the
+    // bookmarks when there are any.
+    val shownCategories = if (categories.size < 2) emptyList() else categories
+    if (shownCategories.isEmpty() && bookmarks == 0) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1942,7 +1945,7 @@ private fun CategoryChips(
                 )
             }
         }
-        items(categories, key = { it }) { id ->
+        items(shownCategories, key = { it }) { id ->
             ChoiceChip(
                 selected = selected == id,
                 label = stringResource(R.string.category_chip, stringResource(categoryLabel(id)), counts[id] ?: 0),
