@@ -63,7 +63,13 @@ enum class AppStatus {
      * Another app altogether is installed under this package name, signed with another key
      * and going by another name; this app is not installed, and cannot be while that is.
      */
-    OTHER_APP
+    OTHER_APP,
+
+    /**
+     * A newer version is offered, but this Android cannot run it: it needs a newer one. The
+     * installed version stays, and nothing is offered as the update.
+     */
+    NEEDS_NEWER_ANDROID
 }
 
 object InstalledApps {
@@ -235,10 +241,16 @@ object InstalledApps {
         if (row.otherBuild && !it.otherSigner && !it.sameSigner) it.copy(otherBuild = true) else it
     }
 
-    fun status(app: StoreApp, installed: InstalledVersion?): AppStatus = when {
+    /**
+     * How [app] stands against what is [installed] of it. [runs] says whether the file offered
+     * runs on this Android ([CatalogRules.runsOn]); one that does not is no update, whatever
+     * its key, since nothing could be installed.
+     */
+    fun status(app: StoreApp, installed: InstalledVersion?, runs: Boolean = true): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
         installed.otherApp -> AppStatus.OTHER_APP
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
+        !runs -> AppStatus.NEEDS_NEWER_ANDROID
         installed.otherSigner -> AppStatus.OTHER_SIGNER
         installed.otherBuild -> AppStatus.OTHER_BUILD
         else -> AppStatus.UPDATE_AVAILABLE
@@ -246,8 +258,10 @@ object InstalledApps {
 
     fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
         val installed = snapshot(context)
+        val android = CatalogRules.Android.THIS
         return merged(context, apps, installed).filter {
-            status(it.app, find(context, it, installed)) == AppStatus.UPDATE_AVAILABLE
+            val runs = CatalogRules.runsOn(it.app, android)
+            status(it.app, find(context, it, installed), runs) == AppStatus.UPDATE_AVAILABLE
         }.map { it.app }
     }
 

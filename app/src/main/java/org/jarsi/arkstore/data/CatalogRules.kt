@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.data
 
+import android.os.Build
 import java.security.MessageDigest
 
 /** What the catalogue offers and shows, decided without any I/O so that it can be tested. */
@@ -16,10 +17,13 @@ internal object CatalogRules {
      * either manifest could not be read there is nothing to compare, and the full release
      * is offered.
      */
-    fun offered(stable: StoreApp?, beta: StoreApp?, includeBeta: Boolean): StoreApp? {
+    fun offered(stable: StoreApp?, beta: StoreApp?, includeBeta: Boolean, android: Android): StoreApp? {
         if (!includeBeta || beta == null) return stable
         if (stable == null) return beta
-        return if (upgrades(beta, stable)) beta else stable
+        if (!upgrades(beta, stable)) return stable
+        // A prerelease this Android cannot run does not replace a full release it can. When
+        // it can run neither, the newest is shown as the one that needs a newer Android.
+        return if (runsOn(stable, android) && !runsOn(beta, android)) stable else beta
     }
 
     /** Whether [beta] is the same package as [stable] with a higher version code. */
@@ -50,11 +54,41 @@ internal object CatalogRules {
     }
 
     /**
-     * Whether a file whose manifest names [minSdk] as the lowest Android API level it runs on,
-     * or null when the index does not tell it, runs on Android [sdk]. A file not yet read
-     * for it is offered, as every file was before the index read it.
+     * The Android a device runs: its API level [sdk] and, for a preview of Android, its
+     * [codename], which is "REL" for a release.
      */
-    fun runsOn(minSdk: Int?, sdk: Int): Boolean = minSdk == null || minSdk <= sdk
+    data class Android(val sdk: Int, val codename: String = RELEASE) {
+        companion object {
+            const val RELEASE = "REL"
+
+            /** The Android this device runs. */
+            val THIS: Android by lazy { Android(Build.VERSION.SDK_INT, Build.VERSION.CODENAME ?: RELEASE) }
+        }
+    }
+
+    /**
+     * Whether a file whose manifest names [minSdk] as the lowest Android API level it runs on,
+     * or the preview of Android [codename] as the lowest, either null when the index does not
+     * tell it, runs on [android]. A file not yet read for it is offered, as every file was
+     * before the index read it. A file for a preview runs on that preview alone, not on any
+     * release, however new: Android refuses it.
+     */
+    fun runsOn(minSdk: Int?, codename: String?, android: Android): Boolean = when {
+        codename != null -> codename == android.codename
+        else -> minSdk == null || minSdk <= android.sdk
+    }
+
+    /** Whether the file offered of [app] runs on [android]; see [runsOn]. */
+    fun runsOn(app: StoreApp, android: Android): Boolean = runsOn(app.minSdk, app.minSdkCodename, android)
+
+    /**
+     * Whether an app is listed at all, given its [status] and whether its file [runs] on this
+     * Android. One the device cannot run is listed only when the app is installed, to say
+     * that its newest version needs a newer Android; one not installed, which could not be
+     * installed, is left out.
+     */
+    fun listed(status: AppStatus, runs: Boolean): Boolean =
+        runs || (status != AppStatus.NOT_INSTALLED && status != AppStatus.OTHER_APP)
 
     /** One file a catalogue offers of an app, as far as choosing between them goes. */
     data class CatalogueApk(
@@ -67,8 +101,11 @@ internal object CatalogRules {
 
     /**
      * The index of the file in [apks] to offer a device that runs the CPU architectures
-     * [deviceAbis] and Android [sdk], or null when none suits it: the highest version among
-     * those the device can run. A file that names no architecture runs on all of them.
+     * [deviceAbis] and Android [sdk], or null when none is built for its architecture: the
+     * highest version among those the device can run. A file that names no architecture runs
+     * on all of them. When none of the files for the architecture runs on its Android, the
+     * newest of them is named all the same, as the version an installed app would need a
+     * newer Android for; see [listed].
      *
      * [installedSigners] are the certificates the app is installed with, or null when it is
      * not installed. Android updates an app only with a file signed like the installed one,
@@ -81,9 +118,11 @@ internal object CatalogRules {
         sdk: Int,
         installedSigners: Set<String>? = null
     ): Int? {
-        val runnable = apks.withIndex().filter { (_, apk) ->
-            apk.minSdk <= sdk && (apk.abis.isEmpty() || apk.abis.any { it in deviceAbis })
+        val forDevice = apks.withIndex().filter { (_, apk) ->
+            apk.abis.isEmpty() || apk.abis.any { it in deviceAbis }
         }
+        val runnable = forDevice.filter { (_, apk) -> apk.minSdk <= sdk }
+        if (runnable.isEmpty()) return forDevice.maxByOrNull { (_, apk) -> apk.versionCode }?.index
         val updating = installedSigners?.let { signers ->
             runnable.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
         }

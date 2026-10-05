@@ -350,7 +350,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
                     val installed = visible.filter {
                         it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
-                            it.status == AppStatus.OTHER_BUILD
+                            it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
                     }
                     val available = visible.filter {
                         it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
@@ -711,7 +711,8 @@ private fun AppCard(
                         // Another app under this name: nothing to open and nothing to install
                         // over it; the note below says so.
                         AppStatus.OTHER_APP -> Unit
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD -> {
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD,
+                        AppStatus.NEEDS_NEWER_ANDROID -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -743,16 +744,18 @@ private fun AppCard(
             }
 
             val note = when {
-                row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
-                row.status == AppStatus.OTHER_BUILD -> R.string.other_build_note
-                row.status == AppStatus.OTHER_APP -> R.string.other_app_note
-                row.betaInstalled -> R.string.newer_installed_note
-                row.newerInstalled -> R.string.newer_version_note
+                row.status == AppStatus.NEEDS_NEWER_ANDROID ->
+                    stringResource(R.string.newer_android_note, requirement(app).orEmpty())
+                row.status == AppStatus.OTHER_SIGNER -> stringResource(R.string.other_signer_note)
+                row.status == AppStatus.OTHER_BUILD -> stringResource(R.string.other_build_note)
+                row.status == AppStatus.OTHER_APP -> stringResource(R.string.other_app_note)
+                row.betaInstalled -> stringResource(R.string.newer_installed_note)
+                row.newerInstalled -> stringResource(R.string.newer_version_note)
                 else -> null
             }
             if (note != null) {
                 Text(
-                    text = stringResource(note),
+                    text = note,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp)
@@ -968,12 +971,12 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
         }
-        app.minSdk?.let { sdk ->
-            DetailLine(
-                stringResource(R.string.detail_requires),
-                AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
-                    ?: stringResource(R.string.requires_api, sdk)
-            )
+        // A requirement the store itself meets says nothing to whoever runs the store.
+        val ownMinSdk = remember { context.applicationInfo.minSdkVersion }
+        val told = app.minSdkCodename != null ||
+            (app.minSdk != null && AndroidVersions.worthTelling(app.minSdk, ownMinSdk))
+        if (told) {
+            requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
         }
         DetailLine(
             stringResource(R.string.detail_size),
@@ -1042,6 +1045,12 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(R.string.action_update))
             }
+        } else if (row.status == AppStatus.NEEDS_NEWER_ANDROID) {
+            Text(
+                text = stringResource(R.string.newer_android_detail, requirement(app).orEmpty()),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
         } else if (row.installed != null && row.status == AppStatus.UPDATE_AVAILABLE) {
             // Whether the update will go through: known from the keys when the place that
             // offers the file tells how it is signed, otherwise only once it is downloaded.
@@ -1131,6 +1140,19 @@ private fun DetailLine(label: String, value: String) {
             modifier = Modifier.weight(0.6f)
         )
     }
+}
+
+/**
+ * The Android [app] needs, as the user is to read it: "Android 8.0 or later", the API level
+ * when the version is not named here, or the preview by its codename; null when it is not
+ * known.
+ */
+@Composable
+private fun requirement(app: StoreApp): String? {
+    app.minSdkCodename?.let { return stringResource(R.string.requires_preview, it) }
+    val sdk = app.minSdk ?: return null
+    return AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
+        ?: stringResource(R.string.requires_api, sdk)
 }
 
 @Composable

@@ -12,4 +12,11 @@ object AndroidVersions {
 
     /** The version released as API level [sdk], such as "8.0" for 26, or null for a level not named here. */
     fun name(sdk: Int): String? = names.getOrNull(sdk - 1)
+
+    /**
+     * Whether an app that needs API level [minSdk] is worth telling about in a store that
+     * itself needs [ownMinSdk]: every device that runs the store runs a file that needs no
+     * more, so only a higher requirement says anything.
+     */
+    fun worthTelling(minSdk: Int, ownMinSdk: Int): Boolean = minSdk > ownMinSdk
 }

@@ -21,6 +21,24 @@ class InstalledAppsTest {
     }
 
     @Test
+    fun newestVersionThisAndroidCannotRunIsNoUpdate() {
+        val older = InstalledVersion(4, "1.4")
+        assertEquals(AppStatus.NEEDS_NEWER_ANDROID, InstalledApps.status(offered, older, runs = false))
+        // Whatever its key: nothing could be installed anyway.
+        assertEquals(
+            AppStatus.NEEDS_NEWER_ANDROID,
+            InstalledApps.status(offered, older.copy(otherSigner = true), runs = false)
+        )
+        // The installed version is the one offered, or newer: nothing is missing.
+        assertEquals(AppStatus.UP_TO_DATE, InstalledApps.status(offered, InstalledVersion(5, "1.5"), runs = false))
+        assertEquals(AppStatus.NOT_INSTALLED, InstalledApps.status(offered, null, runs = false))
+        assertEquals(
+            AppStatus.OTHER_APP,
+            InstalledApps.status(offered, older.copy(otherApp = true), runs = false)
+        )
+    }
+
+    @Test
     fun appSignedWithAnotherKeyIsNotAnUpdate() {
         val elsewhere = InstalledVersion(4, "1.4", otherSigner = true)
         assertEquals(AppStatus.OTHER_SIGNER, InstalledApps.status(offered, elsewhere))

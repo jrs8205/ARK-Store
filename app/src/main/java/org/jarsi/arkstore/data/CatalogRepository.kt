@@ -78,6 +78,7 @@ class CatalogRepository private constructor(context: Context) {
     val sources = SourceStore(context)
 
     private val deviceAbis: List<String> = Build.SUPPORTED_ABIS.toList()
+    private val thisAndroid = CatalogRules.Android.THIS
 
     private val packages = context.packageManager
 
@@ -631,7 +632,7 @@ class CatalogRepository private constructor(context: Context) {
             null
         }
         val apk = CatalogRules
-            .pickCatalogueApk(choices, deviceAbis, Build.VERSION.SDK_INT, installedSigners)
+            .pickCatalogueApk(choices, deviceAbis, thisAndroid.sdk, installedSigners)
             ?.let { apks[it] }
             ?: return null
         fun list(from: JSONObject, key: String) = from.optJSONArray(key)
@@ -700,8 +701,11 @@ class CatalogRepository private constructor(context: Context) {
 
     /**
      * Builds an app from its index entry [json] and one of the releases described there, or
-     * returns null when none of that release's APKs suits this device: its architecture, told
-     * by the file's name, or its Android, told by the index when it has read the file.
+     * returns null when none of that release's APKs is built for this device's architecture,
+     * told by the file's name. Of the files that are, one this Android runs is taken, as the
+     * index tells it when it has read the file; when none does, the file is taken all the
+     * same, as the version an installed app needs a newer Android for (see
+     * [CatalogRules.listed]).
      */
     private fun indexedApp(
         json: JSONObject,
@@ -709,9 +713,12 @@ class CatalogRepository private constructor(context: Context) {
         prerelease: Boolean = false,
         auto: Boolean = false
     ): StoreApp? {
-        val apks = release.getJSONArray("apks").let { array ->
+        val all = release.getJSONArray("apks").let { array ->
             (0 until array.length()).map { array.getJSONObject(it) }
-        }.filter { CatalogRules.runsOn(StoreApp.minSdkOf(it), Build.VERSION.SDK_INT) }
+        }
+        val apks = all.filter {
+            CatalogRules.runsOn(StoreApp.minSdkOf(it), StoreApp.minSdkCodenameOf(it), thisAndroid)
+        }.ifEmpty { all }
         val apk = ApkPicker.pick(apks.map { it.getString("name") }, deviceAbis)
             ?.let { apks[it] }
             ?: return null
@@ -751,6 +758,7 @@ class CatalogRepository private constructor(context: Context) {
             allDownloads = allDownloads,
             signer = StoreApp.indexedSigner(apk),
             minSdk = StoreApp.minSdkOf(apk),
+            minSdkCodename = StoreApp.minSdkCodenameOf(apk),
             icon = AppIcon.of(apk.opt("icon"))
         )
     }
@@ -978,7 +986,7 @@ class CatalogRepository private constructor(context: Context) {
         val includeAuto = _includeAuto.value
         val own = sources.list()
         val shownCatalogues = _catalogues.value
-        return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta) }
+        return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta, thisAndroid) }
             .mapNotNull { CatalogRules.shown(it, own, includeAuto, shownCatalogues) }
             .sortedBy { it.title.lowercase() }
     }

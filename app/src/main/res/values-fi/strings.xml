@@ -39,6 +39,7 @@
     <string name="detail_requires">Vaatii</string>
     <string name="requires_android">Android %1$s tai uudempi</string>
     <string name="requires_api">Androidin API-taso %1$d tai uudempi</string>
+    <string name="requires_preview">Android %1$s (esiversio)</string>
     <string name="detail_notes">Julkaisutiedot</string>
 
     <string name="channel_updates">Sovelluspäivitykset</string>
@@ -175,6 +176,8 @@
     <string name="other_signer_detail">Asennettu sovellus on allekirjoitettu eri avaimella kuin täällä tarjottu versio, yleensä siksi, että se on asennettu toisesta kaupasta. Android ei anna ARK-Storen päivittää sitä. Jos haluat vaihtaa tähän versioon, poista sovellus ensin ja asenna se sitten täältä. Poisto tyhjentää sovelluksen tiedot.</string>
     <string name="other_build_note">Mahdollisesti toisen tekijän versio. Ei tarjota päivityksenä.</string>
     <string name="other_app_note">Samalla paketinnimellä on asennettuna eri sovellus.</string>
+    <string name="newer_android_note">Uusin versio vaatii: %1$s. Tämä laite ei voi ajaa sitä, joten sitä ei tarjota.</string>
+    <string name="newer_android_detail">Uusin versio vaatii: %1$s. Tämä laite ei voi ajaa sitä, joten ARK-Store ei tarjoa sitä. Asennettu versio jää paikoilleen.</string>
     <string name="action_try_install">Yritä asentaa</string>
     <string name="other_app_detail">Tällä paketinnimellä on asennettuna %1$s (asennuslähde: %2$s): eri sovellus, eri avaimella allekirjoitettu. Tätä sovellusta ei ole asennettu, eikä sitä voi asentaa, kun toinen on paikallaan; toisen poisto tyhjentää sen tiedot.</string>
     <string name="other_build_detail">Asennettu sovellus on allekirjoitettu avaimella, jota toinen tätä pakettia tarjoava paikka käyttää, eikä tämän version avainta vielä tiedetä, joten se voi olla toisen tekijän samanniminen versio. ARK-Store ei tarjoa sitä päivityksenä. Voit silti kokeilla: avaimet verrataan, kun tiedosto on ladattu, ja päivitys tehdään vain, jos ne täsmäävät.</string>

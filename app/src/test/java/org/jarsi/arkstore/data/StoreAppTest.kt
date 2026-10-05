@@ -61,6 +61,16 @@ class StoreAppTest {
     }
 
     @Test
+    fun codenameOfThePreviewAndroidAFileNeedsIsKeptInTheStoredCopy() {
+        val app = testApp().copy(minSdkCodename = "Baklava")
+        assertEquals("Baklava", StoreApp.fromJson(app.toJson()).minSdkCodename)
+        assertNull(StoreApp.fromJson(testApp().toJson()).minSdkCodename)
+        assertEquals("Baklava", StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", "Baklava")))
+        assertNull(StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", JSONObject.NULL)))
+        assertNull(StoreApp.minSdkCodenameOf(JSONObject()))
+    }
+
+    @Test
     fun lowestAndroidVersionIsReadTheWayTheIndexWritesIt() {
         assertEquals(26, StoreApp.minSdkOf(JSONObject().put("minSdk", 26)))
         assertNull(StoreApp.minSdkOf(JSONObject()))

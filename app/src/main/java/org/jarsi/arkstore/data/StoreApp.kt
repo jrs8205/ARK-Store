@@ -68,6 +68,11 @@ data class StoreApp(
      * catalogue tells it; null when it does not, as for a release read straight from GitHub.
      */
     val minSdk: Int? = null,
+    /**
+     * The codename of the preview of Android the APK's manifest names as the lowest it runs
+     * on, instead of a number, when the index tells it. Only that preview runs the file.
+     */
+    val minSdkCodename: String? = null,
     /** What a catalogue warns about in the app, such as tracking, in its own words. */
     val antiFeatures: List<String> = emptyList(),
     /** The app's icon as the index publishes it, or null when it publishes none. */
@@ -129,6 +134,7 @@ data class StoreApp(
         .put("signerReader", if (fromRepository) SIGNER_READER else JSONObject.NULL)
         .put("sha256", sha256 ?: JSONObject.NULL)
         .put("minSdk", minSdk ?: JSONObject.NULL)
+        .put("minSdkCodename", minSdkCodename ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
 
@@ -159,6 +165,13 @@ data class StoreApp(
          */
         fun minSdkOf(json: JSONObject): Int? =
             if (json.isNull("minSdk")) null else json.optInt("minSdk").takeIf { it > 0 }
+
+        /**
+         * The codename of the preview of Android [json], an index entry of a file or a stored
+         * app, names as the lowest the file runs on, or null when it names none.
+         */
+        fun minSdkCodenameOf(json: JSONObject): String? =
+            if (json.isNull("minSdkCodename")) null else json.getString("minSdkCodename").takeIf { it.isNotBlank() }
 
         fun fromJson(json: JSONObject) = StoreApp(
             fullName = json.getString("fullName"),
@@ -193,6 +206,7 @@ data class StoreApp(
             },
             sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
             minSdk = minSdkOf(json),
+            minSdkCodename = minSdkCodenameOf(json),
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }
                 .orEmpty(),

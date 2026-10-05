@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.CatalogRepository
+import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
@@ -85,17 +86,17 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         error
     ) { catalog, _, isRefreshing, loadError ->
         val packages = InstalledApps.snapshot(application)
+        val android = CatalogRules.Android.THIS
         StoreUiState(
-            rows = InstalledApps.merged(application, catalog.apps, packages).map { row ->
+            rows = InstalledApps.merged(application, catalog.apps, packages).mapNotNull { row ->
                 val app = row.app
+                val runs = CatalogRules.runsOn(app, android)
                 val installed = InstalledApps.find(application, row, packages)
-                AppRow(
-                    app,
-                    installed,
-                    InstalledApps.status(app, installed),
-                    catalog.betaVersions[app.fullName],
-                    row.alsoFrom
-                )
+                val status = InstalledApps.status(app, installed, runs)
+                // An app this Android cannot run is listed only when it is installed, to say
+                // that its newest version needs a newer Android.
+                if (!CatalogRules.listed(status, runs)) return@mapNotNull null
+                AppRow(app, installed, status, catalog.betaVersions[app.fullName], row.alsoFrom)
             },
             checkedAt = catalog.checkedAt,
             storeDownloads = catalog.storeDownloads,
