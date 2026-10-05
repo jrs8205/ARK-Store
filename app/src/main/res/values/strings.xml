@@ -39,6 +39,10 @@
     <string name="detail_published">Published</string>
     <string name="detail_size">Size</string>
     <string name="detail_package">Package</string>
+    <string name="detail_requires">Requires</string>
+    <string name="requires_android">Android %1$s or later</string>
+    <string name="requires_api">Android API level %1$d or later</string>
+    <string name="requires_preview">Android %1$s (preview)</string>
     <string name="detail_notes">Release notes</string>
 
     <string name="channel_updates">App updates</string>
@@ -85,6 +89,10 @@
     </plurals>
     <string name="category_chip" translatable="false">%1$s (%2$d)</string>
     <string name="category_all">All</string>
+    <string name="bookmarks_chip">Bookmarks</string>
+    <string name="action_bookmark">Bookmark</string>
+    <string name="action_unbookmark">Remove bookmark</string>
+    <string name="bookmarked">Bookmarked</string>
     <string name="category_communication">Communication</string>
     <string name="category_productivity">Productivity</string>
     <string name="category_tools">Tools</string>
@@ -121,6 +129,8 @@
     <string name="action_settings">Settings</string>
     <string name="settings_title">Settings</string>
     <string name="appearance_title">Appearance</string>
+    <string name="hide_top_switch">Hide the top when scrolling</string>
+    <string name="hide_top_description">The title bar, the search and the filters slide out of view as the list scrolls down and come back as soon as it scrolls up. Turned off, they stay above the list.</string>
     <string name="material_switch">Material surfaces</string>
     <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. On by default on Android 13 and later; turn it off here if you prefer flat colours or want to save power.</string>
     <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
@@ -187,6 +197,8 @@
     <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
     <string name="other_build_note">Possibly another developer\'s build. Not offered as an update.</string>
     <string name="other_app_note">A different app with this package name is installed.</string>
+    <string name="newer_android_note">The newest version needs %1$s. This device cannot run it, so it is not offered.</string>
+    <string name="newer_android_detail">The newest version needs %1$s. This device cannot run it, so ARK-Store does not offer it. The installed version stays.</string>
     <string name="action_try_install">Try to install</string>
     <string name="other_app_detail">What is installed under this package name is %1$s, from %2$s: a different app, signed with another key. This app is not installed, and it cannot be installed while the other is; removing the other removes its data.</string>
     <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>

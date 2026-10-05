@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.6.0-beta.5
+
+- The title bar, the search and the filters slide out of view as the list scrolls down and
+  come back as soon as it scrolls up, so that the list has the screen; a switch in the
+  settings, under Appearance, keeps them above the list instead
+- Bookmarks: an app can be bookmarked from its details, a bookmarked app carries a mark in
+  the list, and a Bookmarks chip among the categories shows the bookmarked apps alone. The
+  bookmarks stay on the device and follow the app's package, whatever place offers it
+- Release notes are shown with their headings, bullets, bold and code, instead of as the
+  Markdown they are written in
+
+## 1.6.0-beta.4
+
+- An installed app whose newest version needs a newer Android than the device has stays in
+  the list, with a note and no update button; one not installed is left out. A place still
+  offering a version the device can run is preferred over one that does not
+- The Android version is told in the details only when it is newer than the store itself
+  needs; a release built for a preview of Android, named by its codename, is offered to
+  that preview only
+- Releases read straight from GitHub, from sources and for the store's own row, have their
+  lowest Android read from the APK's manifest too
+- The manifest readers read uses-sdk only as a child of the manifest element, decode only
+  the strings they look for, and refuse a string pool that decodes to more than it holds
+- The index keeps the codename of a preview Android an APK needs
+
+## 1.6.0-beta.3
+
+- The details tell which Android an app needs, as "Requires: Android 8.0 or later", once the
+  index has read it from the APK, and a file the device cannot run is no longer offered
+- The index reads the lowest Android version from every APK, wherever the uses-sdk element
+  stands in the manifest
+- The README says that a file is refused by its keys only when its keys can be read
+
+## 1.6.0-beta.2
+
+- A list being scrolled at the moment the updates section or an error comes first is left
+  alone; a list at its top is still brought to the newcomer
+- The README's section on what an install rests on now says what the store can and cannot
+  tell: the service hosting the release, the index and HTTPS are trusted; the comparison of
+  keys is a first sieve, with Android deciding; and an update without asking is a possibility
+  on Android 12 and later under Android's conditions, not a rule
+
+## 1.6.0-beta.1
+
+- The updates a refresh has just found are seen at once. A list at its top stays at its top
+  when a section comes first, the updates found or an error, instead of keeping its first
+  item in place and leaving the new section hidden above it until the list is scrolled up.
+  A list scrolled further down stays where it is
+- The README explains what is and is not checked when an app is installed
+
 ## 1.5.0
 
 The work of the 1.5.0 beta versions, now for everyone:

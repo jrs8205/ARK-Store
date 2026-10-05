@@ -36,6 +36,10 @@
     <string name="detail_published">Julkaistu</string>
     <string name="detail_size">Koko</string>
     <string name="detail_package">Paketti</string>
+    <string name="detail_requires">Vaatii</string>
+    <string name="requires_android">Android %1$s tai uudempi</string>
+    <string name="requires_api">Androidin API-taso %1$d tai uudempi</string>
+    <string name="requires_preview">Android %1$s (esiversio)</string>
     <string name="detail_notes">Julkaisutiedot</string>
 
     <string name="channel_updates">Sovelluspäivitykset</string>
@@ -80,6 +84,10 @@
         <item quantity="other">Näytetään %1$d / %2$d sovellusta</item>
     </plurals>
     <string name="category_all">Kaikki</string>
+    <string name="bookmarks_chip">Kirjanmerkit</string>
+    <string name="action_bookmark">Lisää kirjanmerkki</string>
+    <string name="action_unbookmark">Poista kirjanmerkki</string>
+    <string name="bookmarked">Kirjanmerkitty</string>
     <string name="category_communication">Viestintä</string>
     <string name="category_productivity">Tuottavuus</string>
     <string name="category_tools">Työkalut</string>
@@ -116,6 +124,8 @@
     <string name="action_settings">Asetukset</string>
     <string name="settings_title">Asetukset</string>
     <string name="appearance_title">Ulkoasu</string>
+    <string name="hide_top_switch">Piilota yläosa vieritettäessä</string>
+    <string name="hide_top_description">Otsikkopalkki, haku ja suodattimet liukuvat pois näkyvistä, kun listaa vierittää alaspäin, ja palaavat heti, kun vierittää ylöspäin. Pois päältä ne pysyvät listan yläpuolella.</string>
     <string name="material_switch">Materiaalipinnat</string>
     <string name="material_description">Piirtää näytön ja kaiken sillä olevan ylhäältä valaistuna harjattuna metallina näytönohjaimella. Oletuksena päällä Android 13:sta alkaen; voit sammuttaa sen tästä, jos haluat tasaiset värit tai säästää virtaa.</string>
     <string name="material_unavailable">Ei saatavilla tällä laitteella: näytönohjaimen ajuri ei pystynyt piirtämään pintoja, joten tasaiset värit pysyvät.</string>
@@ -172,6 +182,8 @@
     <string name="other_signer_detail">Asennettu sovellus on allekirjoitettu eri avaimella kuin täällä tarjottu versio, yleensä siksi, että se on asennettu toisesta kaupasta. Android ei anna ARK-Storen päivittää sitä. Jos haluat vaihtaa tähän versioon, poista sovellus ensin ja asenna se sitten täältä. Poisto tyhjentää sovelluksen tiedot.</string>
     <string name="other_build_note">Mahdollisesti toisen tekijän versio. Ei tarjota päivityksenä.</string>
     <string name="other_app_note">Samalla paketinnimellä on asennettuna eri sovellus.</string>
+    <string name="newer_android_note">Uusin versio vaatii: %1$s. Tämä laite ei voi ajaa sitä, joten sitä ei tarjota.</string>
+    <string name="newer_android_detail">Uusin versio vaatii: %1$s. Tämä laite ei voi ajaa sitä, joten ARK-Store ei tarjoa sitä. Asennettu versio jää paikoilleen.</string>
     <string name="action_try_install">Yritä asentaa</string>
     <string name="other_app_detail">Tällä paketinnimellä on asennettuna %1$s (asennuslähde: %2$s): eri sovellus, eri avaimella allekirjoitettu. Tätä sovellusta ei ole asennettu, eikä sitä voi asentaa, kun toinen on paikallaan; toisen poisto tyhjentää sen tiedot.</string>
     <string name="other_build_detail">Asennettu sovellus on allekirjoitettu avaimella, jota toinen tätä pakettia tarjoava paikka käyttää, eikä tämän version avainta vielä tiedetä, joten se voi olla toisen tekijän samanniminen versio. ARK-Store ei tarjoa sitä päivityksenä. Voit silti kokeilla: avaimet verrataan, kun tiedosto on ladattu, ja päivitys tehdään vain, jos ne täsmäävät.</string>

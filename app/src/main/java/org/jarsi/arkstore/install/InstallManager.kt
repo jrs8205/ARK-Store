@@ -154,7 +154,15 @@ object InstallManager {
                 CatalogRepository.get(appContext).rememberApkInfo(
                     app.fullName,
                     app.assetId,
-                    ApkInfo(archive.packageName, versionCode, archive.versionName)
+                    ApkInfo(
+                        archive.packageName,
+                        versionCode,
+                        archive.versionName,
+                        // A preview named by its codename comes out as CUR_DEVELOPMENT, which
+                        // is no level.
+                        archive.applicationInfo?.minSdkVersion
+                            ?.takeIf { it in 1 until Build.VERSION_CODES.CUR_DEVELOPMENT }
+                    )
                 )
             } catch (e: IOException) {
                 // Only a convenience for the next refresh; the install itself does not need it.

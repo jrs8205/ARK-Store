@@ -53,4 +53,15 @@ object ApkPicker {
             Triple(index, debugPenalty, rank)
         }.minWithOrNull(compareBy<Triple<Int, Int, Int>>({ it.second }, { it.third }, { it.first }))
             ?.first
+
+    /**
+     * [pick] among the files that run on the device's Android, [runs] telling which do, or
+     * failing that among them all: a file the device cannot run is still named, as the
+     * version an installed app would need a newer Android for. The index is into [fileNames].
+     */
+    fun pickRunnable(fileNames: List<String>, runs: List<Boolean>, deviceAbis: List<String>): Int? {
+        val runnable = fileNames.indices.filter { runs[it] }
+        return pick(runnable.map { fileNames[it] }, deviceAbis)?.let { runnable[it] }
+            ?: pick(fileNames, deviceAbis)
+    }
 }

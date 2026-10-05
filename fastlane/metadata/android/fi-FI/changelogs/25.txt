@@ -1,0 +1,1 @@
+Tiedot kertovat, minkä Androidin sovellus vaatii, eikä laitteelle sopimatonta tiedostoa enää tarjota. Indeksi lukee jokaisesta APK:sta alimman Android-version.

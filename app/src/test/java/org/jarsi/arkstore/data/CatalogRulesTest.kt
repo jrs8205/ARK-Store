@@ -18,51 +18,107 @@ class CatalogRulesTest {
         auto: Boolean = false
     ) = testApp(fullName, packageName, versionCode, prerelease, auto)
 
+    private val android = CatalogRules.Android(34)
+
+    @Test
+    fun fileRunsOnAnAndroidNoOlderThanItsLowest() {
+        assertTrue(CatalogRules.runsOn(minSdk = 26, codename = null, android = CatalogRules.Android(26)))
+        assertTrue(CatalogRules.runsOn(minSdk = 26, codename = null, android = CatalogRules.Android(35)))
+        assertFalse(CatalogRules.runsOn(minSdk = 27, codename = null, android = CatalogRules.Android(26)))
+        // A file whose lowest Android is not known is offered, as before it was read.
+        assertTrue(CatalogRules.runsOn(minSdk = null, codename = null, android = CatalogRules.Android(21)))
+        assertTrue(CatalogRules.runsOn(app().copy(minSdk = 26), android))
+        assertFalse(CatalogRules.runsOn(app().copy(minSdk = 35), android))
+    }
+
+    @Test
+    fun fileForAPreviewAndroidRunsOnThatPreviewOnly() {
+        // A release of Android, whose codename is "REL", does not run it, however new.
+        assertFalse(CatalogRules.runsOn(null, "Baklava", CatalogRules.Android(36)))
+        assertFalse(CatalogRules.runsOn(null, "Baklava", CatalogRules.Android(36, "Canary")))
+        assertTrue(CatalogRules.runsOn(null, "Baklava", CatalogRules.Android(35, "Baklava")))
+        // The codename decides even beside a number.
+        assertFalse(CatalogRules.runsOn(26, "Baklava", CatalogRules.Android(36)))
+    }
+
     @Test
     fun offersThePrereleaseOnlyWhenBetaVersionsAreWanted() {
         val stable = app(versionCode = 5)
         val beta = app(versionCode = 7, prerelease = true)
-        assertSame(beta, CatalogRules.offered(stable, beta, includeBeta = true))
-        assertSame(stable, CatalogRules.offered(stable, beta, includeBeta = false))
-        assertSame(stable, CatalogRules.offered(stable, null, includeBeta = true))
+        assertSame(beta, CatalogRules.offered(stable, beta, includeBeta = true, android))
+        assertSame(stable, CatalogRules.offered(stable, beta, includeBeta = false, android))
+        assertSame(stable, CatalogRules.offered(stable, null, includeBeta = true, android))
+    }
+
+    @Test
+    fun prereleaseThisAndroidCannotRunDoesNotReplaceAFullReleaseItCan() {
+        val stable = app(versionCode = 5).copy(minSdk = 26)
+        val beta = app(versionCode = 7, prerelease = true).copy(minSdk = 35)
+        assertSame(stable, CatalogRules.offered(stable, beta, includeBeta = true, CatalogRules.Android(30)))
+        assertSame(beta, CatalogRules.offered(stable, beta, includeBeta = true, CatalogRules.Android(35)))
+        // When neither runs, the newest is shown as the one that needs a newer Android.
+        assertSame(beta, CatalogRules.offered(stable, beta, includeBeta = true, CatalogRules.Android(21)))
+        assertSame(beta, CatalogRules.offered(null, beta, includeBeta = true, CatalogRules.Android(21)))
     }
 
     @Test
     fun prereleaseFromAnOlderBranchDoesNotReplaceTheFullRelease() {
         val stable = app(versionCode = 200)
         val older = app(versionCode = 191, prerelease = true)
-        assertSame(stable, CatalogRules.offered(stable, older, includeBeta = true))
+        assertSame(stable, CatalogRules.offered(stable, older, includeBeta = true, android))
     }
 
     @Test
     fun prereleaseWithTheSameVersionCodeDoesNotReplaceTheFullRelease() {
         val stable = app(versionCode = 8)
         val nightly = app(versionCode = 8, prerelease = true)
-        assertSame(stable, CatalogRules.offered(stable, nightly, includeBeta = true))
+        assertSame(stable, CatalogRules.offered(stable, nightly, includeBeta = true, android))
     }
 
     @Test
     fun prereleaseOfAnotherPackageDoesNotReplaceTheFullRelease() {
         val stable = app(packageName = "org.example", versionCode = 5)
         val other = app(packageName = "org.example.beta", versionCode = 9, prerelease = true)
-        assertSame(stable, CatalogRules.offered(stable, other, includeBeta = true))
+        assertSame(stable, CatalogRules.offered(stable, other, includeBeta = true, android))
+    }
+
+    @Test
+    fun storedAppThatKnowsTheFilesLowestAndroidGoesBeforeOneThatKnowsOnlyItsIdentity() {
+        // The store's own copy from before the lowest Android was read, and the index entry
+        // of the same file after it: the index entry is what is known of the file.
+        val identity = app(versionCode = 3).copy(assetId = 7)
+        val indexed = app(versionCode = 3).copy(assetId = 7, minSdk = 35)
+        assertSame(indexed, CatalogRules.knownApk(listOf(identity, indexed), 7))
+        assertSame(identity, CatalogRules.knownApk(listOf(identity), 7))
+        assertNull(CatalogRules.knownApk(listOf(identity.copy(packageName = null)), 7))
+        assertNull(CatalogRules.knownApk(listOf(indexed), 8))
+    }
+
+    @Test
+    fun appThisAndroidCannotRunIsListedOnlyWhenItIsInstalled() {
+        assertFalse(CatalogRules.listed(AppStatus.NOT_INSTALLED, runs = false))
+        // Another app under the package name: this one is not installed.
+        assertFalse(CatalogRules.listed(AppStatus.OTHER_APP, runs = false))
+        assertTrue(CatalogRules.listed(AppStatus.NEEDS_NEWER_ANDROID, runs = false))
+        assertTrue(CatalogRules.listed(AppStatus.UP_TO_DATE, runs = false))
+        assertTrue(CatalogRules.listed(AppStatus.NOT_INSTALLED, runs = true))
     }
 
     @Test
     fun unreadableManifestLeavesTheFullRelease() {
         val stable = app(versionCode = 5)
         val unknown = app(packageName = null, versionCode = 0, prerelease = true)
-        assertSame(stable, CatalogRules.offered(stable, unknown, includeBeta = true))
+        assertSame(stable, CatalogRules.offered(stable, unknown, includeBeta = true, android))
         val unknownStable = app(packageName = null, versionCode = 0)
         val beta = app(versionCode = 7, prerelease = true)
-        assertSame(unknownStable, CatalogRules.offered(unknownStable, beta, includeBeta = true))
+        assertSame(unknownStable, CatalogRules.offered(unknownStable, beta, includeBeta = true, android))
     }
 
     @Test
     fun repositoryWithOnlyAPrereleaseIsOfferedAsBeta() {
         val beta = app(versionCode = 1, prerelease = true)
-        assertSame(beta, CatalogRules.offered(null, beta, includeBeta = true))
-        assertNull(CatalogRules.offered(null, beta, includeBeta = false))
+        assertSame(beta, CatalogRules.offered(null, beta, includeBeta = true, android))
+        assertNull(CatalogRules.offered(null, beta, includeBeta = false, android))
     }
 
     @Test
@@ -106,8 +162,32 @@ class CatalogRulesTest {
         app(fullName = "$source:$packageName", packageName = packageName)
             .copy(source = source, signer = signer)
 
-    private fun merged(apps: List<StoreApp>, installed: Set<String>? = null) =
-        CatalogRules.merged(apps) { installed }
+    private fun merged(
+        apps: List<StoreApp>,
+        installed: Set<String>? = null,
+        android: CatalogRules.Android = this.android
+    ) = CatalogRules.merged(apps, android) { installed }
+
+    @Test
+    fun placeWhoseFileThisAndroidRunsGoesBeforeOneWhoseFileItDoesNot() {
+        // GitHub's newest needs Android 35 while F-Droid still offers one for 26: on Android
+        // 34 the latter is the row, and the former is listed as another place offering the app.
+        val github = app(versionCode = 3).copy(minSdk = 35, signer = "k")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "k").copy(versionCode = 2, minSdk = 26)
+        val row = merged(listOf(github, fdroid), android = CatalogRules.Android(34)).single()
+        assertSame(fdroid, row.app)
+        assertEquals(listOf(StoreApp.SOURCE_GITHUB), row.alsoFrom)
+        assertSame(github, merged(listOf(github, fdroid), android = CatalogRules.Android(35)).single().app)
+        // When neither runs, the first in line stays, as the version that needs a newer Android.
+        assertSame(github, merged(listOf(github, fdroid), android = CatalogRules.Android(21)).single().app)
+        // A place whose file is signed like the installed app still goes first, runnable or not:
+        // the other could not update the app whatever its Android.
+        val other = catalogue(StoreApp.SOURCE_IZZY, "x").copy(versionCode = 2, minSdk = 26)
+        assertSame(
+            github,
+            merged(listOf(github, other), installed = setOf("k"), android = CatalogRules.Android(34)).single().app
+        )
+    }
 
     @Test
     fun appOfACatalogueIsShownOnlyWhileTheCatalogueIsOn() {
@@ -304,10 +384,23 @@ class CatalogRulesTest {
         assertEquals(2, CatalogRules.pickCatalogueApk(perAbi, listOf("armeabi-v7a"), sdk = 34))
         assertNull(CatalogRules.pickCatalogueApk(perAbi, listOf("riscv64"), sdk = 34))
         assertEquals(0, CatalogRules.pickCatalogueApk(listOf(apk(1)), arm, sdk = 34))
-        assertNull(CatalogRules.pickCatalogueApk(listOf(apk(1, minSdk = 35)), arm, sdk = 34))
         assertEquals(
             1,
             CatalogRules.pickCatalogueApk(listOf(apk(9, minSdk = 35), apk(8)), arm, sdk = 34)
+        )
+    }
+
+    @Test
+    fun newestFileForTheArchitectureIsPickedWhenNoneRunsOnThisAndroid() {
+        // Shown as the version that needs a newer Android, for an installed app; see listed.
+        fun apk(code: Long, minSdk: Int) = CatalogRules.CatalogueApk(code, emptyList(), minSdk)
+        val arm = listOf("arm64-v8a")
+        assertEquals(0, CatalogRules.pickCatalogueApk(listOf(apk(1, 35)), arm, sdk = 34))
+        assertEquals(1, CatalogRules.pickCatalogueApk(listOf(apk(8, 35), apk(9, 36)), arm, sdk = 34))
+        assertNull(
+            CatalogRules.pickCatalogueApk(
+                listOf(CatalogRules.CatalogueApk(1, listOf("x86_64"), 35)), arm, sdk = 34
+            )
         )
     }
 
@@ -325,6 +418,19 @@ class CatalogRulesTest {
         // A file whose signature is not known may still turn out to fit.
         val unknown = listOf(apk(9, null), apk(8, "old"))
         assertEquals(0, CatalogRules.pickCatalogueApk(unknown, abis, sdk = 34, installedSigners = setOf("old")))
+    }
+
+    @Test
+    fun fileSignedLikeTheInstalledAppIsPreferredEvenWhenNoneRunsOnThisAndroid() {
+        // The version named as needing a newer Android is the one of the installed app's own
+        // line of keys, not another developer's that could never update it.
+        val files = listOf(
+            CatalogRules.CatalogueApk(2, emptyList(), 35, "a"),
+            CatalogRules.CatalogueApk(3, emptyList(), 99, "b")
+        )
+        val abis = listOf("arm64-v8a")
+        assertEquals(0, CatalogRules.pickCatalogueApk(files, abis, sdk = 34, installedSigners = setOf("a")))
+        assertEquals(1, CatalogRules.pickCatalogueApk(files, abis, sdk = 34))
     }
 
     @Test

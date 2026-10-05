@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.data
 
+import android.os.Build
 import java.security.MessageDigest
 
 /** What the catalogue offers and shows, decided without any I/O so that it can be tested. */
@@ -16,10 +17,13 @@ internal object CatalogRules {
      * either manifest could not be read there is nothing to compare, and the full release
      * is offered.
      */
-    fun offered(stable: StoreApp?, beta: StoreApp?, includeBeta: Boolean): StoreApp? {
+    fun offered(stable: StoreApp?, beta: StoreApp?, includeBeta: Boolean, android: Android): StoreApp? {
         if (!includeBeta || beta == null) return stable
         if (stable == null) return beta
-        return if (upgrades(beta, stable)) beta else stable
+        if (!upgrades(beta, stable)) return stable
+        // A prerelease this Android cannot run does not replace a full release it can. When
+        // it can run neither, the newest is shown as the one that needs a newer Android.
+        return if (runsOn(stable, android) && !runsOn(beta, android)) stable else beta
     }
 
     /** Whether [beta] is the same package as [stable] with a higher version code. */
@@ -49,6 +53,43 @@ internal object CatalogRules {
         else -> null
     }
 
+    /**
+     * The Android a device runs: its API level [sdk] and, for a preview of Android, its
+     * [codename], which is "REL" for a release.
+     */
+    data class Android(val sdk: Int, val codename: String = RELEASE) {
+        companion object {
+            const val RELEASE = "REL"
+
+            /** The Android this device runs. */
+            val THIS: Android by lazy { Android(Build.VERSION.SDK_INT, Build.VERSION.CODENAME ?: RELEASE) }
+        }
+    }
+
+    /**
+     * Whether a file whose manifest names [minSdk] as the lowest Android API level it runs on,
+     * or the preview of Android [codename] as the lowest, either null when the index does not
+     * tell it, runs on [android]. A file not yet read for it is offered, as every file was
+     * before the index read it. A file for a preview runs on that preview alone, not on any
+     * release, however new: Android refuses it.
+     */
+    fun runsOn(minSdk: Int?, codename: String?, android: Android): Boolean = when {
+        codename != null -> codename == android.codename
+        else -> minSdk == null || minSdk <= android.sdk
+    }
+
+    /** Whether the file offered of [app] runs on [android]; see [runsOn]. */
+    fun runsOn(app: StoreApp, android: Android): Boolean = runsOn(app.minSdk, app.minSdkCodename, android)
+
+    /**
+     * Whether an app is listed at all, given its [status] and whether its file [runs] on this
+     * Android. One the device cannot run is listed only when the app is installed, to say
+     * that its newest version needs a newer Android; one not installed, which could not be
+     * installed, is left out.
+     */
+    fun listed(status: AppStatus, runs: Boolean): Boolean =
+        runs || (status != AppStatus.NOT_INSTALLED && status != AppStatus.OTHER_APP)
+
     /** One file a catalogue offers of an app, as far as choosing between them goes. */
     data class CatalogueApk(
         val versionCode: Long,
@@ -60,8 +101,11 @@ internal object CatalogRules {
 
     /**
      * The index of the file in [apks] to offer a device that runs the CPU architectures
-     * [deviceAbis] and Android [sdk], or null when none suits it: the highest version among
-     * those the device can run. A file that names no architecture runs on all of them.
+     * [deviceAbis] and Android [sdk], or null when none is built for its architecture: the
+     * highest version among those the device can run. A file that names no architecture runs
+     * on all of them. When none of the files for the architecture runs on its Android, the
+     * choice is made among all of them the same way, as the version an installed app would
+     * need a newer Android for; see [listed].
      *
      * [installedSigners] are the certificates the app is installed with, or null when it is
      * not installed. Android updates an app only with a file signed like the installed one,
@@ -74,13 +118,14 @@ internal object CatalogRules {
         sdk: Int,
         installedSigners: Set<String>? = null
     ): Int? {
-        val runnable = apks.withIndex().filter { (_, apk) ->
-            apk.minSdk <= sdk && (apk.abis.isEmpty() || apk.abis.any { it in deviceAbis })
+        val forDevice = apks.withIndex().filter { (_, apk) ->
+            apk.abis.isEmpty() || apk.abis.any { it in deviceAbis }
         }
+        val candidates = forDevice.filter { (_, apk) -> apk.minSdk <= sdk }.ifEmpty { forDevice }
         val updating = installedSigners?.let { signers ->
-            runnable.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
+            candidates.filter { (_, apk) -> apk.signer == null || sameSigner(apk.signer, signers) }
         }
-        return (updating?.takeIf { it.isNotEmpty() } ?: runnable)
+        return (updating?.takeIf { it.isNotEmpty() } ?: candidates)
             .maxByOrNull { (_, apk) -> apk.versionCode }
             ?.index
     }
@@ -144,7 +189,10 @@ internal object CatalogRules {
      * Android updates an app only with a file signed like the installed one, so then a place
      * whose file is known to be signed that way goes first, and one whose signature is not
      * known before any that is known to differ. [installedSigners] gives the certificates of
-     * an installed package, or null.
+     * an installed package, or null. A place whose file runs on [android] goes before one
+     * whose file does not, within those rules: a catalogue's older version is offered when
+     * the developer's newest needs a newer Android, and only when every place's file needs
+     * one is the first in line shown as such.
      *
      * Repositories of one place are never folded into one another: two of them releasing the
      * same package are two developers' builds, and stay two rows as long as a repository is
@@ -159,7 +207,11 @@ internal object CatalogRules {
      * the rows of the other projects are marked as [Merged.otherBuild]: a fork whose key is
      * not known yet must not be offered as the update of the original.
      */
-    fun merged(apps: List<StoreApp>, installedSigners: (String) -> Set<String>?): List<Merged> {
+    fun merged(
+        apps: List<StoreApp>,
+        android: Android,
+        installedSigners: (String) -> Set<String>?
+    ): List<Merged> {
         val result = ArrayList<Merged>(apps.size)
         val byPackage = LinkedHashMap<String, MutableList<StoreApp>>()
         for (app in apps) {
@@ -182,7 +234,7 @@ internal object CatalogRules {
             }
             for (project in projects) {
                 val otherBuild = own.isNotEmpty() && own.none { it === project }
-                result += fold(project, signers).map { if (otherBuild) it.copy(otherBuild = true) else it }
+                result += fold(project, signers, android).map { if (otherBuild) it.copy(otherBuild = true) else it }
             }
         }
         return result
@@ -221,10 +273,11 @@ internal object CatalogRules {
     private const val REPOSITORIES = ""
 
     /** The rows of one project of one package; see [merged]. */
-    private fun fold(offers: List<StoreApp>, signers: Set<String>?): List<Merged> {
+    private fun fold(offers: List<StoreApp>, signers: Set<String>?, android: Android): List<Merged> {
         if (offers.size == 1) return listOf(Merged(offers[0], emptyList()))
         val inLine = offers.sortedWith(
-            compareBy<StoreApp>(::rank)
+            compareBy<StoreApp> { !runsOn(it, android) }
+                .thenBy(::rank)
                 .thenByDescending { if (it.fromRepository) it.versionCode else 0 }
                 .thenBy { it.source != StoreApp.SOURCE_GITHUB }
         )
@@ -307,6 +360,17 @@ internal object CatalogRules {
             .filter { it.packageName == packageName && it.label != null }
             .minByOrNull { it.prerelease != prerelease }
             ?.label
+    }
+
+    /**
+     * What was known of the file [assetId] among what was listed [before], or null when none
+     * of it has read the file's manifest. The store's own copy from before the lowest Android
+     * was read and the index entry of the same file may both be there: the one that knows the
+     * lowest Android goes before one that knows the identity alone.
+     */
+    fun knownApk(before: List<StoreApp>, assetId: Long): StoreApp? {
+        val known = before.filter { it.assetId == assetId && it.packageName != null }
+        return known.firstOrNull { it.apkInfo!!.lowestAndroidKnown } ?: known.firstOrNull()
     }
 
     /**

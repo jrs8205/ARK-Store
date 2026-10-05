@@ -1,0 +1,1 @@
+Päivitystarkistuksen löytämät päivitykset näkyvät heti listan alussa sen sijaan, että ne jäisivät piiloon listan yläpuolelle, kunnes vierität ylös. Alaspäin vieritetty lista pysyy paikallaan.

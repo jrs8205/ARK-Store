@@ -2,7 +2,9 @@ package org.jarsi.arkstore.data
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class StoreAppTest {
@@ -49,6 +51,42 @@ class StoreAppTest {
             stored.remove("signerReader")
             assertEquals(app.signer, StoreApp.fromJson(stored).signer)
         }
+    }
+
+    @Test
+    fun lowestAndroidVersionIsKeptInTheStoredCopy() {
+        val app = testApp().copy(minSdk = 26)
+        assertEquals(26, StoreApp.fromJson(app.toJson()).minSdk)
+        val unknown = testApp().toJson()
+        unknown.remove("minSdk")
+        assertNull(StoreApp.fromJson(unknown).minSdk)
+    }
+
+    @Test
+    fun codenameOfThePreviewAndroidAFileNeedsIsKeptInTheStoredCopy() {
+        val app = testApp().copy(minSdkCodename = "Baklava")
+        assertEquals("Baklava", StoreApp.fromJson(app.toJson()).minSdkCodename)
+        assertNull(StoreApp.fromJson(testApp().toJson()).minSdkCodename)
+        assertEquals("Baklava", StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", "Baklava")))
+        assertNull(StoreApp.minSdkCodenameOf(JSONObject().put("minSdkCodename", JSONObject.NULL)))
+        assertNull(StoreApp.minSdkCodenameOf(JSONObject()))
+    }
+
+    @Test
+    fun identityOfAStoredAppIsWhatItsManifestSaid() {
+        val app = testApp(packageName = "org.example", versionCode = 4).copy(versionName = "1.4", minSdk = 26)
+        assertEquals(ApkInfo("org.example", 4, "1.4", 26, null), app.apkInfo)
+        assertNull(testApp(packageName = null).apkInfo)
+        assertTrue(app.apkInfo!!.lowestAndroidKnown)
+        assertFalse(ApkInfo("org.example", 4, "1.4").lowestAndroidKnown)
+        assertTrue(ApkInfo("org.example", 4, "1.4", null, "Baklava").lowestAndroidKnown)
+    }
+
+    @Test
+    fun lowestAndroidVersionIsReadTheWayTheIndexWritesIt() {
+        assertEquals(26, StoreApp.minSdkOf(JSONObject().put("minSdk", 26)))
+        assertNull(StoreApp.minSdkOf(JSONObject()))
+        assertNull(StoreApp.minSdkOf(JSONObject().put("minSdk", JSONObject.NULL)))
     }
 
     @Test

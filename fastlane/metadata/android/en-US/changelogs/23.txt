@@ -1,0 +1,1 @@
+The updates a refresh finds show at the top of the list right away, instead of staying hidden above it until you scroll up. A list you have scrolled down stays where it is.

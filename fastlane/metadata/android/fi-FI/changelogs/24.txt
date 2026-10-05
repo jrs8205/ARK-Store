@@ -1,0 +1,1 @@
+Vieritettävää listaa ei keskeytetä, kun päivitysosio ilmestyy; ylhäällä oleva lista näyttää sen yhä heti. README kertoo tarkemmin, mihin asennus nojaa ja mitä kauppa tarkistaa.

@@ -1,0 +1,1 @@
+Otsikkopalkki, haku ja suodattimet liukuvat nyt pois, kun listaa vierittää alaspäin, ja palaavat heti, kun vierittää ylöspäin; asetusten kytkimellä ne saa pysymään paikallaan. Sovelluksen voi merkitä kirjanmerkiksi sen tiedoista, ja Kirjanmerkit-chip näyttää ne erikseen. Julkaisutekstit näytetään muotoiltuina.

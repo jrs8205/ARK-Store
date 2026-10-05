@@ -13,7 +13,6 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -22,6 +21,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -72,7 +73,9 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -81,14 +84,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
-import androidx.compose.ui.layout.layout
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
@@ -107,11 +112,15 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -128,6 +137,7 @@ import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.StoreApp
@@ -142,12 +152,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
+    val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var place by rememberSaveable { mutableStateOf<String?>(null) }
+    var onlyBookmarks by rememberSaveable { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
@@ -161,6 +173,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
         )
     }
     var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
+    var hideTop by remember { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    // The bar, the search and the filters slide out of view as the list scrolls down and back
+    // in as it scrolls up, when the setting says so; see CollapsingTop.
+    val top = remember { CollapsingTop() }
+    top.hide = hideTop
+    top.minRoomBelow = with(LocalDensity.current) { MIN_LIST_ROOM.roundToPx() }
+    LaunchedEffect(hideTop) { if (!hideTop) top.show() }
+    val topConnection = remember(top) { top.connection() }
 
     InstallHaptics(installs)
 
@@ -182,9 +202,13 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 if (searchFocused && down.position !in searchBounds) focusManager.clearFocus()
             }
-        },
-        topBar = {
+        }
+    ) { padding ->
+        // The bar is laid out with the search and the filters below, so that the whole top
+        // can slide away together; the status bar's room stays, given by the padding.
+        val bar: @Composable () -> Unit = {
             TopAppBar(
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.surface
                 ),
@@ -227,12 +251,18 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 }
             )
         }
-    ) { padding ->
         // A category that no longer has apps (a source was removed) must not stay selected,
         // and neither may a place.
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
         val activePlace = place
+        val bookmarkCount = state.rows.count { Bookmarks.marked(it.app, bookmarked) }
+        // Taking the last bookmark away ends the bookmark filter for good, so that the next
+        // bookmark does not bring it back by itself. A list still loading has no bookmarks
+        // yet and is left alone, so that a filter restored with the screen stays.
+        val loaded = state.rows.isNotEmpty()
+        LaunchedEffect(bookmarkCount, loaded) { if (loaded && bookmarkCount == 0) onlyBookmarks = false }
+        val activeBookmarks = onlyBookmarks && bookmarkCount > 0
         // The places whose apps are turned on in the settings; GitHub always is.
         val enabledPlaces = CatalogRules.PLACES.filter { it == StoreApp.SOURCE_GITHUB || it in catalogues }.toSet()
         // With a search, the apps whose name answers it come first, then those whose
@@ -241,7 +271,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val words = remember(query) { searchWords(query) }
         val visible = state.rows.mapNotNull { row ->
             val shown = (activeCategory == null || row.app.category == activeCategory) &&
-                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace))
+                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
+                (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
             if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
         }
             .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
@@ -249,7 +280,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // A changed search or filter shows its result from the top; a list restored as it
         // was, after a turn of the screen, stays where it was.
         val listState = rememberLazyListState()
-        val filterKey = "$query\u0000$activeCategory\u0000$activePlace"
+        val filterKey = "$query\u0000$activeCategory\u0000$activePlace\u0000$activeBookmarks"
         var shownFor by rememberSaveable { mutableStateOf(filterKey) }
         LaunchedEffect(filterKey) {
             if (shownFor != filterKey) {
@@ -261,8 +292,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         PullThresholdHaptics(pullState)
 
         // The search, the chips, the count and the order: above the list, so that a card
-        // scrolling out goes under them instead of taking them along, or, in a window too
-        // low to leave the list room beside them, at the top of the list.
+        // scrolling out goes under them instead of taking them along.
         val header: @Composable () -> Unit = {
             Column(Modifier.fillMaxWidth()) {
                 SearchField(
@@ -279,7 +309,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     counts = state.rows.groupingBy { it.app.category }.eachCount(),
                     total = state.rows.size,
                     selected = activeCategory,
-                    onSelect = { category = it }
+                    onSelect = { category = it },
+                    bookmarks = bookmarkCount,
+                    onlyBookmarks = activeBookmarks,
+                    onBookmarksToggle = { onlyBookmarks = !activeBookmarks }
                 )
                 PlaceChips(
                     counts = CatalogRules.PLACES.associateWith { place ->
@@ -330,144 +363,166 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 }
             }
         }
-        BoxWithConstraints(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
-            val pinned = maxHeight >= PINNED_HEADER_MIN_HEIGHT
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (pinned && state.rows.isNotEmpty()) header()
-                PullToRefreshBox(
-                    isRefreshing = state.refreshing,
-                    onRefresh = { viewModel.refresh() },
-                    state = pullState,
-                    modifier = Modifier.fillMaxSize()
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clipToBounds()
+                    .collapsing(top)
+            ) {
+                Column(Modifier.fillMaxWidth()) {
+                    bar()
+                    if (state.rows.isNotEmpty()) header()
+                }
+            }
+            PullToRefreshBox(
+                isRefreshing = state.refreshing,
+                onRefresh = { viewModel.refresh() },
+                state = pullState,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
+                val installed = visible.filter {
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
+                        it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
+                }
+                val available = visible.filter {
+                    it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
+                }
+                // The key of the list's first item, in the order the content below gives
+                // them; see KeepTop.
+                val firstKey = when {
+                    state.error != null -> "error"
+                    state.rows.isNotEmpty() && visible.isEmpty() -> "no-match"
+                    state.rows.isEmpty() -> "empty"
+                    updates.isNotEmpty() -> "header-updates"
+                    installed.isNotEmpty() -> "header-installed"
+                    available.isNotEmpty() -> "header-available"
+                    else -> "checked"
+                }
+                KeepTop(listState, firstKey)
+
+                LazyColumn(
+                    state = listState,
+                    // The top takes its share of the list's scrolling from here, inside the
+                    // pull to refresh, so that a pull reversed retracts the indicator first.
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(topConnection),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
-                    val installed = visible.filter {
-                        it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
-                            it.status == AppStatus.OTHER_BUILD
-                    }
-                    val available = visible.filter {
-                        it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
+                    state.error?.let { error ->
+                        item(key = "error") { ErrorBanner(error) }
                     }
 
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (!pinned && state.rows.isNotEmpty()) {
-                            // The header keeps its own edges, past the list's side padding.
-                            item(key = "header") { Box(Modifier.pastSidePadding(16.dp)) { header() } }
+                    if (state.rows.isNotEmpty() && visible.isEmpty()) {
+                        item(key = "no-match") {
+                            Text(
+                                text = stringResource(R.string.list_no_match),
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.padding(vertical = 32.dp)
+                            )
                         }
-                        state.error?.let { error ->
-                            item(key = "error") { ErrorBanner(error) }
-                        }
+                    }
 
-                        if (state.rows.isNotEmpty() && visible.isEmpty()) {
-                            item(key = "no-match") {
-                                Text(
-                                    text = stringResource(R.string.list_no_match),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(vertical = 32.dp)
-                                )
-                            }
-                        }
-
-                        if (state.rows.isEmpty()) {
-                            item(key = "empty") {
-                                Text(
-                                    text = stringResource(
-                                        when {
-                                            state.refreshing -> R.string.list_loading
-                                            state.error != null -> R.string.list_empty_error
-                                            else -> R.string.list_empty
-                                        }
-                                    ),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier
-                                        .padding(vertical = 48.dp)
-                                        .semantics { liveRegion = LiveRegionMode.Polite }
-                                )
-                            }
-                        }
-
-                        section(
-                            key = "updates",
-                            rows = updates,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = {
-                                SectionHeader(
-                                    title = pluralStringResource(
-                                        R.plurals.section_updates,
-                                        updates.size,
-                                        updates.size
-                                    ),
-                                    action = if (updates.size > 1) {
-                                        stringResource(R.string.action_update_all)
-                                    } else {
-                                        null
-                                    },
-                                    onAction = {
-                                        haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                        viewModel.installAll(updates.map { it.app })
+                    if (state.rows.isEmpty()) {
+                        item(key = "empty") {
+                            Text(
+                                text = stringResource(
+                                    when {
+                                        state.refreshing -> R.string.list_loading
+                                        state.error != null -> R.string.list_empty_error
+                                        else -> R.string.list_empty
                                     }
-                                )
-                            }
-                        )
-                        section(
-                            key = "installed",
-                            rows = installed,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = { SectionHeader(stringResource(R.string.section_installed)) }
-                        )
-                        section(
-                            key = "available",
-                            rows = available,
-                            installs = installs,
-                            viewModel = viewModel,
-                            onSelect = { selectedRepo = it },
-                            header = { SectionHeader(stringResource(R.string.section_available)) }
-                        )
+                                ),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .padding(vertical = 48.dp)
+                                    .semantics { liveRegion = LiveRegionMode.Polite }
+                            )
+                        }
+                    }
 
-                        if (state.checkedAt > 0) {
-                            item(key = "checked") {
-                                state.storeDownloads?.let { downloads ->
-                                    Text(
-                                        text = pluralStringResource(
-                                            R.plurals.footer_store_downloads,
-                                            downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                                            fullNumber(downloads)
-                                        ),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(top = 16.dp)
-                                    )
+                    section(
+                        key = "updates",
+                        rows = updates,
+                        installs = installs,
+                        bookmarked = bookmarked,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = {
+                            SectionHeader(
+                                title = pluralStringResource(
+                                    R.plurals.section_updates,
+                                    updates.size,
+                                    updates.size
+                                ),
+                                action = if (updates.size > 1) {
+                                    stringResource(R.string.action_update_all)
+                                } else {
+                                    null
+                                },
+                                onAction = {
+                                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                                    viewModel.installAll(updates.map { it.app })
                                 }
+                            )
+                        }
+                    )
+                    section(
+                        key = "installed",
+                        rows = installed,
+                        installs = installs,
+                        bookmarked = bookmarked,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = { SectionHeader(stringResource(R.string.section_installed)) }
+                    )
+                    section(
+                        key = "available",
+                        rows = available,
+                        installs = installs,
+                        bookmarked = bookmarked,
+                        viewModel = viewModel,
+                        onSelect = { selectedRepo = it },
+                        header = { SectionHeader(stringResource(R.string.section_available)) }
+                    )
+
+                    if (state.checkedAt > 0) {
+                        item(key = "checked") {
+                            state.storeDownloads?.let { downloads ->
                                 Text(
-                                    text = stringResource(
-                                        R.string.footer_checked,
-                                        DateUtils.getRelativeTimeSpanString(
-                                            state.checkedAt,
-                                            System.currentTimeMillis(),
-                                            DateUtils.MINUTE_IN_MILLIS
-                                        ).toString()
+                                    text = pluralStringResource(
+                                        R.plurals.footer_store_downloads,
+                                        downloads.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                                        fullNumber(downloads)
                                     ),
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(
-                                        top = if (state.storeDownloads == null) 16.dp else 4.dp
-                                    )
+                                    modifier = Modifier.padding(top = 16.dp)
                                 )
                             }
+                            Text(
+                                text = stringResource(
+                                    R.string.footer_checked,
+                                    DateUtils.getRelativeTimeSpanString(
+                                        state.checkedAt,
+                                        System.currentTimeMillis(),
+                                        DateUtils.MINUTE_IN_MILLIS
+                                    ).toString()
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(
+                                    top = if (state.storeDownloads == null) 16.dp else 4.dp
+                                )
+                            )
                         }
                     }
                 }
@@ -478,7 +533,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
         StoreSheet(onDismissRequest = { selectedRepo = null }) {
-            DetailsSheet(selected, onInstall = { viewModel.install(selected.app) })
+            DetailsSheet(
+                selected,
+                onInstall = { viewModel.install(selected.app) },
+                bookmarked = Bookmarks.marked(selected.app, bookmarked),
+                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) }
+            )
         }
     }
     if (showSources) {
@@ -499,6 +559,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 onMaterialChange = {
                     material = it
                     preferences.edit { putBoolean(PREF_MATERIAL, it) }
+                },
+                hideTop = hideTop,
+                onHideTopChange = {
+                    hideTop = it
+                    preferences.edit { putBoolean(PREF_HIDE_TOP, it) }
                 }
             )
         }
@@ -534,10 +599,38 @@ private fun StoreSheet(onDismissRequest: () -> Unit, content: @Composable Column
     )
 }
 
+/**
+ * Keeps a list that is at its top at its top when another item comes first. A lazy list
+ * keeps its first visible item in place, by its key, when items are added above it, so the
+ * section of updates a refresh has just found, or an error, would appear above the list
+ * out of sight: the store would open to the apps installed, and the updates would be seen
+ * only by scrolling up. The first item is read in composition, before the list has been laid
+ * out with the new items, and the list is asked for its top before that layout.
+ *
+ * The top is the first item, wholly or partly shown: that item is a section's heading or a
+ * notice, at most a few lines high, and a reader that far from the top has come for what
+ * is now put first. A list scrolled past its first item stays where it is, and so does one
+ * being scrolled at that moment: a gesture is not cut short for the newcomer.
+ */
+@Composable
+private fun KeepTop(listState: LazyListState, firstKey: String) {
+    val atTop by remember(listState) {
+        derivedStateOf { listState.firstVisibleItemIndex == 0 && !listState.isScrollInProgress }
+    }
+    val shown = remember { arrayOf(firstKey) }
+    if (shown[0] != firstKey) {
+        SideEffect {
+            shown[0] = firstKey
+            if (atTop) listState.requestScrollToItem(0)
+        }
+    }
+}
+
 private fun LazyListScope.section(
     key: String,
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
+    bookmarked: Set<String>,
     viewModel: StoreViewModel,
     onSelect: (String) -> Unit,
     header: @Composable () -> Unit
@@ -548,6 +641,7 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
+            bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -607,6 +701,7 @@ private fun ErrorBanner(error: LoadError) {
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
+    bookmarked: Boolean,
     onInstall: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -645,7 +740,22 @@ private fun AppCard(
                 RowIcon(app.title, app.packageName, row.installed != null, app.icon)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = app.title, style = MaterialTheme.typography.titleMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = app.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        if (bookmarked) {
+                            Spacer(Modifier.width(6.dp))
+                            Icon(
+                                painter = painterResource(R.drawable.ic_bookmark_filled),
+                                contentDescription = stringResource(R.string.bookmarked),
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
                     if (app.prerelease) Badge(stringResource(R.string.badge_beta))
                     sourceBadge(app)?.let { Badge(stringResource(it)) }
                     Text(
@@ -668,7 +778,8 @@ private fun AppCard(
                         // Another app under this name: nothing to open and nothing to install
                         // over it; the note below says so.
                         AppStatus.OTHER_APP -> Unit
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD -> {
+                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD,
+                        AppStatus.NEEDS_NEWER_ANDROID -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -700,16 +811,18 @@ private fun AppCard(
             }
 
             val note = when {
-                row.status == AppStatus.OTHER_SIGNER -> R.string.other_signer_note
-                row.status == AppStatus.OTHER_BUILD -> R.string.other_build_note
-                row.status == AppStatus.OTHER_APP -> R.string.other_app_note
-                row.betaInstalled -> R.string.newer_installed_note
-                row.newerInstalled -> R.string.newer_version_note
+                row.status == AppStatus.NEEDS_NEWER_ANDROID ->
+                    stringResource(R.string.newer_android_note, requirement(app).orEmpty())
+                row.status == AppStatus.OTHER_SIGNER -> stringResource(R.string.other_signer_note)
+                row.status == AppStatus.OTHER_BUILD -> stringResource(R.string.other_build_note)
+                row.status == AppStatus.OTHER_APP -> stringResource(R.string.other_app_note)
+                row.betaInstalled -> stringResource(R.string.newer_installed_note)
+                row.newerInstalled -> stringResource(R.string.newer_version_note)
                 else -> null
             }
             if (note != null) {
                 Text(
-                    text = stringResource(note),
+                    text = note,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 12.dp)
@@ -835,9 +948,48 @@ private fun Progress(progress: Float?) {
     }
 }
 
+/** Release notes with their headings, bullets, bold and code shown as such. */
 @Composable
-private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
+private fun ReleaseNotesText(markdown: String) {
+    val lines = remember(markdown) { ReleaseNotes.parse(markdown) }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        lines.forEach { line ->
+            val text = buildAnnotatedString {
+                line.spans.forEach { span ->
+                    val style = SpanStyle(
+                        fontFamily = if (span.code) FontFamily.Monospace else null,
+                        fontWeight = if (span.bold) FontWeight.SemiBold else null
+                    )
+                    withStyle(style) { append(span.text) }
+                }
+            }
+            when (line.kind) {
+                ReleaseNotes.Kind.HEADING -> Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                ReleaseNotes.Kind.BULLET -> Row {
+                    Text(text = "\u2022", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(8.dp))
+                    Text(text = text, style = MaterialTheme.typography.bodyMedium)
+                }
+                ReleaseNotes.Kind.TEXT -> Text(text = text, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetailsSheet(
+    row: AppRow,
+    onInstall: () -> Unit,
+    bookmarked: Boolean,
+    onBookmarkToggle: () -> Unit
+) {
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val app = row.app
 
     Column(
@@ -925,6 +1077,13 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
         }
+        // A requirement the store itself meets says nothing to whoever runs the store.
+        val ownMinSdk = remember { context.applicationInfo.minSdkVersion }
+        val told = app.minSdkCodename != null ||
+            (app.minSdk != null && AndroidVersions.worthTelling(app.minSdk, ownMinSdk))
+        if (told) {
+            requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
+        }
         DetailLine(
             stringResource(R.string.detail_size),
             Formatter.formatShortFileSize(context, app.apkSize)
@@ -937,15 +1096,36 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
             )
-            Text(text = app.releaseNotes.trim(), style = MaterialTheme.typography.bodyMedium)
+            ReleaseNotesText(app.releaseNotes)
         }
 
-        Row(
+        // Three buttons do not fit one row on a phone, so they wrap to the next line rather
+        // than squeezing the last one to a column of letters.
+        FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(top = 16.dp)
         ) {
             StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
                 Text(stringResource(R.string.action_view_source))
+            }
+            TextButton(
+                onClick = {
+                    haptics.performHapticFeedback(
+                        if (bookmarked) HapticFeedbackType.ToggleOff else HapticFeedbackType.ToggleOn
+                    )
+                    onBookmarkToggle()
+                }
+            ) {
+                Icon(
+                    painter = painterResource(
+                        if (bookmarked) R.drawable.ic_bookmark_filled else R.drawable.ic_bookmark
+                    ),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(if (bookmarked) R.string.action_unbookmark else R.string.action_bookmark))
             }
             // Not for another app under this name: that would be the other app's removal.
             if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
@@ -992,6 +1172,12 @@ private fun DetailsSheet(row: AppRow, onInstall: () -> Unit) {
             StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
                 Text(stringResource(R.string.action_update))
             }
+        } else if (row.status == AppStatus.NEEDS_NEWER_ANDROID) {
+            Text(
+                text = stringResource(R.string.newer_android_detail, requirement(app).orEmpty()),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
         } else if (row.installed != null && row.status == AppStatus.UPDATE_AVAILABLE) {
             // Whether the update will go through: known from the keys when the place that
             // offers the file tells how it is signed, otherwise only once it is downloaded.
@@ -1081,6 +1267,19 @@ private fun DetailLine(label: String, value: String) {
             modifier = Modifier.weight(0.6f)
         )
     }
+}
+
+/**
+ * The Android [app] needs, as the user is to read it: "Android 8.0 or later", the API level
+ * when the version is not named here, or the preview by its codename; null when it is not
+ * known.
+ */
+@Composable
+private fun requirement(app: StoreApp): String? {
+    app.minSdkCodename?.let { return stringResource(R.string.requires_preview, it) }
+    val sdk = app.minSdk ?: return null
+    return AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
+        ?: stringResource(R.string.requires_api, sdk)
 }
 
 @Composable
@@ -1228,7 +1427,13 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, to
 }
 
 @Composable
-private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMaterialChange: (Boolean) -> Unit) {
+private fun SettingsSheet(
+    viewModel: StoreViewModel,
+    material: Boolean,
+    onMaterialChange: (Boolean) -> Unit,
+    hideTop: Boolean,
+    onHideTopChange: (Boolean) -> Unit
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1249,12 +1454,19 @@ private fun SettingsSheet(viewModel: StoreViewModel, material: Boolean, onMateri
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
+        SettingSwitch(
+            heading = stringResource(R.string.appearance_title),
+            label = stringResource(R.string.hide_top_switch),
+            description = stringResource(R.string.hide_top_description),
+            checked = hideTop,
+            onCheckedChange = onHideTopChange
+        )
         if (Surfaces.supported) {
             // A device whose graphics driver could not draw the materials keeps the flat
             // colours, and the switch says so rather than disappearing.
             val unavailable = Surfaces.failed(LocalContext.current)
             SettingSwitch(
-                heading = stringResource(R.string.appearance_title),
+                heading = null,
                 label = stringResource(R.string.material_switch),
                 description = stringResource(
                     if (unavailable) R.string.material_unavailable else R.string.material_description
@@ -1572,25 +1784,10 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
+private const val PREF_HIDE_TOP = "hide_top"
 
-/**
- * The height of the list's room below which the search, the chips and the count scroll
- * with the list instead of staying above it: together they take about 200 dp, and the
- * list needs room of its own in a low window or with a large font.
- */
-private val PINNED_HEADER_MIN_HEIGHT = 480.dp
-
-/**
- * Lays the content out [side] wider on each side than the room given, for a thing in a
- * list that keeps its own edges past the list's side padding.
- */
-private fun Modifier.pastSidePadding(side: Dp): Modifier = layout { measurable, constraints ->
-    val extra = (side * 2).roundToPx()
-    val placeable = measurable.measure(
-        constraints.copy(minWidth = constraints.maxWidth + extra, maxWidth = constraints.maxWidth + extra)
-    )
-    layout(constraints.maxWidth, placeable.height) { placeable.place(-extra / 2, 0) }
-}
+/** The room the list keeps below the top however high the top is; see CollapsingTop. */
+private val MIN_LIST_ROOM = 200.dp
 
 /** The order of apps within each section of the list. */
 private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
@@ -1711,10 +1908,15 @@ private fun CategoryChips(
     counts: Map<String, Int>,
     total: Int,
     selected: String?,
-    onSelect: (String?) -> Unit
+    onSelect: (String?) -> Unit,
+    bookmarks: Int,
+    onlyBookmarks: Boolean,
+    onBookmarksToggle: () -> Unit
 ) {
-    // One category tells nothing the full list does not.
-    if (categories.size < 2) return
+    // One category tells nothing the full list does not; the row is still there for the
+    // bookmarks when there are any.
+    val shownCategories = if (categories.size < 2) emptyList() else categories
+    if (shownCategories.isEmpty() && bookmarks == 0) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1722,12 +1924,26 @@ private fun CategoryChips(
     ) {
         item(key = "all") {
             ChoiceChip(
-                selected = selected == null,
+                selected = selected == null && !onlyBookmarks,
                 label = stringResource(R.string.category_chip, stringResource(R.string.category_all), total),
-                onClick = { onSelect(null) }
+                onClick = {
+                    onSelect(null)
+                    if (onlyBookmarks) onBookmarksToggle()
+                }
             )
         }
-        items(categories, key = { it }) { id ->
+        // The bookmarks narrow the list across the categories, so the chip stands with them
+        // but leaves the chosen category as it is.
+        if (bookmarks > 0) {
+            item(key = "bookmarks") {
+                ChoiceChip(
+                    selected = onlyBookmarks,
+                    label = stringResource(R.string.category_chip, stringResource(R.string.bookmarks_chip), bookmarks),
+                    onClick = onBookmarksToggle
+                )
+            }
+        }
+        items(shownCategories, key = { it }) { id ->
             ChoiceChip(
                 selected = selected == id,
                 label = stringResource(R.string.category_chip, stringResource(categoryLabel(id)), counts[id] ?: 0),

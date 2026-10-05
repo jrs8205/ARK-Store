@@ -78,6 +78,7 @@ class CatalogRepository private constructor(context: Context) {
     val sources = SourceStore(context)
 
     private val deviceAbis: List<String> = Build.SUPPORTED_ABIS.toList()
+    private val thisAndroid = CatalogRules.Android.THIS
 
     private val packages = context.packageManager
 
@@ -619,7 +620,7 @@ class CatalogRepository private constructor(context: Context) {
             CatalogRules.CatalogueApk(
                 apk.getLong("versionCode"),
                 abis,
-                apk.optInt("minSdk", 1),
+                StoreApp.minSdkOf(apk) ?: 1,
                 signerOf(apk)
             )
         }
@@ -631,7 +632,7 @@ class CatalogRepository private constructor(context: Context) {
             null
         }
         val apk = CatalogRules
-            .pickCatalogueApk(choices, deviceAbis, Build.VERSION.SDK_INT, installedSigners)
+            .pickCatalogueApk(choices, deviceAbis, thisAndroid.sdk, installedSigners)
             ?.let { apks[it] }
             ?: return null
         fun list(from: JSONObject, key: String) = from.optJSONArray(key)
@@ -662,6 +663,7 @@ class CatalogRepository private constructor(context: Context) {
             author = json.optStringOrEmpty("author").takeIf { it.isNotBlank() },
             signer = signerOf(apk),
             sha256 = apk.getString("sha256"),
+            minSdk = StoreApp.minSdkOf(apk),
             // The warnings belong to a version, and the one picked for this device need not
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.
@@ -699,7 +701,11 @@ class CatalogRepository private constructor(context: Context) {
 
     /**
      * Builds an app from its index entry [json] and one of the releases described there, or
-     * returns null when none of that release's APKs suits this device.
+     * returns null when none of that release's APKs is built for this device's architecture,
+     * told by the file's name. Of the files that are, one this Android runs is taken, as the
+     * index tells it when it has read the file; when none does, the best for the
+     * architecture is taken all the same, as the version an installed app needs a newer
+     * Android for (see [CatalogRules.listed]).
      */
     private fun indexedApp(
         json: JSONObject,
@@ -710,7 +716,10 @@ class CatalogRepository private constructor(context: Context) {
         val apks = release.getJSONArray("apks").let { array ->
             (0 until array.length()).map { array.getJSONObject(it) }
         }
-        val apk = ApkPicker.pick(apks.map { it.getString("name") }, deviceAbis)
+        val runs = apks.map {
+            CatalogRules.runsOn(StoreApp.minSdkOf(it), StoreApp.minSdkCodenameOf(it), thisAndroid)
+        }
+        val apk = ApkPicker.pickRunnable(apks.map { it.getString("name") }, runs, deviceAbis)
             ?.let { apks[it] }
             ?: return null
         val topics = json.optJSONArray("topics")
@@ -748,6 +757,8 @@ class CatalogRepository private constructor(context: Context) {
             label = if (apk.isNull("label")) null else apk.getString("label"),
             allDownloads = allDownloads,
             signer = StoreApp.indexedSigner(apk),
+            minSdk = StoreApp.minSdkOf(apk),
+            minSdkCodename = StoreApp.minSdkCodenameOf(apk),
             icon = AppIcon.of(apk.opt("icon"))
         )
     }
@@ -836,9 +847,12 @@ class CatalogRepository private constructor(context: Context) {
             val url = apk.getString("browser_download_url")
             val size = apk.getLong("size")
             // The asset id changes whenever a file is replaced, so a known id means a known APK.
-            val known = previous.firstOrNull { it.assetId == assetId && it.packageName != null }
-            val info = if (known != null) {
-                ApkInfo(known.packageName!!, known.versionCode, known.versionName)
+            // One known from before the lowest Android was read is read again for it; should
+            // that fail, what was known of it stays.
+            val knownApp = CatalogRules.knownApk(previous, assetId)
+            val known = knownApp?.apkInfo
+            val info = if (known != null && known.lowestAndroidKnown) {
+                known
             } else {
                 try {
                     ApkManifestReader.read(size) { start, length ->
@@ -846,7 +860,7 @@ class CatalogRepository private constructor(context: Context) {
                     }
                 } catch (e: IOException) {
                     Log.w(TAG, "Could not read manifest of ${apk.getString("name")}", e)
-                    null
+                    known
                 }
             }
             return StoreApp(
@@ -871,9 +885,11 @@ class CatalogRepository private constructor(context: Context) {
                 packageName = info?.packageName,
                 versionCode = info?.versionCode ?: 0,
                 versionName = info?.versionName,
+                minSdk = info?.minSdk,
+                minSdkCodename = info?.minSdkCodename,
                 // Only the index reads an app's name. A release newer than the index is
                 // taken to be called what the one before it was.
-                label = known?.label
+                label = knownApp?.label
                     ?: CatalogRules.inheritedLabel(previous, info?.packageName, prerelease),
                 allDownloads = downloads
             )
@@ -913,7 +929,9 @@ class CatalogRepository private constructor(context: Context) {
                 app.copy(
                     packageName = info.packageName,
                     versionCode = info.versionCode,
-                    versionName = info.versionName
+                    versionName = info.versionName,
+                    minSdk = info.minSdk,
+                    minSdkCodename = info.minSdkCodename
                 )
             }
         }
@@ -975,7 +993,7 @@ class CatalogRepository private constructor(context: Context) {
         val includeAuto = _includeAuto.value
         val own = sources.list()
         val shownCatalogues = _catalogues.value
-        return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta) }
+        return entries.mapNotNull { CatalogRules.offered(it.app, it.beta, includeBeta, thisAndroid) }
             .mapNotNull { CatalogRules.shown(it, own, includeAuto, shownCatalogues) }
             .sortedBy { it.title.lowercase() }
     }

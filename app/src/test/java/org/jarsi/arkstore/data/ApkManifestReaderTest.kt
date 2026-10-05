@@ -9,6 +9,8 @@ import java.nio.ByteOrder
 import java.util.Random
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -33,6 +35,132 @@ class ApkManifestReaderTest {
     }
 
     private fun le(size: Int) = ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN)
+
+    private fun chunk(kind: Int, header: ByteArray, body: ByteArray): ByteArray =
+        le(8).putShort(kind.toShort()).putShort((8 + header.size).toShort())
+            .putInt(8 + header.size + body.size).array() + header + body
+
+    /** A UTF-16 string pool of [strings]. */
+    private fun stringPool(strings: List<String>): ByteArray {
+        val offsets = le(4 * strings.size)
+        val data = ByteArrayOutputStream()
+        for (text in strings) {
+            offsets.putInt(data.size())
+            data.write(le(2).putShort(text.length.toShort()).array())
+            data.write(text.toByteArray(Charsets.UTF_16LE))
+            data.write(byteArrayOf(0, 0))
+        }
+        val header = le(20).putInt(strings.size).putInt(0).putInt(0).putInt(28 + 4 * strings.size).putInt(0)
+        return chunk(0x0001, header.array(), offsets.array() + data.toByteArray())
+    }
+
+    /** A start element named by string [name] with attributes (name index, type, data). */
+    private fun element(name: Int, attributes: List<Triple<Int, Int, Int>>): ByteArray {
+        val body = le(20 + 20 * attributes.size)
+            .putInt(-1).putInt(name).putShort(20).putShort(20).putShort(attributes.size.toShort())
+            .putShort(0).putShort(0).putShort(0)
+        for ((attribute, type, data) in attributes) {
+            body.putInt(-1).putInt(attribute).putInt(if (type == 0x03) data else -1)
+                .putShort(8).put(0).put(type.toByte()).putInt(data)
+        }
+        return chunk(0x0102, le(8).putInt(1).putInt(-1).array(), body.array())
+    }
+
+    /** The end tag of the element named by string [name]. */
+    private fun endElement(name: Int): ByteArray =
+        chunk(0x0103, le(8).putInt(1).putInt(-1).array(), le(8).putInt(-1).putInt(name).array())
+
+    /**
+     * A binary manifest of org.example, version 3, with an application element and, when
+     * [minSdk] or [codename] is given, a uses-sdk element naming the lowest Android before
+     * the application, or after it with [sdkLast]. With [nestedSdk], a uses-sdk element
+     * inside the application element names that, which Android does not read.
+     */
+    private fun manifest(
+        minSdk: Int? = null,
+        codename: String? = null,
+        sdkLast: Boolean = false,
+        nestedSdk: Int? = null
+    ): ByteArray {
+        val strings = listOf(
+            "versionCode", "package", "manifest", "org.example", "minSdkVersion", "uses-sdk",
+            "application", codename.orEmpty()
+        )
+        val resourceMap = chunk(
+            0x0180, ByteArray(0),
+            le(32).putInt(0x0101021B).putInt(0).putInt(0).putInt(0).putInt(0x0101020C).putInt(0).putInt(0).putInt(0).array()
+        )
+        val root = element(2, listOf(Triple(0, 0x10, 3), Triple(1, 0x03, 3)))
+        val usesSdk = when {
+            codename != null -> element(5, listOf(Triple(4, 0x03, 7))) + endElement(5)
+            minSdk != null -> element(5, listOf(Triple(4, 0x10, minSdk))) + endElement(5)
+            else -> ByteArray(0)
+        }
+        val nested = nestedSdk?.let { element(5, listOf(Triple(4, 0x10, it))) + endElement(5) } ?: ByteArray(0)
+        val application = element(6, emptyList()) + nested + endElement(6)
+        val elements = if (sdkLast) application + usesSdk else usesSdk + application
+        return chunk(0x0003, ByteArray(0), stringPool(strings) + resourceMap + root + elements + endElement(2))
+    }
+
+    @Test
+    fun usesSdkInsideAnotherElementDoesNotCount() {
+        // Android reads uses-sdk as a child of the manifest element only; one inside the
+        // application element is skipped. aapt2 refuses such a manifest unless told to only
+        // warn, so the file is an odd one, and is read as Android would.
+        assertEquals(26, read(zipWithManifest(manifest(minSdk = 26, nestedSdk = 35))).minSdk)
+        assertEquals(1, read(zipWithManifest(manifest(nestedSdk = 35))).minSdk)
+    }
+
+    @Test
+    fun readsTheLowestAndroidFromUsesSdk() {
+        val info = read(zipWithManifest(manifest(minSdk = 26)))
+        assertEquals("org.example", info.packageName)
+        assertEquals(3L, info.versionCode)
+        assertEquals(26, info.minSdk)
+        assertNull(info.minSdkCodename)
+    }
+
+    @Test
+    fun lowestAndroidIsReadAfterTheApplicationToo() {
+        assertEquals(35, read(zipWithManifest(manifest(minSdk = 35, sdkLast = true))).minSdk)
+    }
+
+    @Test
+    fun manifestWithoutUsesSdkRunsOnEveryAndroid() {
+        assertEquals(1, read(zipWithManifest(manifest())).minSdk)
+    }
+
+    @Test
+    fun codenameOfAPreviewAndroidIsKept() {
+        val info = read(zipWithManifest(manifest(codename = "Baklava")))
+        assertNull(info.minSdk)
+        assertEquals("Baklava", info.minSdkCodename)
+    }
+
+    @Test
+    fun elementsAfterTheRootAreNotDecodedForNothing() {
+        // A hostile manifest: tens of thousands of elements and attributes after the root,
+        // every one named by a string of tens of thousands of characters. Decoding each
+        // would cost gigabytes; only what the reader looks for is decoded.
+        val big = "x".repeat(30_000)
+        val strings = listOf("versionCode", "package", "manifest", "org.example", big)
+        val resourceMap = chunk(
+            0x0180, ByteArray(0), le(20).putInt(0x0101021B).putInt(0).putInt(0).putInt(0).putInt(0).array()
+        )
+        val root = element(2, listOf(Triple(0, 0x10, 3), Triple(1, 0x03, 3)))
+        val filler = element(4, listOf(Triple(4, 0x03, 4)))
+        val body = ByteArrayOutputStream()
+        body.write(stringPool(strings))
+        body.write(resourceMap)
+        body.write(root)
+        repeat(40_000) { body.write(filler) }
+        val started = System.nanoTime()
+        val info = ApkManifestReader.parseManifest(chunk(0x0003, ByteArray(0), body.toByteArray()))
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assertEquals("org.example", info.packageName)
+        assertEquals(1, info.minSdk)
+        assertTrue("took $millis ms", millis < 1000)
+    }
 
     /** A manifest whose string pool claims [stringCount] strings but holds none. */
     private fun manifestWithStringCount(stringCount: Int): ByteArray {
