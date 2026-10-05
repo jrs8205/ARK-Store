@@ -1,0 +1,1 @@
+The title bar, the search and the filters now slide away as the list scrolls down and come back as soon as it scrolls up; a switch in the settings keeps them in place instead. Apps can be bookmarked from their details, and a Bookmarks chip shows them alone. Release notes are shown formatted.

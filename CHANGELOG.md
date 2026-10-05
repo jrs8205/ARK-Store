@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.6.0-beta.5
+
+- The title bar, the search and the filters slide out of view as the list scrolls down and
+  come back as soon as it scrolls up, so that the list has the screen; a switch in the
+  settings, under Appearance, keeps them above the list instead
+- Bookmarks: an app can be bookmarked from its details, a bookmarked app carries a mark in
+  the list, and a Bookmarks chip among the categories shows the bookmarked apps alone. The
+  bookmarks stay on the device and follow the app's package, whatever place offers it
+- Release notes are shown with their headings, bullets, bold and code, instead of as the
+  Markdown they are written in
+
 ## 1.6.0-beta.4
 
 - An installed app whose newest version needs a newer Android than the device has stays in
