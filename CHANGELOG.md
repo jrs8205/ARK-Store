@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.0-beta.2
+
+- A choice of themes in the settings, under Appearance: five palettes and, on Android 12
+  and later, the colours of the wallpaper. A theme colours the background, the cards and
+  the menus too, and every theme keeps the same contrast
+- A pure black dark theme for OLED screens
+
 ## 1.7.0-beta.1
 
 - The details tell which Android an app needs whenever it is known, also when the store

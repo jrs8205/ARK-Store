@@ -1,0 +1,1 @@
+A choice of themes in the settings, under Appearance: five palettes and, on Android 12 and later, the colours of the wallpaper, with a pure black dark theme for OLED screens.
