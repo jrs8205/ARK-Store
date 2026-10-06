@@ -1077,13 +1077,7 @@ private fun DetailsSheet(
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
         }
-        // A requirement the store itself meets says nothing to whoever runs the store.
-        val ownMinSdk = remember { context.applicationInfo.minSdkVersion }
-        val told = app.minSdkCodename != null ||
-            (app.minSdk != null && AndroidVersions.worthTelling(app.minSdk, ownMinSdk))
-        if (told) {
-            requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
-        }
+        requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
         DetailLine(
             stringResource(R.string.detail_size),
             Formatter.formatShortFileSize(context, app.apkSize)
@@ -1275,12 +1269,13 @@ private fun DetailLine(label: String, value: String) {
  * known.
  */
 @Composable
-private fun requirement(app: StoreApp): String? {
-    app.minSdkCodename?.let { return stringResource(R.string.requires_preview, it) }
-    val sdk = app.minSdk ?: return null
-    return AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
-        ?: stringResource(R.string.requires_api, sdk)
-}
+private fun requirement(app: StoreApp): String? =
+    when (val needs = AndroidVersions.requirement(app.minSdk, app.minSdkCodename)) {
+        is AndroidVersions.Requirement.Version -> stringResource(R.string.requires_android, needs.name)
+        is AndroidVersions.Requirement.Level -> stringResource(R.string.requires_api, needs.sdk)
+        is AndroidVersions.Requirement.Preview -> stringResource(R.string.requires_preview, needs.codename)
+        null -> null
+    }
 
 @Composable
 private fun versionLine(row: AppRow): String {
