@@ -128,6 +128,62 @@ class PalettesTest {
     }
 
     @Test
+    fun textKeepsItsContrastOnTheSurfacesDrawnAsMetal() {
+        // With materials on, the shader lights and shades a surface under its text, within the
+        // limits Surfaces holds it to. A text must read at 7:1 against its surface at the end
+        // of that range nearest to the text, not against the flat colour only.
+        val failures = mutableListOf<String>()
+        for (palette in Palette.entries.filter { it != Palette.WALLPAPER }) {
+            val tones = TonalPalettes.of(palette)
+            for (dark in listOf(false, true)) {
+                for (black in listOf(false, true)) {
+                    val scheme = Palettes.colorScheme(palette, tones, dark = dark, black = black)
+                    fun text(what: String, fg: Color, shaded: Color) {
+                        val ratio = contrast(fg, shaded)
+                        if (ratio < 7.0) failures += "$palette dark=$dark black=$black: $what is ${"%.2f".format(ratio)}:1"
+                    }
+                    // The background is a plate without a bevel, on which the shader's limits
+                    // do not hold; its shading is the weakest of all, and stays within the
+                    // larger of the two limits both ways.
+                    fun plate(color: Color): Color {
+                        val shift = if (Surfaces.light(color)) -Surfaces.SHADE else Surfaces.SHADE
+                        return Color(
+                            (color.red + shift).coerceIn(0f, 1f),
+                            (color.green + shift).coerceIn(0f, 1f),
+                            (color.blue + shift).coerceIn(0f, 1f)
+                        )
+                    }
+                    val surfaces = mutableMapOf(
+                        "surfaceContainer" to Surfaces.underText(scheme.surfaceContainer),
+                        "surfaceContainerLow" to Surfaces.underText(scheme.surfaceContainerLow),
+                        "surfaceContainerHigh" to Surfaces.underText(scheme.surfaceContainerHigh)
+                    )
+                    if (Surfaces.takes(scheme.background)) surfaces["background"] = plate(scheme.background)
+                    for ((surface, color) in surfaces) {
+                        text("onSurface/$surface", scheme.onSurface, color)
+                        text("onSurfaceVariant/$surface", scheme.onSurfaceVariant, color)
+                        text("primary/$surface", scheme.primary, color)
+                        text("secondary/$surface", scheme.secondary, color)
+                        text("tertiary/$surface", scheme.tertiary, color)
+                        text("error/$surface", scheme.error, color)
+                    }
+                    text("onPrimary/primary", scheme.onPrimary, Surfaces.underText(scheme.primary))
+                    text("onTertiary/tertiary", scheme.onTertiary, Surfaces.underText(scheme.tertiary))
+                    text(
+                        "onSecondaryContainer/secondaryContainer",
+                        scheme.onSecondaryContainer, Surfaces.underText(scheme.secondaryContainer)
+                    )
+                    text(
+                        "onTertiaryContainer/tertiaryContainer",
+                        scheme.onTertiaryContainer, Surfaces.underText(scheme.tertiaryContainer)
+                    )
+                }
+            }
+        }
+        assertTrue(failures.joinToString("\n", prefix = "\n"), failures.isEmpty())
+    }
+
+    @Test
     fun theSurfacesCarryTheColorOfThePalette() {
         // The background, the cards and the sheets are most of the screen, so a palette that
         // left them grey would show in the buttons and the headings only.
@@ -163,7 +219,7 @@ class PalettesTest {
     @Test
     fun theArkPaletteKeepsItsOwnColors() {
         val tones = TonalPalettes.of(Palette.ARK)
-        assertEquals(Color(0xFF004F52), Palettes.colorScheme(Palette.ARK, tones, dark = false, black = false).primary)
+        assertEquals(Color(0xFF004C4F), Palettes.colorScheme(Palette.ARK, tones, dark = false, black = false).primary)
         assertEquals(Color(0xFF8EE0E4), Palettes.colorScheme(Palette.ARK, tones, dark = true, black = false).primary)
     }
 

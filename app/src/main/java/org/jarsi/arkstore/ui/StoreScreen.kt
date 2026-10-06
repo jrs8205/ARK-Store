@@ -188,15 +188,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
     InstallHaptics(installs)
 
     // With materials on, the screen itself is a sheet of brushed metal, and the bar and the
-    // list lie on it; see Surfaces.
+    // list lie on it; see Surfaces. A pure black background is no metal, and fills the screen
+    // as it does with materials off.
     CompositionLocalProvider(LocalMaterial provides (material && Surfaces.ready(context))) {
+    val background = MaterialTheme.colorScheme.background
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
+            .material(background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
     ) {
     Scaffold(
-        containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.background,
+        containerColor = if (LocalMaterial.current && Surfaces.takes(background)) Color.Transparent else background,
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.

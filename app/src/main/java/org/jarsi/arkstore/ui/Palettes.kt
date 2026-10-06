@@ -185,20 +185,23 @@ object Palettes {
     // The tones of each role. Text sits 60 tones or more from its surface for 7:1, outlines
     // 40 or more for 3:1; the surface containers step between the listed tones. The light
     // surfaces start at 96 rather than next to white, where there is no room for a colour.
+    // A surface drawn as metal is lit and shaded under its text (Surfaces.LIFT and SHADE), so
+    // the pairs that would sit at 60 exactly are set 65 or more apart: the text on an accent
+    // and on a container in the dark scheme, the accents themselves in the light one.
     private fun scheme(p: TonalPalettes, dark: Boolean): ColorScheme = if (dark) darkColorScheme(
         primary = p.accent1[80],
-        onPrimary = p.accent1[20],
+        onPrimary = p.accent1[10],
         primaryContainer = p.accent1[30],
-        onPrimaryContainer = p.accent1[90],
+        onPrimaryContainer = p.accent1[95],
         inversePrimary = p.accent1[30],
         secondary = p.accent2[80],
-        onSecondary = p.accent2[20],
+        onSecondary = p.accent2[10],
         secondaryContainer = p.accent2[30],
-        onSecondaryContainer = p.accent2[90],
+        onSecondaryContainer = p.accent2[95],
         tertiary = p.accent3[80],
-        onTertiary = p.accent3[20],
+        onTertiary = p.accent3[10],
         tertiaryContainer = p.accent3[30],
-        onTertiaryContainer = p.accent3[90],
+        onTertiaryContainer = p.accent3[95],
         error = ArkDark.error,
         onError = ArkDark.onError,
         errorContainer = ArkDark.errorContainer,
@@ -223,17 +226,17 @@ object Palettes {
         outlineVariant = p.neutral2[50],
         scrim = Color.Black
     ) else lightColorScheme(
-        primary = p.accent1[30],
+        primary = p.accent1.at(25f),
         onPrimary = p.accent1[100],
         primaryContainer = p.accent1[90],
         onPrimaryContainer = p.accent1[10],
         inversePrimary = p.accent1[80],
-        secondary = p.accent2[30],
+        secondary = p.accent2.at(25f),
         onSecondary = p.accent2[100],
         // Darker than the surfaces, which share its hue, so that a chosen chip shows among the others.
         secondaryContainer = p.accent2.at(85f),
         onSecondaryContainer = p.accent2[10],
-        tertiary = p.accent3[30],
+        tertiary = p.accent3.at(25f),
         onTertiary = p.accent3[100],
         tertiaryContainer = p.accent3[90],
         onTertiaryContainer = p.accent3[10],
@@ -247,7 +250,7 @@ object Palettes {
         onSurface = p.neutral1[10],
         surfaceVariant = p.neutral2[90],
         onSurfaceVariant = p.neutral2[20],
-        surfaceTint = p.accent1[30],
+        surfaceTint = p.accent1.at(25f),
         inverseSurface = p.neutral1[20],
         inverseOnSurface = p.neutral1[95],
         surfaceDim = p.neutral1[90],
@@ -276,9 +279,10 @@ object Palettes {
 }
 
 // The ARK palette, built around the ARK mark: deep navy, sea teal and the amber hull. Tuned by
-// hand before the generated palettes, and kept as it is.
+// hand before the generated palettes, and kept as it is but for a shade here and there that
+// the contrast tests asked for.
 internal val ArkLight = lightColorScheme(
-    primary = Color(0xFF004F52),
+    primary = Color(0xFF004C4F),
     onPrimary = Color(0xFFFFFFFF),
     primaryContainer = Color(0xFF9CF1F4),
     onPrimaryContainer = Color(0xFF002021),
@@ -287,7 +291,7 @@ internal val ArkLight = lightColorScheme(
     onSecondary = Color(0xFFFFFFFF),
     secondaryContainer = Color(0xFFD3E4FF),
     onSecondaryContainer = Color(0xFF0A1D33),
-    tertiary = Color(0xFF5C4000),
+    tertiary = Color(0xFF5B3F00),
     onTertiary = Color(0xFFFFFFFF),
     tertiaryContainer = Color(0xFFFFDEA6),
     onTertiaryContainer = Color(0xFF271900),
@@ -301,7 +305,7 @@ internal val ArkLight = lightColorScheme(
     onSurface = Color(0xFF101415),
     surfaceVariant = Color(0xFFDAE4E5),
     onSurfaceVariant = Color(0xFF2F3838),
-    surfaceTint = Color(0xFF004F52),
+    surfaceTint = Color(0xFF004C4F),
     inverseSurface = Color(0xFF2B3232),
     inverseOnSurface = Color(0xFFEEF3F3),
     surfaceDim = Color(0xFFDFE3E3),
