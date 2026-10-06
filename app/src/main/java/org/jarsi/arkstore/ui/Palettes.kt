@@ -77,17 +77,20 @@ class TonalPalettes(
         /** The tones of one of the store's own palettes; the wallpaper's come from [system]. */
         fun of(palette: Palette): TonalPalettes = known.getOrPut(palette) { build(palette) }
 
+        // Three accents, then the two neutrals that the surfaces and the outlines are made of.
+        // The neutrals keep enough of the palette's hue for the background, the cards and the
+        // sheets to show which palette is in use; graphite is the grey one, and stays close to it.
         private fun build(palette: Palette): TonalPalettes = when (palette) {
             // Deep navy, sea teal and the amber hull; only the neutrals are used, for pure black.
             Palette.ARK -> seeds(185f, 0.06f, 240f, 0.05f, 75f, 0.10f, 185f, 0.012f, 185f, 0.02f)
             // Spruce, moss and copper.
-            Palette.FOREST -> seeds(150f, 0.09f, 130f, 0.04f, 55f, 0.10f, 150f, 0.010f, 150f, 0.020f)
+            Palette.FOREST -> seeds(150f, 0.09f, 130f, 0.04f, 55f, 0.10f, 150f, 0.030f, 150f, 0.045f)
             // Steel with a cool blue.
-            Palette.GRAPHITE -> seeds(240f, 0.05f, 240f, 0.03f, 250f, 0.10f, 240f, 0.005f, 240f, 0.012f)
+            Palette.GRAPHITE -> seeds(240f, 0.05f, 240f, 0.03f, 250f, 0.10f, 240f, 0.014f, 240f, 0.022f)
             // Wine, rose and old gold.
-            Palette.WINE -> seeds(10f, 0.12f, 10f, 0.05f, 70f, 0.09f, 10f, 0.008f, 10f, 0.020f)
-            // Indigo, violet and lavender.
-            Palette.MIDNIGHT -> seeds(275f, 0.12f, 300f, 0.06f, 290f, 0.08f, 275f, 0.008f, 275f, 0.020f)
+            Palette.WINE -> seeds(10f, 0.12f, 10f, 0.05f, 70f, 0.09f, 10f, 0.030f, 10f, 0.045f)
+            // Indigo, violet and lavender; the surfaces lean to the violet, away from graphite's blue.
+            Palette.MIDNIGHT -> seeds(275f, 0.12f, 300f, 0.06f, 290f, 0.08f, 285f, 0.035f, 285f, 0.050f)
             Palette.WALLPAPER -> throw IllegalArgumentException("the wallpaper's tones come from the system")
         }
 
@@ -98,12 +101,19 @@ class TonalPalettes(
             Tones.of(h1, c1), Tones.of(h2, c2), Tones.of(h3, c3), Tones.of(n1h, n1c), Tones.of(n2h, n2c)
         )
 
-        /** The tones Android 12 and later derive from the wallpaper. */
+        /**
+         * The tones Android 12 and later derive from the wallpaper. The surfaces are made of
+         * the second accent rather than of the system's first neutral, which is all but grey,
+         * so that the wallpaper's colour shows on them as a palette of the store's own does.
+         */
         @RequiresApi(Build.VERSION_CODES.S)
-        fun system(context: Context): TonalPalettes = TonalPalettes(
-            systemTones(context, ACCENT1), systemTones(context, ACCENT2), systemTones(context, ACCENT3),
-            systemTones(context, NEUTRAL1), systemTones(context, NEUTRAL2)
-        )
+        fun system(context: Context): TonalPalettes {
+            val accent2 = systemTones(context, ACCENT2)
+            return TonalPalettes(
+                systemTones(context, ACCENT1), accent2, systemTones(context, ACCENT3),
+                accent2, systemTones(context, NEUTRAL2)
+            )
+        }
 
         @RequiresApi(Build.VERSION_CODES.S)
         private fun systemTones(context: Context, ids: IntArray): Tones =
@@ -144,17 +154,6 @@ class TonalPalettes(
         )
 
         @RequiresApi(Build.VERSION_CODES.S)
-        private val NEUTRAL1 = intArrayOf(
-            android.R.color.system_neutral1_1000, android.R.color.system_neutral1_900,
-            android.R.color.system_neutral1_800, android.R.color.system_neutral1_700,
-            android.R.color.system_neutral1_600, android.R.color.system_neutral1_500,
-            android.R.color.system_neutral1_400, android.R.color.system_neutral1_300,
-            android.R.color.system_neutral1_200, android.R.color.system_neutral1_100,
-            android.R.color.system_neutral1_50, android.R.color.system_neutral1_10,
-            android.R.color.system_neutral1_0
-        )
-
-        @RequiresApi(Build.VERSION_CODES.S)
         private val NEUTRAL2 = intArrayOf(
             android.R.color.system_neutral2_1000, android.R.color.system_neutral2_900,
             android.R.color.system_neutral2_800, android.R.color.system_neutral2_700,
@@ -184,7 +183,8 @@ object Palettes {
     }
 
     // The tones of each role. Text sits 60 tones or more from its surface for 7:1, outlines
-    // 40 or more for 3:1; the surface containers step between the listed tones.
+    // 40 or more for 3:1; the surface containers step between the listed tones. The light
+    // surfaces start at 96 rather than next to white, where there is no room for a colour.
     private fun scheme(p: TonalPalettes, dark: Boolean): ColorScheme = if (dark) darkColorScheme(
         primary = p.accent1[80],
         onPrimary = p.accent1[20],
@@ -230,7 +230,8 @@ object Palettes {
         inversePrimary = p.accent1[80],
         secondary = p.accent2[30],
         onSecondary = p.accent2[100],
-        secondaryContainer = p.accent2[90],
+        // Darker than the surfaces, which share its hue, so that a chosen chip shows among the others.
+        secondaryContainer = p.accent2.at(85f),
         onSecondaryContainer = p.accent2[10],
         tertiary = p.accent3[30],
         onTertiary = p.accent3[100],
@@ -240,9 +241,9 @@ object Palettes {
         onError = ArkLight.onError,
         errorContainer = ArkLight.errorContainer,
         onErrorContainer = ArkLight.onErrorContainer,
-        background = p.neutral1[99],
+        background = p.neutral1.at(96f),
         onBackground = p.neutral1[10],
-        surface = p.neutral1[99],
+        surface = p.neutral1.at(96f),
         onSurface = p.neutral1[10],
         surfaceVariant = p.neutral2[90],
         onSurfaceVariant = p.neutral2[20],
@@ -250,14 +251,14 @@ object Palettes {
         inverseSurface = p.neutral1[20],
         inverseOnSurface = p.neutral1[95],
         surfaceDim = p.neutral1[90],
-        surfaceBright = p.neutral1[99],
+        surfaceBright = p.neutral1.at(96f),
         surfaceContainerLowest = p.neutral1[100],
-        surfaceContainerLow = p.neutral1.at(96f),
-        surfaceContainer = p.neutral1.at(94f),
-        surfaceContainerHigh = p.neutral1.at(92f),
+        surfaceContainerLow = p.neutral1[95],
+        surfaceContainer = p.neutral1.at(93f),
+        surfaceContainerHigh = p.neutral1.at(91.5f),
         surfaceContainerHighest = p.neutral1[90],
         outline = p.neutral2[50],
-        outlineVariant = p.neutral2[60],
+        outlineVariant = p.neutral2.at(55f),
         scrim = Color.Black
     )
 

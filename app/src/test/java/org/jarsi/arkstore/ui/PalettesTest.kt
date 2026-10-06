@@ -5,18 +5,34 @@ import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.hypot
 import kotlin.math.pow
 
 class PalettesTest {
 
     // The WCAG 2 relative luminance, computed here on its own so that the test does not lean
     // on the code it checks.
-    private fun luminance(color: Color): Double {
-        fun channel(c: Float): Double {
-            val v = c.toDouble()
-            return if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
-        }
-        return 0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+    private fun luminance(color: Color): Double =
+        0.2126 * channel(color.red) + 0.7152 * channel(color.green) + 0.0722 * channel(color.blue)
+
+    private fun channel(c: Float): Double {
+        val v = c.toDouble()
+        return if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+    }
+
+    // How far the colour is from a grey of its lightness: its chroma in OKLab, computed here on
+    // its own as the luminance is.
+    private fun chroma(color: Color): Double {
+        val r = channel(color.red)
+        val g = channel(color.green)
+        val b = channel(color.blue)
+        val l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b)
+        val m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b)
+        val s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b)
+        return hypot(
+            1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+            0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+        )
     }
 
     private fun contrast(a: Color, b: Color): Double {
@@ -108,6 +124,39 @@ class PalettesTest {
                     )
                 }
             }
+        }
+    }
+
+    @Test
+    fun theSurfacesCarryTheColorOfThePalette() {
+        // The background, the cards and the sheets are most of the screen, so a palette that
+        // left them grey would show in the buttons and the headings only.
+        for (palette in Palette.entries.filter { it != Palette.WALLPAPER && it != Palette.ARK }) {
+            val tones = TonalPalettes.of(palette)
+            fun colored(name: String, color: Color) {
+                val chroma = chroma(color)
+                assertTrue("$palette $name is all but grey, chroma ${"%.4f".format(chroma)}", chroma >= 0.008)
+            }
+            for (dark in listOf(false, true)) {
+                val scheme = Palettes.colorScheme(palette, tones, dark = dark, black = false)
+                colored("background dark=$dark", scheme.background)
+                colored("surface dark=$dark", scheme.surface)
+                colored("surfaceContainer dark=$dark", scheme.surfaceContainer)
+                colored("surfaceContainerLow dark=$dark", scheme.surfaceContainerLow)
+            }
+            // On pure black the background has no colour to carry; the cards on it do.
+            colored("surfaceContainer black", Palettes.colorScheme(palette, tones, dark = true, black = true).surfaceContainer)
+        }
+    }
+
+    @Test
+    fun aChosenChipStandsApartFromTheOthersInTheLightTheme() {
+        // The chips not chosen lie on a surface of the palette's own hue, so the chosen one is
+        // told from them by being darker, not by its colour alone.
+        for (palette in Palette.entries.filter { it != Palette.WALLPAPER && it != Palette.ARK }) {
+            val scheme = Palettes.colorScheme(palette, TonalPalettes.of(palette), dark = false, black = false)
+            val ratio = contrast(scheme.secondaryContainer, scheme.surfaceContainerHigh)
+            assertTrue("$palette: ${"%.2f".format(ratio)}:1", ratio >= 1.15)
         }
     }
 
