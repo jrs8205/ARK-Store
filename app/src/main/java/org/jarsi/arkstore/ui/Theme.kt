@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -19,34 +20,51 @@ internal const val PREFS_UI = "ui"
 internal const val PREF_PALETTE = "palette"
 internal const val PREF_BLACK = "black"
 
-/** The theme chosen in the settings, kept up to date as the settings change. */
-class ThemeSettings(context: Context) {
-    private val preferences = context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+/** The theme chosen in the settings, kept up to date as the settings change while it [listen]s. */
+class ThemeSettings(private val preferences: SharedPreferences) {
 
-    var palette by mutableStateOf(Palette.fromKey(preferences.getString(PREF_PALETTE, null)))
+    var palette by mutableStateOf(savedPalette())
         private set
 
-    var black by mutableStateOf(preferences.getBoolean(PREF_BLACK, false))
+    var black by mutableStateOf(savedBlack())
         private set
 
-    // Held here because the preferences keep their listeners weakly.
-    private val listener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+    // The preferences keep their listeners weakly, so the listener lives as long as this field
+    // does. The field must be read as well as written, which close() does: a release build
+    // drops a field that nothing reads, and the listener would be collected with it.
+    private val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
-            PREF_PALETTE -> palette = Palette.fromKey(prefs.getString(PREF_PALETTE, null))
-            PREF_BLACK -> black = prefs.getBoolean(PREF_BLACK, false)
+            PREF_PALETTE -> palette = savedPalette()
+            PREF_BLACK -> black = savedBlack()
         }
     }
 
-    init {
+    /** Starts following the settings, and catches up with what changed before this. */
+    fun listen() {
         preferences.registerOnSharedPreferenceChangeListener(listener)
+        palette = savedPalette()
+        black = savedBlack()
     }
+
+    /** Stops following the settings. */
+    fun close() {
+        preferences.unregisterOnSharedPreferenceChangeListener(listener)
+    }
+
+    private fun savedPalette() = Palette.fromKey(preferences.getString(PREF_PALETTE, null))
+
+    private fun savedBlack() = preferences.getBoolean(PREF_BLACK, false)
 }
 
 /** The palette chosen in the settings, light or dark as the Android settings say. */
 @Composable
 fun ArkStoreTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    val settings = remember { ThemeSettings(context) }
+    val settings = remember { ThemeSettings(context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)) }
+    DisposableEffect(settings) {
+        settings.listen()
+        onDispose { settings.close() }
+    }
     val dark = isSystemInDarkTheme()
     val scheme = remember(settings.palette, dark, settings.black) {
         colorSchemeOf(context, settings.palette, dark, settings.black)
