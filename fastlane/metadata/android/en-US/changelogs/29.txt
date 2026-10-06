@@ -1,0 +1,1 @@
+The details tell which Android an app needs whenever it is known, also when the store itself needs no less, so that every app reads the same way.

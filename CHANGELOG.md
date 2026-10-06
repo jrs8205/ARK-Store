@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.0-beta.1
+
+- The details tell which Android an app needs whenever it is known, also when the store
+  itself needs no less, so that every app reads the same way
+
 ## 1.6.0
 
 - The title bar, the search and the filters slide out of view as the list scrolls down and
