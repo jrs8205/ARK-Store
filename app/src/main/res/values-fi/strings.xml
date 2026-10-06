@@ -129,6 +129,15 @@
     <string name="material_switch">Materiaalipinnat</string>
     <string name="material_description">Piirtää näytön ja kaiken sillä olevan ylhäältä valaistuna harjattuna metallina näytönohjaimella. Oletuksena päällä Android 13:sta alkaen; voit sammuttaa sen tästä, jos haluat tasaiset värit tai säästää virtaa.</string>
     <string name="material_unavailable">Ei saatavilla tällä laitteella: näytönohjaimen ajuri ei pystynyt piirtämään pintoja, joten tasaiset värit pysyvät.</string>
+    <string name="theme_title">Teema</string>
+    <string name="palette_ark">ARK</string>
+    <string name="palette_forest">Metsä</string>
+    <string name="palette_graphite">Grafiitti</string>
+    <string name="palette_wine">Viini</string>
+    <string name="palette_midnight">Keskiyö</string>
+    <string name="palette_wallpaper">Tapetti</string>
+    <string name="black_switch">Puhdas musta tummassa teemassa</string>
+    <string name="black_description">Tumma teema käyttää mustaa taustaa, mikä säästää OLED-näytön virtaa.</string>
     <string name="action_cancel">Peruuta</string>
     <string name="beta_return_note">Kun tämä on pois päältä, tarjolla ovat taas vakaat versiot. Jo asennettu beta pysyy, kunnes seuraava vakaa versio korvaa sen. Jos haluat palata aiemmin, avaa sovelluksen tiedot.</string>
     <string name="newer_installed_note">Uudempi beta on asennettuna. Seuraava vakaa versio korvaa sen.</string>

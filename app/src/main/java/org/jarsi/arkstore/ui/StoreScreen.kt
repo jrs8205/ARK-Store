@@ -174,6 +174,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
     }
     var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
     var hideTop by remember { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    // The theme itself follows these through ThemeSettings; see Theme.kt.
+    var palette by remember { mutableStateOf(Palette.fromKey(preferences.getString(PREF_PALETTE, null))) }
+    var black by remember { mutableStateOf(preferences.getBoolean(PREF_BLACK, false)) }
     // The bar, the search and the filters slide out of view as the list scrolls down and back
     // in as it scrolls up, when the setting says so; see CollapsingTop.
     val top = remember { CollapsingTop() }
@@ -555,6 +558,16 @@ fun StoreScreen(viewModel: StoreViewModel) {
         StoreSheet(onDismissRequest = { showSettings = false }) {
             SettingsSheet(
                 viewModel = viewModel,
+                palette = palette,
+                onPaletteChange = {
+                    palette = it
+                    preferences.edit { putString(PREF_PALETTE, it.key) }
+                },
+                black = black,
+                onBlackChange = {
+                    black = it
+                    preferences.edit { putBoolean(PREF_BLACK, it) }
+                },
                 material = material,
                 onMaterialChange = {
                     material = it
@@ -1424,6 +1437,10 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, to
 @Composable
 private fun SettingsSheet(
     viewModel: StoreViewModel,
+    palette: Palette,
+    onPaletteChange: (Palette) -> Unit,
+    black: Boolean,
+    onBlackChange: (Boolean) -> Unit,
     material: Boolean,
     onMaterialChange: (Boolean) -> Unit,
     hideTop: Boolean,
@@ -1449,8 +1466,20 @@ private fun SettingsSheet(
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
-        SettingSwitch(
+        ThemePicker(
             heading = stringResource(R.string.appearance_title),
+            palette = palette,
+            onPaletteChange = onPaletteChange
+        )
+        SettingSwitch(
+            heading = null,
+            label = stringResource(R.string.black_switch),
+            description = stringResource(R.string.black_description),
+            checked = black,
+            onCheckedChange = onBlackChange
+        )
+        SettingSwitch(
+            heading = null,
             label = stringResource(R.string.hide_top_switch),
             description = stringResource(R.string.hide_top_description),
             checked = hideTop,
@@ -1776,7 +1805,6 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
     }
 }
 
-private const val PREFS_UI = "ui"
 private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
 private const val PREF_HIDE_TOP = "hide_top"

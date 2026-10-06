@@ -134,6 +134,15 @@
     <string name="material_switch">Material surfaces</string>
     <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. On by default on Android 13 and later; turn it off here if you prefer flat colours or want to save power.</string>
     <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
+    <string name="theme_title">Theme</string>
+    <string name="palette_ark">ARK</string>
+    <string name="palette_forest">Forest</string>
+    <string name="palette_graphite">Graphite</string>
+    <string name="palette_wine">Wine</string>
+    <string name="palette_midnight">Midnight</string>
+    <string name="palette_wallpaper">Wallpaper</string>
+    <string name="black_switch">Pure black in the dark theme</string>
+    <string name="black_description">The dark theme uses a black background, which saves power on an OLED screen.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>
     <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>

@@ -94,6 +94,9 @@ following a developer who has not added it.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
 - Every app with its own icon, read from the APK or given by its catalogue.
+- A choice of themes: five palettes and, on Android 12 and later, the colours of the
+  wallpaper, with a pure black dark theme for OLED screens. Every theme keeps the same
+  contrast.
 - The details tell the latest version, when it was published, the size of the file and the
   Android version the app needs. An installed app whose newest version needs a newer Android
   than the device has stays in the list, with a note; one not installed is left out.
