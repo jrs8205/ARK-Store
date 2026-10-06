@@ -22,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -41,8 +43,8 @@ import org.jarsi.arkstore.R
 
 /**
  * The row of palettes to choose from under the [heading], each shown as a disc of its primary
- * and tertiary colour in the light or dark version in use, the chosen one marked with a tick.
- * The wallpaper's palette is offered where Android provides it.
+ * and tertiary colour on its background, in the light or dark version in use, the chosen one
+ * marked with a tick. The wallpaper's palette is offered where Android provides it.
  */
 @Composable
 internal fun ThemePicker(heading: String, palette: Palette, onPaletteChange: (Palette) -> Unit) {
@@ -89,6 +91,7 @@ internal fun ThemePicker(heading: String, palette: Palette, onPaletteChange: (Pa
                     .padding(horizontal = 2.dp, vertical = 8.dp)
             ) {
                 Swatch(
+                    ground = scheme.background,
                     left = scheme.primary,
                     right = scheme.tertiary,
                     tick = if (selected) scheme.onPrimary else null,
@@ -117,18 +120,22 @@ private val Palette.label: Int
     }
 
 /**
- * A disc whose [left] half and [right] half show two colours of a palette, inside a [ring];
- * with a [tick] colour, a smaller disc of the left colour carries a tick in it.
+ * A disc of a palette's [ground], the colour of its background, inside a [ring], and on it a
+ * smaller disc whose [left] half and [right] half show two of its accents; with a [tick]
+ * colour, a still smaller disc of the left colour carries a tick in it.
  */
 @Composable
-private fun Swatch(left: Color, right: Color, tick: Color?, ring: Color, ringWidth: Dp) {
+private fun Swatch(ground: Color, left: Color, right: Color, tick: Color?, ring: Color, ringWidth: Dp) {
     Box(
         modifier = Modifier
             .size(44.dp)
             .drawBehind {
                 val radius = size.minDimension / 2
-                drawArc(left, startAngle = 90f, sweepAngle = 180f, useCenter = true)
-                drawArc(right, startAngle = 270f, sweepAngle = 180f, useCenter = true)
+                drawCircle(ground)
+                val accents = Size(radius * 1.36f, radius * 1.36f)
+                val corner = Offset(center.x - accents.width / 2, center.y - accents.height / 2)
+                drawArc(left, startAngle = 90f, sweepAngle = 180f, useCenter = true, topLeft = corner, size = accents)
+                drawArc(right, startAngle = 270f, sweepAngle = 180f, useCenter = true, topLeft = corner, size = accents)
                 val stroke = ringWidth.toPx()
                 drawCircle(ring, radius = radius - stroke / 2, style = Stroke(stroke))
                 if (tick != null) {

@@ -143,8 +143,9 @@ class PalettesTest {
                         if (ratio < 7.0) failures += "$palette dark=$dark black=$black: $what is ${"%.2f".format(ratio)}:1"
                     }
                     // The background is a plate without a bevel, on which the shader's limits
-                    // do not hold; its shading is the weakest of all, and stays within the
-                    // larger of the two limits both ways.
+                    // do not hold. Its shading is the weakest of all: toward its text, a light
+                    // plate darkens and a dark one brightens by less than the larger of the two
+                    // limits. A light plate may brighten by more, which only helps its text.
                     fun plate(color: Color): Color {
                         val shift = if (Surfaces.light(color)) -Surfaces.SHADE else Surfaces.SHADE
                         return Color(
@@ -206,13 +207,25 @@ class PalettesTest {
     }
 
     @Test
+    fun aLightBackgroundStaysShortOfPastel() {
+        // Green keeps its chroma all the way to white, where the other hues run out of room;
+        // left to it, the largest surface of the forest palette would be twice as coloured as
+        // any other's.
+        for (palette in Palette.entries.filter { it != Palette.WALLPAPER && it != Palette.ARK }) {
+            val scheme = Palettes.colorScheme(palette, TonalPalettes.of(palette), dark = false, black = false)
+            val chroma = chroma(scheme.background)
+            assertTrue("$palette background, chroma ${"%.4f".format(chroma)}", chroma <= 0.025)
+        }
+    }
+
+    @Test
     fun aChosenChipStandsApartFromTheOthersInTheLightTheme() {
         // The chips not chosen lie on a surface of the palette's own hue, so the chosen one is
         // told from them by being darker, not by its colour alone.
         for (palette in Palette.entries.filter { it != Palette.WALLPAPER && it != Palette.ARK }) {
             val scheme = Palettes.colorScheme(palette, TonalPalettes.of(palette), dark = false, black = false)
             val ratio = contrast(scheme.secondaryContainer, scheme.surfaceContainerHigh)
-            assertTrue("$palette: ${"%.2f".format(ratio)}:1", ratio >= 1.15)
+            assertTrue("$palette: ${"%.2f".format(ratio)}:1", ratio >= 1.3)
         }
     }
 

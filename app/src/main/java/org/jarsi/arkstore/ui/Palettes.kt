@@ -63,13 +63,18 @@ class Tones private constructor(private val colors: Map<Int, Color>) {
     }
 }
 
-/** The five tonal palettes a colour scheme is built from, named as Material names them. */
+/**
+ * The five tonal palettes a colour scheme is built from, named as Material names them, and
+ * the [paper] the light surfaces are made of: the first neutral, unless a palette gives them
+ * less colour than its dark surfaces take.
+ */
 class TonalPalettes(
     val accent1: Tones,
     val accent2: Tones,
     val accent3: Tones,
     val neutral1: Tones,
-    val neutral2: Tones
+    val neutral2: Tones,
+    val paper: Tones = neutral1
 ) {
     companion object {
         private val known = java.util.EnumMap<Palette, TonalPalettes>(Palette::class.java)
@@ -83,8 +88,9 @@ class TonalPalettes(
         private fun build(palette: Palette): TonalPalettes = when (palette) {
             // Deep navy, sea teal and the amber hull; only the neutrals are used, for pure black.
             Palette.ARK -> seeds(185f, 0.06f, 240f, 0.05f, 75f, 0.10f, 185f, 0.012f, 185f, 0.02f)
-            // Spruce, moss and copper.
-            Palette.FOREST -> seeds(150f, 0.09f, 130f, 0.04f, 55f, 0.10f, 150f, 0.030f, 150f, 0.045f)
+            // Spruce, moss and copper. Green keeps its chroma all the way to white, where the
+            // other hues run out of room, so the light surfaces are given less of it.
+            Palette.FOREST -> seeds(150f, 0.09f, 130f, 0.04f, 55f, 0.10f, 150f, 0.030f, 150f, 0.045f, paper = 0.022f)
             // Steel with a cool blue.
             Palette.GRAPHITE -> seeds(240f, 0.05f, 240f, 0.03f, 250f, 0.10f, 240f, 0.014f, 240f, 0.022f)
             // Wine, rose and old gold.
@@ -96,10 +102,14 @@ class TonalPalettes(
 
         private fun seeds(
             h1: Float, c1: Float, h2: Float, c2: Float, h3: Float, c3: Float,
-            n1h: Float, n1c: Float, n2h: Float, n2c: Float
-        ) = TonalPalettes(
-            Tones.of(h1, c1), Tones.of(h2, c2), Tones.of(h3, c3), Tones.of(n1h, n1c), Tones.of(n2h, n2c)
-        )
+            n1h: Float, n1c: Float, n2h: Float, n2c: Float, paper: Float = n1c
+        ): TonalPalettes {
+            val neutral1 = Tones.of(n1h, n1c)
+            return TonalPalettes(
+                Tones.of(h1, c1), Tones.of(h2, c2), Tones.of(h3, c3), neutral1, Tones.of(n2h, n2c),
+                if (paper == n1c) neutral1 else Tones.of(n1h, paper)
+            )
+        }
 
         /**
          * The tones Android 12 and later derive from the wallpaper. The surfaces are made of
@@ -234,7 +244,7 @@ object Palettes {
         secondary = p.accent2.at(25f),
         onSecondary = p.accent2[100],
         // Darker than the surfaces, which share its hue, so that a chosen chip shows among the others.
-        secondaryContainer = p.accent2.at(85f),
+        secondaryContainer = p.accent2[80],
         onSecondaryContainer = p.accent2[10],
         tertiary = p.accent3.at(25f),
         onTertiary = p.accent3[100],
@@ -244,22 +254,22 @@ object Palettes {
         onError = ArkLight.onError,
         errorContainer = ArkLight.errorContainer,
         onErrorContainer = ArkLight.onErrorContainer,
-        background = p.neutral1.at(96f),
+        background = p.paper.at(96f),
         onBackground = p.neutral1[10],
-        surface = p.neutral1.at(96f),
+        surface = p.paper.at(96f),
         onSurface = p.neutral1[10],
         surfaceVariant = p.neutral2[90],
         onSurfaceVariant = p.neutral2[20],
         surfaceTint = p.accent1.at(25f),
         inverseSurface = p.neutral1[20],
         inverseOnSurface = p.neutral1[95],
-        surfaceDim = p.neutral1[90],
-        surfaceBright = p.neutral1.at(96f),
-        surfaceContainerLowest = p.neutral1[100],
-        surfaceContainerLow = p.neutral1[95],
-        surfaceContainer = p.neutral1.at(93f),
-        surfaceContainerHigh = p.neutral1.at(91.5f),
-        surfaceContainerHighest = p.neutral1[90],
+        surfaceDim = p.paper[90],
+        surfaceBright = p.paper.at(96f),
+        surfaceContainerLowest = p.paper[100],
+        surfaceContainerLow = p.paper[95],
+        surfaceContainer = p.paper.at(93f),
+        surfaceContainerHigh = p.paper.at(91.5f),
+        surfaceContainerHighest = p.paper[90],
         outline = p.neutral2[50],
         outlineVariant = p.neutral2.at(55f),
         scrim = Color.Black
