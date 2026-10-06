@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.7.0-beta.3
+
+- A chosen theme takes effect at once; in 1.7.0-beta.2 it showed only after the store was
+  opened again
+
 ## 1.7.0-beta.2
 
 - A choice of themes in the settings, under Appearance: five palettes and, on Android 12

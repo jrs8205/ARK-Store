@@ -1,0 +1,1 @@
+A chosen theme takes effect at once; in 1.7.0-beta.2 it showed only after the store was opened again.
