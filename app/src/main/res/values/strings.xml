@@ -214,4 +214,12 @@
     <string name="channel_installs">Ready to install</string>
     <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
     <string name="screenshot_description">Screenshot %1$d of %2$d</string>
+    <string name="auto_update_title">Automatic updates</string>
+    <string name="auto_update_switch">Install updates in the background</string>
+    <string name="auto_update_description">Apps that ARK-Store installed are updated without asking when the background check finds a newer version. Other apps still get a notification, as does an update that Android wants confirmed.</string>
+    <string name="auto_update_unsupported">Needs Android 12 or later. On this device the background check only notifies.</string>
+    <string name="auto_update_unmetered_switch">Only on Wi-Fi</string>
+    <string name="auto_update_unmetered_description">Not on mobile data or another metered network</string>
+    <string name="auto_update_charging_switch">Only while charging</string>
+    <string name="auto_update_charging_description">Waits until the device is plugged in</string>
 </resources>

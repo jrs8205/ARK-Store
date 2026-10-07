@@ -4,6 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.net.ConnectivityManager
+import android.os.BatteryManager
+import android.os.Build
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.edit
@@ -20,8 +24,11 @@ import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
+import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.install.InstallManager
+import org.jarsi.arkstore.install.Outcome
 import org.jarsi.arkstore.ui.MainActivity
 
 /** A request that timed out, or too many of them. */
@@ -50,7 +57,17 @@ internal fun announcement(app: StoreApp): String = "${app.fullName.lowercase()}@
 internal fun newToAnnounce(waiting: Set<String>, announced: Set<String>): Boolean =
     (waiting - announced).isNotEmpty()
 
-/** Periodically refreshes the catalogue and tells the user when updates are waiting. */
+/**
+ * The [updates] left to tell the user of once those [settled] unasked, by their full names,
+ * are taken out: installed, or waiting for the user behind a notification of their own.
+ */
+internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<StoreApp> =
+    updates.filter { it.fullName !in settled }
+
+/**
+ * Periodically refreshes the catalogue, installs the updates it may unasked (see
+ * [AutoUpdate]) and tells the user of the rest.
+ */
 class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
 
@@ -64,7 +81,9 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         }
         // A refresh that failed for one source has still updated the others, so whatever the
         // catalogue holds now is worth acting on.
-        val updates = InstalledApps.countUpdates(applicationContext, repository.catalog.value.apps)
+        val found = InstalledApps.updates(applicationContext, repository.catalog.value.apps)
+        val settled = installUnasked(found)
+        val updates = toAnnounce(found.map { it.first }, settled)
         val waiting = updates.map(::announcement).toSet()
         val preferences = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val announced = preferences.getStringSet(PREF_ANNOUNCED, null).orEmpty()
@@ -80,6 +99,36 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         return if (failure == null || isLasting(failure)) Result.success() else Result.retry()
     }
 
+    /**
+     * Installs, without asking, the updates among [found] that the settings allow now and
+     * that the store itself installed, one after the other, as long as the time a run is
+     * given lasts. Returns the full names of those settled: installed, or handed to the
+     * user to confirm. One that failed is announced like any other update.
+     */
+    private suspend fun installUnasked(found: List<Pair<StoreApp, InstalledVersion>>): Set<String> {
+        val context = applicationContext
+        val settings = AutoUpdate.read(context)
+        if (!settings.allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) return emptySet()
+        val settled = HashSet<String>()
+        val deadline = SystemClock.elapsedRealtime() + INSTALL_BUDGET_MS
+        for ((app, installed) in found) {
+            if (installed.installer != context.packageName) continue
+            val left = deadline - SystemClock.elapsedRealtime()
+            if (left <= 0) break
+            when (InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))) {
+                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
+                Outcome.FAILED, null -> {}
+            }
+        }
+        return settled
+    }
+
+    private fun unmetered(context: Context): Boolean =
+        context.getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false
+
+    private fun charging(context: Context): Boolean =
+        context.getSystemService(BatteryManager::class.java)?.isCharging == true
+
     companion object {
         private const val WORK_NAME = "update-check"
         private const val CHANNEL_ID = "updates"
@@ -87,6 +136,9 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         private const val INTERVAL_HOURS = 4L
         private const val PREFS = "updates"
         private const val PREF_ANNOUNCED = "announced"
+        // A run is given ten minutes; what is not done in time waits for the next.
+        private const val INSTALL_BUDGET_MS = 6 * 60 * 1000L
+        private const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(

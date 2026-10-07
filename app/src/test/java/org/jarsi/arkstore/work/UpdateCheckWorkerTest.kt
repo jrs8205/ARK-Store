@@ -4,6 +4,7 @@ import java.io.IOException
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.testApp
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -56,5 +57,17 @@ class UpdateCheckWorkerTest {
             announcement(testApp(fullName = "alice/app", versionCode = 5)),
             announcement(testApp(fullName = "bob/app", versionCode = 5))
         )
+    }
+
+    @Test
+    fun updatesInstalledOrWaitingForTheUserAreNotAnnounced() {
+        val installed = testApp(fullName = "alice/app", versionCode = 5)
+        val waiting = testApp(fullName = "bob/app", versionCode = 2)
+        val failed = testApp(fullName = "carol/app", versionCode = 3)
+        val other = testApp(fullName = "dan/app", versionCode = 4)
+        val updates = listOf(installed, waiting, failed, other)
+        val settled = setOf(installed.fullName, waiting.fullName)
+        assertEquals(listOf(failed, other), toAnnounce(updates, settled))
+        assertEquals(updates, toAnnounce(updates, emptySet()))
     }
 }

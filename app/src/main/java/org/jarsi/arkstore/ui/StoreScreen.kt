@@ -3,6 +3,7 @@ package org.jarsi.arkstore.ui
 import android.content.Context
 import android.icu.text.CompactDecimalFormat
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
@@ -146,6 +147,7 @@ import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
+import org.jarsi.arkstore.work.AutoUpdate
 import org.jarsi.arkstore.work.UpdateCheckWorker
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1515,6 +1517,7 @@ private fun SettingsSheet(
                 onCheckedChange = onMaterialChange
             )
         }
+        AutoUpdateSettings()
         NotificationSetting()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
@@ -1523,6 +1526,47 @@ private fun SettingsSheet(
             modifier = Modifier.padding(top = 24.dp)
         )
     }
+}
+
+/**
+ * Whether the background check installs updates unasked, and when; see [AutoUpdate]. Before
+ * Android 12 the switch stays off and says why.
+ */
+@Composable
+private fun AutoUpdateSettings() {
+    val context = LocalContext.current
+    var settings by remember { mutableStateOf(AutoUpdate.read(context)) }
+    val supported = Build.VERSION.SDK_INT >= AutoUpdate.SUPPORTED_SDK
+    fun change(changed: AutoUpdate) {
+        settings = changed
+        AutoUpdate.write(context, changed)
+    }
+    SettingSwitch(
+        heading = stringResource(R.string.auto_update_title),
+        label = stringResource(R.string.auto_update_switch),
+        description = stringResource(
+            if (supported) R.string.auto_update_description else R.string.auto_update_unsupported
+        ),
+        checked = settings.enabled && supported,
+        enabled = supported,
+        onCheckedChange = { change(settings.copy(enabled = it)) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.auto_update_unmetered_switch),
+        description = stringResource(R.string.auto_update_unmetered_description),
+        checked = settings.unmeteredOnly,
+        enabled = supported && settings.enabled,
+        onCheckedChange = { change(settings.copy(unmeteredOnly = it)) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.auto_update_charging_switch),
+        description = stringResource(R.string.auto_update_charging_description),
+        checked = settings.chargingOnly,
+        enabled = supported && settings.enabled,
+        onCheckedChange = { change(settings.copy(chargingOnly = it)) }
+    )
 }
 
 /**

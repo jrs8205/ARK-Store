@@ -256,13 +256,18 @@ object InstalledApps {
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
-    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> {
+    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> =
+        updates(context, apps).map { it.first }
+
+    /** The apps among [apps] that have an update to offer, each with what is installed of it. */
+    fun updates(context: Context, apps: List<StoreApp>): List<Pair<StoreApp, InstalledVersion>> {
         val installed = snapshot(context)
         val android = CatalogRules.Android.THIS
-        return merged(context, apps, installed).filter {
+        return merged(context, apps, installed).mapNotNull {
+            val version = find(context, it, installed)
             val runs = CatalogRules.runsOn(it.app, android)
-            status(it.app, find(context, it, installed), runs) == AppStatus.UPDATE_AVAILABLE
-        }.map { it.app }
+            if (version != null && status(it.app, version, runs) == AppStatus.UPDATE_AVAILABLE) it.app to version else null
+        }
     }
 
     /**

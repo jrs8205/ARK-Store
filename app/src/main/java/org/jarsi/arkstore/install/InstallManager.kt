@@ -16,13 +16,19 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
@@ -38,6 +44,9 @@ sealed interface InstallState {
 }
 
 enum class FailReason { DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL }
+
+/** How an install that was waited for came out. */
+enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED }
 
 /** Downloads release APKs and hands them to the system package installer. */
 object InstallManager {
@@ -68,17 +77,24 @@ object InstallManager {
     /** Ticks whenever an install finishes, so observers re-read the installed versions. */
     val installedChanged: StateFlow<Int> = _installedChanged.asStateFlow()
 
+    /** The outcome of each install as it is settled, for [installAndAwait]. */
+    private val outcomes = MutableSharedFlow<Pair<String, Outcome>>(extraBufferCapacity = 64)
+
     fun isBusy(repo: String): Boolean = _states.value[repo].let {
         it is InstallState.Downloading || it is InstallState.Installing
     }
 
-    fun install(context: Context, app: StoreApp) {
+    /**
+     * Downloads and installs [app]. From the [foreground], the download is kept going by a
+     * service if the user leaves the app; from the background, where no service may start,
+     * the caller keeps the process alive instead.
+     */
+    fun install(context: Context, app: StoreApp, foreground: Boolean = true) {
         val appContext = context.applicationContext
         if (isBusy(app.fullName)) return
         setState(app.fullName, InstallState.Downloading(0f))
         _activeJobs.update { it + 1 }
-        // Lets the download carry on if the user leaves the app before it is done.
-        InstallService.start(appContext)
+        if (foreground) InstallService.start(appContext)
 
         scope.launch {
             val target = File(File(appContext.cacheDir, "apk"), CatalogRules.downloadName(app.fullName))
@@ -95,6 +111,24 @@ object InstallManager {
                 target.delete()
                 _activeJobs.update { it - 1 }
             }
+        }
+    }
+
+    /**
+     * [install]s [app] from the background and waits for the outcome: installed, waiting for
+     * the user to confirm (a notification asks them), or failed. Null when nothing was
+     * settled within [timeoutMillis]; the install itself goes on, and its outcome is handled
+     * as any other's.
+     */
+    suspend fun installAndAwait(context: Context, app: StoreApp, timeoutMillis: Long): Outcome? = coroutineScope {
+        // Listening before starting, so that an outcome settled at once is not missed.
+        val outcome = async(start = CoroutineStart.UNDISPATCHED) {
+            outcomes.first { it.first == app.fullName }.second
+        }
+        install(context, app, foreground = false)
+        withTimeoutOrNull(timeoutMillis) { outcome.await() } ?: run {
+            outcome.cancel()
+            null
         }
     }
 
@@ -225,6 +259,7 @@ object InstallManager {
         setState(repo, InstallState.Installing)
         confirmations.enqueue(repo, Confirmation(sessionId, intent))
         if (screens.get() == 0) InstallService.showReady(context, repo, sessionId, intent)
+        outcomes.tryEmit(repo to Outcome.CONFIRMATION_NEEDED)
     }
 
     /** Called by [InstallReceiver] once the system has decided on a session. */
@@ -232,9 +267,15 @@ object InstallManager {
         confirmations.remove(repo)
         val attempted = committed.remove(repo)
         when (status) {
-            PackageInstaller.STATUS_SUCCESS -> setState(repo, null)
+            PackageInstaller.STATUS_SUCCESS -> {
+                setState(repo, null)
+                outcomes.tryEmit(repo to Outcome.INSTALLED)
+            }
             // The user backed out of the system prompt; that is not an error worth showing.
-            PackageInstaller.STATUS_FAILURE_ABORTED -> setState(repo, null)
+            PackageInstaller.STATUS_FAILURE_ABORTED -> {
+                setState(repo, null)
+                outcomes.tryEmit(repo to Outcome.FAILED)
+            }
             PackageInstaller.STATUS_FAILURE_CONFLICT,
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
                 val reason = conflictReason(message)
@@ -260,8 +301,9 @@ object InstallManager {
             FailReason.INSTALL
         }
 
-    private fun setState(repo: String, state: InstallState?) = _states.update {
-        if (state == null) it - repo else it + (repo to state)
+    private fun setState(repo: String, state: InstallState?) {
+        _states.update { if (state == null) it - repo else it + (repo to state) }
+        if (state is InstallState.Failed) outcomes.tryEmit(repo to Outcome.FAILED)
     }
 
     private fun commit(context: Context, repo: String, packageName: String, apk: File) {

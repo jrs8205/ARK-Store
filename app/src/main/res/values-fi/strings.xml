@@ -199,4 +199,12 @@
     <string name="channel_installs">Valmiina asennettavaksi</string>
     <string name="channel_installs_description">Kertoo, kun ladattu sovellus odottaa, että vahvistat asennuksen</string>
     <string name="screenshot_description">Kuvakaappaus %1$d/%2$d</string>
+    <string name="auto_update_title">Automaattiset päivitykset</string>
+    <string name="auto_update_switch">Asenna päivitykset taustalla</string>
+    <string name="auto_update_description">ARK-Storen asentamat sovellukset päivitetään kysymättä, kun taustatarkistus löytää uudemman version. Muista sovelluksista tulee edelleen ilmoitus, samoin päivityksestä, jonka Android haluaa vahvistettavan.</string>
+    <string name="auto_update_unsupported">Vaatii Android 12:n tai uudemman. Tällä laitteella taustatarkistus vain ilmoittaa.</string>
+    <string name="auto_update_unmetered_switch">Vain Wi-Fi-verkossa</string>
+    <string name="auto_update_unmetered_description">Ei mobiilidatalla eikä muussa maksullisessa verkossa</string>
+    <string name="auto_update_charging_switch">Vain latauksessa</string>
+    <string name="auto_update_charging_description">Odottaa, kunnes laite on latauksessa</string>
 </resources>
