@@ -11,6 +11,7 @@ Only the standard library is used. Set GITHUB_TOKEN to raise the API request lim
 
 import argparse
 import calendar
+import functools
 import hashlib
 import json
 import os
@@ -66,6 +67,13 @@ SIGNER_READER = 2
 # the way parse_manifest finds the element changes what is written.
 SDK_READER = 1
 USER_AGENT = "ARK-Store-index"
+# An app's long description and phone screenshots are read from where the F-Droid tools take
+# them, fastlane/metadata/android/<locale>/, for each of these languages.
+METADATA_FOLDER = "fastlane/metadata/android/"
+LANGUAGES = ("en", "fi")
+DEFAULT_REGIONS = {"en": "US", "fi": "FI"}
+MAX_SCREENSHOTS = 8
+RAW_ADDRESS = "https://raw.githubusercontent.com"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
 # users who ask for them. To keep that list fresh and reasonably trustworthy, a repository
@@ -1312,6 +1320,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
                 app = build_app(
                     repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400,
                     with_prerelease=False, icons=icons,
+                    metadata_of=functools.partial(app_metadata, previous=previous),
                 )
                 looked = True
             except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
@@ -1483,12 +1492,98 @@ def is_upgrade(beta_info, stable_info):
     return False
 
 
-def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None):
+def preferred_locale(language, locales):
+    """The one of locales to read language from, or None: the locale of the language's usual
+    region (DEFAULT_REGIONS), failing that the language alone, failing that the first of its
+    other regions."""
+    for locale in ("%s-%s" % (language, DEFAULT_REGIONS[language]), language):
+        if locale in locales:
+            return locale
+    return min((locale for locale in locales if locale.startswith(language + "-")), default=None)
+
+
+def natural_order(path):
+    """Sorts files by the number their name begins with, so that 2.png comes before 10.png,
+    and then by name. Names that begin with no number come last."""
+    name = path.rsplit("/", 1)[-1]
+    number = re.match(r"\d+", name)
+    return (number is None, int(number.group()) if number else 0, name)
+
+
+def chosen_screenshots(paths):
+    """The images among paths that are shown, in the order they are shown."""
+    images = [path for path in paths if path.lower().endswith(IMAGE_SUFFIXES)]
+    return sorted(images, key=natural_order)[:MAX_SCREENSHOTS]
+
+
+def raw_address(full_name, branch, path):
+    """The address a file on a branch of a repository is served at."""
+    return "%s/%s/%s/%s" % (RAW_ADDRESS, full_name, urllib.parse.quote(branch, safe="/"),
+                            urllib.parse.quote(path, safe="/"))
+
+
+def metadata_from_paths(paths, full_name, default_branch):
+    """The "metadata" of a repository's entry, given the paths of the files on its default
+    branch: for each of LANGUAGES there is something for, the address of the long description,
+    when there is one, and the addresses of the phone screenshots. Both come from one folder."""
+    descriptions = {}
+    screenshots = {}
+    for path in paths:
+        if not path.startswith(METADATA_FOLDER):
+            continue
+        parts = path[len(METADATA_FOLDER):].split("/")
+        if parts[1:] == ["full_description.txt"]:
+            descriptions[parts[0]] = path
+        elif len(parts) == 4 and parts[1:3] == ["images", "phoneScreenshots"]:
+            screenshots.setdefault(parts[0], []).append(path)
+    shown = {locale: chosen_screenshots(found) for locale, found in screenshots.items()}
+    useful = set(descriptions) | {locale for locale, found in shown.items() if found}
+    metadata = {}
+    for language in LANGUAGES:
+        locale = preferred_locale(language, useful)
+        if locale is None:
+            continue
+        found = {}
+        if locale in descriptions:
+            found["description"] = raw_address(full_name, default_branch, descriptions[locale])
+        found["screenshots"] = [raw_address(full_name, default_branch, path) for path in shown.get(locale, [])]
+        metadata[language] = found
+    return metadata
+
+
+def fastlane_metadata(full_name, default_branch):
+    """The "metadata" of a repository's entry (see metadata_from_paths), from the list of the
+    files on its default branch, which takes one request. A list too long for GitHub to give
+    whole is read as far as it goes."""
+    try:
+        tree = api("/repos/%s/git/trees/%s?recursive=1" % (full_name, urllib.parse.quote(default_branch, safe="")))
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        return {}
+    paths = [item.get("path") or "" for item in tree.get("tree") or [] if item.get("type") == "blob"]
+    return metadata_from_paths(paths, full_name, default_branch)
+
+
+def app_metadata(repo, previous=None):
+    """The "metadata" of a repository's entry, or None when its default branch is not known,
+    so that the entry goes without and a later run looks it up. previous is the repository's
+    entry from an earlier run, whose metadata stands while the repository is not pushed to."""
+    if previous and "metadata" in previous and previous.get("pushedAt") == (repo.get("pushed_at") or ""):
+        return previous["metadata"]
+    if not repo.get("default_branch"):
+        return None
+    return fastlane_metadata(repo["full_name"], repo["default_branch"])
+
+
+def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None,
+              metadata_of=None):
     """Returns the index entry of a repository, or None when it has nothing to install.
 
     With not_before, a repository whose newest full release was published earlier than that
     is given up on at once, before any of its APKs are examined. With icons, an IconStore,
-    the icons of the apps are read and kept there.
+    the icons of the apps are read and kept there. With metadata_of, a function given the
+    repository such as app_metadata, what it returns is written under "metadata", unless None.
 
     The entry describes the newest full release. When the release at the top of the list is a
     prerelease that upgrades it, that is added under "beta" for users who have asked for beta
@@ -1553,6 +1648,9 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
     else:
         app.update(beta_info)
         app["betaOnly"] = True
+    metadata = metadata_of(repo) if metadata_of is not None else None
+    if metadata is not None:
+        app["metadata"] = metadata
     return app
 
 
@@ -1588,7 +1686,8 @@ def write_json(path, value, **options):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--previous", help="the previous index, to reuse what is known about unchanged APKs")
+    parser.add_argument("--previous", help="the previous index, to reuse what is known about unchanged "
+                                           "APKs and repositories")
     parser.add_argument("--previous-auto", help="the previous list of automatically found apps")
     parser.add_argument("--state", help="what earlier runs learnt about automatically found repositories; "
                                         "read if present and rewritten")
@@ -1624,7 +1723,8 @@ def main():
         full_name = repo["full_name"]
         previous = previous_apps.get(full_name)
         try:
-            app = build_app(repo, known_apks(previous), icons=icons)
+            app = build_app(repo, known_apks(previous), icons=icons,
+                            metadata_of=functools.partial(app_metadata, previous=previous))
         except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
             # Keep what was known rather than dropping an app over a passing error.
             print("%s: %s" % (full_name, error), file=sys.stderr)

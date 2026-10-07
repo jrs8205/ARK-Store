@@ -21,9 +21,10 @@ import os
 import shutil
 import sys
 import time
+import urllib.parse
 import urllib.request
 
-from build_index import guess_category, write_json
+from build_index import LANGUAGES, chosen_screenshots, guess_category, preferred_locale, write_json
 
 USER_AGENT = "ARK-Store-index"
 MAX_ENTRY = 1024 * 1024
@@ -188,6 +189,7 @@ def build_app(source, address, page, package, entry, anti_feature_names):
         "releaseUrl": page % package,
         "publishedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest.get("added", 0) / 1000)),
         "icon": icon_address(address, metadata.get("icon")),
+        "metadata": screenshot_metadata(address, metadata.get("screenshots")),
         # What the newest version is warned about, for versions of the store that do not look
         # at the file they picked.
         "antiFeatures": apks[0]["antiFeatures"],
@@ -201,6 +203,29 @@ def icon_address(address, icon):
     described = localized(icon)
     name = described.get("name") if isinstance(described, dict) else None
     return address + name if isinstance(name, str) and name.startswith("/") else None
+
+
+def screenshot_metadata(address, screenshots):
+    """The "metadata" of a package's entry, as build_index writes it for a repository on
+    GitHub, but with the phone screenshots alone: the catalogue keeps no long description in
+    a file of its own. It gives the screenshots by kind and locale, each file as {"name",
+    "sha256", "size"}."""
+    phone = screenshots.get("phone") if isinstance(screenshots, dict) else None
+    if not isinstance(phone, dict):
+        return {}
+    found = {}
+    for locale, files in phone.items():
+        names = [file.get("name") for file in files if isinstance(file, dict)] if isinstance(files, list) else []
+        chosen = chosen_screenshots([name for name in names if isinstance(name, str) and name.startswith("/")])
+        if chosen:
+            found[locale] = chosen
+    metadata = {}
+    for language in LANGUAGES:
+        locale = preferred_locale(language, found)
+        if locale is not None:
+            shown = [address + urllib.parse.quote(name, safe="/") for name in found[locale]]
+            metadata[language] = {"screenshots": shown}
+    return metadata
 
 
 def build_apk(address, package, label, version, anti_feature_names):
@@ -267,12 +292,14 @@ def build_catalogue(source, index, timestamp, now):
 def read_timestamp(path):
     """The catalogue timestamp a file written by an earlier run was built from, or None when
     the file is not one to carry on from: among other things, one written before the lists
-    told the apps' icons, which is built again whether the catalogue has changed or not."""
+    told the apps' icons or screenshots, which is built again whether the catalogue has
+    changed or not."""
     try:
         with open(path, encoding="utf-8") as file:
             loaded = json.load(file)
         apps = loaded.get("apps")
-        if loaded.get("version") != 1 or not apps or not all("icon" in app for app in apps):
+        if loaded.get("version") != 1 or not apps \
+                or not all("icon" in app and "metadata" in app for app in apps):
             return None
         return loaded["timestamp"]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
