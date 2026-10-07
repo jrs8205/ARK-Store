@@ -48,6 +48,24 @@ enum class FailReason { DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL }
 /** How an install that was waited for came out. */
 enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED }
 
+/**
+ * [states] with [repo] reserved for a download, or null when an install of it is already
+ * on its way. Applied in one update of the states, since the screen and the background
+ * check may ask for the same install at the same moment.
+ */
+internal fun reserved(states: Map<String, InstallState>, repo: String): Map<String, InstallState>? {
+    val state = states[repo]
+    if (state is InstallState.Downloading || state is InstallState.Installing) return null
+    return states + (repo to InstallState.Downloading(0f))
+}
+
+/**
+ * [states] without [repo]'s failure; [states] as they are when it has none, so that an
+ * install begun since the failure is left alone. Applied in one update, like [reserved].
+ */
+internal fun dismissed(states: Map<String, InstallState>, repo: String): Map<String, InstallState> =
+    if (states[repo] is InstallState.Failed) states - repo else states
+
 /** Downloads release APKs and hands them to the system package installer. */
 object InstallManager {
     private const val TAG = "InstallManager"
@@ -120,18 +138,13 @@ object InstallManager {
      * screen and the background check may ask for the same install at the same moment.
      */
     private fun reserve(repo: String): Boolean {
-        var reserved = false
+        var got = false
         _states.update { states ->
-            val state = states[repo]
-            if (state is InstallState.Downloading || state is InstallState.Installing) {
-                reserved = false
-                states
-            } else {
-                reserved = true
-                states + (repo to InstallState.Downloading(0f))
-            }
+            val next = reserved(states, repo)
+            got = next != null
+            next ?: states
         }
-        return reserved
+        return got
     }
 
     /**
@@ -268,9 +281,7 @@ object InstallManager {
         }
     }
 
-    fun dismissFailure(repo: String) {
-        if (_states.value[repo] is InstallState.Failed) setState(repo, null)
-    }
+    fun dismissFailure(repo: String) = _states.update { dismissed(it, repo) }
 
     /**
      * The system wants the user to confirm the install of [repo]. The store's screen asks
