@@ -264,7 +264,7 @@ class BuildAppTest(unittest.TestCase):
                                   return_value=("org.example", 4, "1.4", "Example", None, 26)):
             app = build_index.build_app(repo, {}, metadata_of=build_index.app_metadata)
             self.assertNotIn("metadata", build_index.build_app(repo, {}, metadata_of=lambda found: None))
-        self.assertEqual(app["metadata"], {"en": {"description": RAW + "en-US/full_description.txt",
+        self.assertEqual(app["metadata"], {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
                                                   "screenshots": []}})
 
     def test_entry_has_no_metadata_unless_asked_for_it(self):
@@ -1201,6 +1201,16 @@ class MetadataTest(unittest.TestCase):
         self.assertEqual(metadata["en"]["screenshots"],
                          [RAW + "en-US/images/phoneScreenshots/1%20main%20screen.png"])
 
+    def test_address_carries_the_push_as_a_stamp(self):
+        metadata = build_index.metadata_from_paths(
+            fastlane("en-US/full_description.txt", "en-US/images/phoneScreenshots/1.png"), "owner/app", "main",
+            stamp="20260101120000")
+        self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=20260101120000")
+        self.assertEqual(metadata["en"]["screenshots"], [RAW + "en-US/images/phoneScreenshots/1.png?at=20260101120000"])
+        self.assertEqual(build_index.stamp_of("2026-01-01T12:00:00Z"), "20260101120000")
+        self.assertIsNone(build_index.stamp_of(None))
+        self.assertIsNone(build_index.stamp_of(""))
+
     def test_nothing_to_show_is_empty(self):
         self.assertEqual(self.metadata("en-US/title.txt", "en-US/images/icon.png", "de-DE/full_description.txt"), {})
         elsewhere = ["metadata/en-US/full_description.txt", "app/fastlane/metadata/android/en-US/full_description.txt"]
@@ -1244,7 +1254,22 @@ class MetadataTest(unittest.TestCase):
             with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
                 metadata = build_index.app_metadata(dict(REPO, default_branch="main"), previous)
             api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
-            self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt")
+            self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=20260101000000")
+
+    def test_lookup_stamps_the_addresses_with_the_push(self):
+        with mock.patch.object(build_index, "api", return_value=self.TREE):
+            metadata = build_index.app_metadata(dict(REPO, default_branch="main"), None)
+        stamp = build_index.stamp_of(REPO["pushed_at"])
+        self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=" + stamp)
+
+    def test_lookup_that_fails_keeps_what_was_known_and_costs_the_entry_nothing(self):
+        failing = urllib.error.HTTPError("https://api.github.com/", 502, "Bad Gateway", {}, None)
+        pushed = dict(self.KNOWN, pushedAt="2025-12-01T00:00:00Z")
+        with mock.patch.object(build_index, "api", side_effect=failing):
+            self.assertEqual(build_index.app_metadata(dict(REPO, default_branch="main"), pushed), self.KNOWN["metadata"])
+            self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
+        with mock.patch.object(build_index, "api", side_effect=OSError("timed out")):
+            self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
 
     def test_repository_whose_branch_is_not_known_has_no_metadata_yet(self):
         with mock.patch.object(build_index, "api") as api:
@@ -1513,7 +1538,8 @@ class MainTest(unittest.TestCase):
         self.assertEqual(asked, ["/repos/owner/app/releases?per_page=100"])
         index, _ = self.run_main({"apps": [dict(known, pushedAt="2025-12-01T00:00:00Z")]}, **found)
         self.assertEqual(index["apps"][0]["metadata"],
-                         {"en": {"description": RAW + "en-US/full_description.txt", "screenshots": []}})
+                         {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
+                                 "screenshots": []}})
         self.assertEqual(asked[-1], "/repos/owner/app/git/trees/main?recursive=1")
 
     def test_previous_list_inside_an_old_index_is_still_used(self):

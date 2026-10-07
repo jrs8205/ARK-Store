@@ -108,10 +108,12 @@ class BuildAppTest(unittest.TestCase):
             with self.subTest(source=source):
                 app = build(package([version(1)], screenshots=screenshots), source)
                 shots = address + "/org.example/%s/phoneScreenshots/"
+                # The file's digest marks the address, so that a replaced file is fetched anew.
+                stamp = "?v=" + SHA[:12]
                 self.assertEqual(app["metadata"], {
-                    "en": {"screenshots": [shots % "en-US" + "2.png", shots % "en-US" + "10.png",
-                                           shots % "en-US" + "my%20shot.png"]},
-                    "fi": {"screenshots": [shots % "fi" + "1.jpg"]},
+                    "en": {"screenshots": [shots % "en-US" + "2.png" + stamp, shots % "en-US" + "10.png" + stamp,
+                                           shots % "en-US" + "my%20shot.png" + stamp]},
+                    "fi": {"screenshots": [shots % "fi" + "1.jpg" + stamp]},
                 })
 
     def test_screenshots_are_capped(self):
