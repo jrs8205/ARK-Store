@@ -31,7 +31,8 @@ class SourceStore(context: Context) {
     /** Adds those of [sources] not there yet, under whatever case, and returns how many. */
     fun addAll(sources: List<String>): Int {
         val current = list()
-        val added = sources.filter { source -> current.none { it.equals(source, ignoreCase = true) } }
+        val seen = current.mapTo(HashSet()) { it.lowercase() }
+        val added = sources.filter { seen.add(it.lowercase()) }
         if (added.isNotEmpty()) save(current + added)
         return added.size
     }

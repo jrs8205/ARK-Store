@@ -85,14 +85,14 @@ object InstallManager {
     }
 
     /**
-     * Downloads and installs [app]. From the [foreground], the download is kept going by a
+     * Downloads and installs [app], unless an install of it is already on its way; returns
+     * whether this one was begun. From the [foreground], the download is kept going by a
      * service if the user leaves the app; from the background, where no service may start,
      * the caller keeps the process alive instead.
      */
-    fun install(context: Context, app: StoreApp, foreground: Boolean = true) {
+    fun install(context: Context, app: StoreApp, foreground: Boolean = true): Boolean {
         val appContext = context.applicationContext
-        if (isBusy(app.fullName)) return
-        setState(app.fullName, InstallState.Downloading(0f))
+        if (!reserve(app.fullName)) return false
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 
@@ -112,6 +112,26 @@ object InstallManager {
                 _activeJobs.update { it - 1 }
             }
         }
+        return true
+    }
+
+    /**
+     * Marks [repo] as being downloaded, unless it is already on its way, in one step: the
+     * screen and the background check may ask for the same install at the same moment.
+     */
+    private fun reserve(repo: String): Boolean {
+        var reserved = false
+        _states.update { states ->
+            val state = states[repo]
+            if (state is InstallState.Downloading || state is InstallState.Installing) {
+                reserved = false
+                states
+            } else {
+                reserved = true
+                states + (repo to InstallState.Downloading(0f))
+            }
+        }
+        return reserved
     }
 
     /**

@@ -2054,7 +2054,7 @@ internal const val PREF_HIDE_TOP = "hide_top"
 private val MIN_LIST_ROOM = 200.dp
 
 /** The order of apps within each section of the list. */
-private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
+internal enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
     NAME(R.string.sort_name, compareBy { it.app.title.lowercase() }),
     DOWNLOADS(
         R.string.sort_downloads,

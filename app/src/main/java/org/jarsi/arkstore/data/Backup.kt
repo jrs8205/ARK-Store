@@ -93,6 +93,10 @@ data class Backup(val sources: List<String>, val bookmarks: Set<String>, val set
         /** The most bytes a file is read for: a backup is a few kilobytes. */
         const val MAX_BYTES = 1024 * 1024
 
+        /** The most sources and bookmarks taken from a file; a device has far fewer. */
+        const val MAX_SOURCES = 1000
+        const val MAX_BOOKMARKS = 10_000
+
         private const val MAX_KEY_LENGTH = 255
 
         /**
@@ -107,22 +111,19 @@ data class Backup(val sources: List<String>, val bookmarks: Set<String>, val set
                 return null
             }
             if (json.optString("app") != APP || json.optInt("version", Int.MAX_VALUE) > VERSION) return null
-            val sources = strings(json.optJSONArray("sources"))
-                .mapNotNull { SourceStore.parse(it) }
-                .let { mergedSources(emptyList(), it) }
+            val sources = mergedSources(emptyList(), strings(json.optJSONArray("sources")).mapNotNull { SourceStore.parse(it) })
+                .take(MAX_SOURCES)
             val bookmarks = strings(json.optJSONArray("bookmarks"))
                 .filter { it.isNotBlank() && it.length <= MAX_KEY_LENGTH }
+                .take(MAX_BOOKMARKS)
                 .toSet()
             return Backup(sources, bookmarks, Settings.fromJson(json.optJSONObject("settings")))
         }
 
         /** [current] with those of [imported] not yet among them, under whatever case, after them. */
         fun mergedSources(current: List<String>, imported: List<String>): List<String> {
-            val merged = current.toMutableList()
-            for (source in imported) {
-                if (merged.none { it.equals(source, ignoreCase = true) }) merged += source
-            }
-            return merged
+            val seen = current.mapTo(HashSet()) { it.lowercase() }
+            return current + imported.filter { seen.add(it.lowercase()) }
         }
 
         private fun strings(array: JSONArray?): List<String> =

@@ -68,6 +68,17 @@ class BackupTest {
     }
 
     @Test
+    fun aFileIsReadForOnlySoManySourcesAndBookmarks() {
+        val json = backup.toJson()
+            .put("sources", List(Backup.MAX_SOURCES + 500) { "owner$it" })
+            .put("bookmarks", List(Backup.MAX_BOOKMARKS + 500) { "org.example.app$it" })
+        val read = Backup.fromJson(json.toString())!!
+        assertEquals(Backup.MAX_SOURCES, read.sources.size)
+        assertEquals("owner0", read.sources.first())
+        assertEquals(Backup.MAX_BOOKMARKS, read.bookmarks.size)
+    }
+
+    @Test
     fun importedSourcesJoinTheCurrentOnesWithoutDoubling() {
         assertEquals(
             listOf("jrs8205", "alice/app", "bob/tool"),

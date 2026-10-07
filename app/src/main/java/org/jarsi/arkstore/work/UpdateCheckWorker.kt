@@ -133,6 +133,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         for (app in toTry(owned, failed)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
+            // The user may have turned the switch off, or left the Wi-Fi, during the last one.
+            if (!AutoUpdate.read(context).allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) break
             when (InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))) {
                 Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
                 Outcome.FAILED -> {

@@ -289,32 +289,38 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** What a file held: nothing readable, text that is no backup, or a backup. */
+    private class Read(val readable: Boolean, val backup: Backup?)
+
     /** Reads a file written by [exportTo] and takes in what it holds, see [take]. */
     fun importFrom(uri: Uri) {
         _transfer.value = TransferUiState(busy = true)
         viewModelScope.launch {
-            val text = try {
+            val read = try {
+                // Read and taken apart off the main thread: a file within the limit can still
+                // name tens of thousands of sources.
                 withContext(Dispatchers.IO) {
-                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                    val text = getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
                         // One byte past the limit tells a file too large from one just at it.
                         val bytes = ByteArray(Backup.MAX_BYTES + 1)
-                        var read = 0
-                        while (read < bytes.size) {
-                            val n = input.read(bytes, read, bytes.size - read)
+                        var count = 0
+                        while (count < bytes.size) {
+                            val n = input.read(bytes, count, bytes.size - count)
                             if (n < 0) break
-                            read += n
+                            count += n
                         }
-                        if (read > Backup.MAX_BYTES) null else String(bytes, 0, read, Charsets.UTF_8)
+                        if (count > Backup.MAX_BYTES) null else String(bytes, 0, count, Charsets.UTF_8)
                     }
+                    Read(text != null, text?.let { Backup.fromJson(it) })
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.w(TAG, "Could not import", e)
-                null
+                Read(false, null)
             }
-            val backup = text?.let { Backup.fromJson(it) }
+            val backup = read.backup
             _transfer.value = when {
-                text == null -> TransferUiState(error = TransferError.FAILED)
+                !read.readable -> TransferUiState(error = TransferError.FAILED)
                 backup == null -> TransferUiState(error = TransferError.NOT_A_BACKUP)
                 else -> TransferUiState(imported = take(backup))
             }
@@ -339,7 +345,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                 black = ui.getBoolean(PREF_BLACK, false),
                 material = ui.getBoolean(PREF_MATERIAL, true),
                 hideTop = ui.getBoolean(PREF_HIDE_TOP, true),
-                sort = ui.getString(PREF_SORT, null),
+                sort = ui.getString(PREF_SORT, null) ?: SortOrder.NAME.name,
                 autoUpdate = AutoUpdate.read(context)
             )
         )
