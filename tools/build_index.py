@@ -1516,16 +1516,26 @@ def chosen_screenshots(paths):
     return sorted(images, key=natural_order)[:MAX_SCREENSHOTS]
 
 
-def raw_address(full_name, branch, path):
-    """The address a file on a branch of a repository is served at."""
-    return "%s/%s/%s/%s" % (RAW_ADDRESS, full_name, urllib.parse.quote(branch, safe="/"),
-                            urllib.parse.quote(path, safe="/"))
+def stamp_of(pushed_at):
+    """The digits of a push's time, to mark an address with, or None for no time."""
+    digits = re.sub(r"\D", "", pushed_at or "")
+    return digits or None
 
 
-def metadata_from_paths(paths, full_name, default_branch):
+def raw_address(full_name, branch, path, stamp=None):
+    """The address a file on a branch of a repository is served at. The address names the
+    branch, so it would stay the same when the file changed and a copy kept by it would never
+    be fetched again; with a stamp, the push the file was last seen at, it changes with it."""
+    address = "%s/%s/%s/%s" % (RAW_ADDRESS, full_name, urllib.parse.quote(branch, safe="/"),
+                               urllib.parse.quote(path, safe="/"))
+    return address + "?at=" + stamp if stamp else address
+
+
+def metadata_from_paths(paths, full_name, default_branch, stamp=None):
     """The "metadata" of a repository's entry, given the paths of the files on its default
     branch: for each of LANGUAGES there is something for, the address of the long description,
-    when there is one, and the addresses of the phone screenshots. Both come from one folder."""
+    when there is one, and the addresses of the phone screenshots. Both come from one folder.
+    The addresses carry the stamp, see raw_address."""
     descriptions = {}
     screenshots = {}
     for path in paths:
@@ -1545,13 +1555,13 @@ def metadata_from_paths(paths, full_name, default_branch):
             continue
         found = {}
         if locale in descriptions:
-            found["description"] = raw_address(full_name, default_branch, descriptions[locale])
-        found["screenshots"] = [raw_address(full_name, default_branch, path) for path in shown.get(locale, [])]
+            found["description"] = raw_address(full_name, default_branch, descriptions[locale], stamp)
+        found["screenshots"] = [raw_address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
         metadata[language] = found
     return metadata
 
 
-def fastlane_metadata(full_name, default_branch):
+def fastlane_metadata(full_name, default_branch, stamp=None):
     """The "metadata" of a repository's entry (see metadata_from_paths), from the list of the
     files on its default branch, which takes one request. A list too long for GitHub to give
     whole is read as far as it goes."""
@@ -1562,18 +1572,25 @@ def fastlane_metadata(full_name, default_branch):
             raise
         return {}
     paths = [item.get("path") or "" for item in tree.get("tree") or [] if item.get("type") == "blob"]
-    return metadata_from_paths(paths, full_name, default_branch)
+    return metadata_from_paths(paths, full_name, default_branch, stamp)
 
 
 def app_metadata(repo, previous=None):
     """The "metadata" of a repository's entry, or None when its default branch is not known,
     so that the entry goes without and a later run looks it up. previous is the repository's
-    entry from an earlier run, whose metadata stands while the repository is not pushed to."""
-    if previous and "metadata" in previous and previous.get("pushedAt") == (repo.get("pushed_at") or ""):
-        return previous["metadata"]
+    entry from an earlier run, whose metadata stands while the repository is not pushed to,
+    and while a lookup fails: the metadata is an extra, and a passing error must not cost the
+    entry its release."""
+    known = previous.get("metadata") if previous and "metadata" in previous else None
+    if previous and known is not None and previous.get("pushedAt") == (repo.get("pushed_at") or ""):
+        return known
     if not repo.get("default_branch"):
         return None
-    return fastlane_metadata(repo["full_name"], repo["default_branch"])
+    try:
+        return fastlane_metadata(repo["full_name"], repo["default_branch"], stamp_of(repo.get("pushed_at")))
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        print("%s: metadata not read: %s" % (repo["full_name"], error), file=sys.stderr)
+        return known
 
 
 def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None,

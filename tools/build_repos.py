@@ -214,16 +214,25 @@ def screenshot_metadata(address, screenshots):
     if not isinstance(phone, dict):
         return {}
     found = {}
+    digests = {}
     for locale, files in phone.items():
-        names = [file.get("name") for file in files if isinstance(file, dict)] if isinstance(files, list) else []
-        chosen = chosen_screenshots([name for name in names if isinstance(name, str) and name.startswith("/")])
+        names = []
+        for file in files if isinstance(files, list) else []:
+            name = file.get("name") if isinstance(file, dict) else None
+            if isinstance(name, str) and name.startswith("/"):
+                names.append(name)
+                if isinstance(file.get("sha256"), str):
+                    digests[name] = file["sha256"]
+        chosen = chosen_screenshots(names)
         if chosen:
             found[locale] = chosen
     metadata = {}
     for language in LANGUAGES:
         locale = preferred_locale(language, found)
         if locale is not None:
-            shown = [address + urllib.parse.quote(name, safe="/") for name in found[locale]]
+            # The digest marks the address, so that a replaced file is fetched anew.
+            shown = [address + urllib.parse.quote(name, safe="/") + ("?v=" + digests[name][:12] if name in digests else "")
+                     for name in found[locale]]
             metadata[language] = {"screenshots": shown}
     return metadata
 
