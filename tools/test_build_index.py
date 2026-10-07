@@ -266,6 +266,7 @@ class BuildAppTest(unittest.TestCase):
             self.assertNotIn("metadata", build_index.build_app(repo, {}, metadata_of=lambda found: None))
         self.assertEqual(app["metadata"], {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
                                                   "screenshots": []}})
+        self.assertEqual(app["metadataAt"], REPO["pushed_at"])
 
     def test_entry_has_no_metadata_unless_asked_for_it(self):
         repo = dict(REPO, default_branch="main")
@@ -1239,37 +1240,41 @@ class MetadataTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError):
                 build_index.fastlane_metadata("owner/app", "main")
 
-    KNOWN = {"fullName": "owner/app", "pushedAt": REPO["pushed_at"],
+    KNOWN = {"fullName": "owner/app", "pushedAt": REPO["pushed_at"], "metadataAt": REPO["pushed_at"],
              "metadata": {"en": {"screenshots": ["https://x/1.png"]}}}
+    STAMPED = RAW + "en-US/full_description.txt?at=20260101000000"
 
     def test_metadata_stands_while_the_repository_is_not_pushed_to(self):
         with mock.patch.object(build_index, "api") as api:
-            metadata = build_index.app_metadata(dict(REPO, default_branch="main"), self.KNOWN)
+            fields = build_index.app_metadata(dict(REPO, default_branch="main"), self.KNOWN)
         api.assert_not_called()
-        self.assertEqual(metadata, self.KNOWN["metadata"])
+        self.assertEqual(fields, {"metadata": self.KNOWN["metadata"], "metadataAt": REPO["pushed_at"]})
 
     def test_metadata_is_looked_up_after_a_push_or_when_not_known(self):
-        unknown = {key: value for key, value in self.KNOWN.items() if key != "metadata"}
-        for previous in (dict(self.KNOWN, pushedAt="2025-12-01T00:00:00Z"), unknown, None):
+        unknown = {key: value for key, value in self.KNOWN.items() if key not in ("metadata", "metadataAt")}
+        old = "2025-12-01T00:00:00Z"
+        for previous in (dict(self.KNOWN, pushedAt=old, metadataAt=old), dict(self.KNOWN, metadataAt=old), unknown, None):
             with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
-                metadata = build_index.app_metadata(dict(REPO, default_branch="main"), previous)
+                fields = build_index.app_metadata(dict(REPO, default_branch="main"), previous)
             api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
-            self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=20260101000000")
+            self.assertEqual(fields["metadata"]["en"]["description"], self.STAMPED)
+            self.assertEqual(fields["metadataAt"], REPO["pushed_at"])
 
-    def test_lookup_stamps_the_addresses_with_the_push(self):
-        with mock.patch.object(build_index, "api", return_value=self.TREE):
-            metadata = build_index.app_metadata(dict(REPO, default_branch="main"), None)
-        stamp = build_index.stamp_of(REPO["pushed_at"])
-        self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=" + stamp)
-
-    def test_lookup_that_fails_keeps_what_was_known_and_costs_the_entry_nothing(self):
+    def test_lookup_that_fails_keeps_what_was_known_and_looks_again_next_time(self):
         failing = urllib.error.HTTPError("https://api.github.com/", 502, "Bad Gateway", {}, None)
-        pushed = dict(self.KNOWN, pushedAt="2025-12-01T00:00:00Z")
+        old = "2025-12-01T00:00:00Z"
+        pushed = dict(self.KNOWN, pushedAt=old, metadataAt=old)
         with mock.patch.object(build_index, "api", side_effect=failing):
-            self.assertEqual(build_index.app_metadata(dict(REPO, default_branch="main"), pushed), self.KNOWN["metadata"])
+            # The old mark stays, so that the next run looks the tree up again.
+            self.assertEqual(build_index.app_metadata(dict(REPO, default_branch="main"), pushed),
+                             {"metadata": self.KNOWN["metadata"], "metadataAt": old})
             self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
         with mock.patch.object(build_index, "api", side_effect=OSError("timed out")):
             self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
+        with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
+            fields = build_index.app_metadata(dict(REPO, default_branch="main"), pushed)
+        api.assert_called_once()
+        self.assertEqual(fields["metadataAt"], REPO["pushed_at"])
 
     def test_repository_whose_branch_is_not_known_has_no_metadata_yet(self):
         with mock.patch.object(build_index, "api") as api:
@@ -1389,12 +1394,13 @@ class AutoAppsTest(unittest.TestCase):
 
     def test_metadata_of_an_examined_app_stands_while_it_is_not_pushed_to(self):
         metadata = {"en": {"screenshots": ["https://x/1.png"]}}
-        previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadata=metadata)}
+        previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadataAt=self.PUSHED, metadata=metadata)}
         _, _, build_app = self.run_auto(
             [self.candidate()], [self.entry()], previous=previous, state={"other/app": self.examined(0)})
         metadata_of = build_app.call_args.kwargs["metadata_of"]
         with mock.patch.object(build_index, "api") as api:
-            self.assertEqual(metadata_of(dict(self.candidate(), default_branch="main")), metadata)
+            self.assertEqual(metadata_of(dict(self.candidate(), default_branch="main")),
+                             {"metadata": metadata, "metadataAt": self.PUSHED})
         api.assert_not_called()
 
     def test_prereleases_are_not_looked_at(self):
@@ -1530,13 +1536,15 @@ class MainTest(unittest.TestCase):
                 return {"tree": [{"path": "fastlane/metadata/android/en-US/full_description.txt", "type": "blob"}]}
             return release(asset_id=8)
 
-        known = dict(self.KNOWN, pushedAt=REPO["pushed_at"], metadata={"en": {"screenshots": ["https://x/1.png"]}})
+        known = dict(self.KNOWN, pushedAt=REPO["pushed_at"], metadataAt=REPO["pushed_at"],
+                     metadata={"en": {"screenshots": ["https://x/1.png"]}})
         found = {"repo": dict(REPO, default_branch="main"), "api": api,
                  "manifest": ("org.example", 4, "1.4", "Example", None, 26)}
         index, _ = self.run_main({"apps": [known]}, **found)
         self.assertEqual(index["apps"][0]["metadata"], known["metadata"])
         self.assertEqual(asked, ["/repos/owner/app/releases?per_page=100"])
-        index, _ = self.run_main({"apps": [dict(known, pushedAt="2025-12-01T00:00:00Z")]}, **found)
+        old = "2025-12-01T00:00:00Z"
+        index, _ = self.run_main({"apps": [dict(known, pushedAt=old, metadataAt=old)]}, **found)
         self.assertEqual(index["apps"][0]["metadata"],
                          {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
                                  "screenshots": []}})
