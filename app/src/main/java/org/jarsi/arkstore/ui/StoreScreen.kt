@@ -121,6 +121,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -706,6 +707,7 @@ private fun ErrorBanner(error: LoadError) {
                 when (error) {
                     LoadError.NETWORK -> R.string.error_network
                     LoadError.RATE_LIMIT -> R.string.error_rate_limit
+                    LoadError.TOKEN -> R.string.error_token
                 }
             ),
             style = MaterialTheme.typography.bodyLarge,
@@ -1483,6 +1485,7 @@ private fun SettingsSheet(
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
+        GitHubSettings(viewModel)
         ThemePicker(
             heading = stringResource(R.string.appearance_title),
             palette = palette,
@@ -1525,6 +1528,104 @@ private fun SettingsSheet(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 24.dp)
         )
+    }
+}
+
+/**
+ * The personal access token for GitHub, see [GitHubToken]: typed and checked with GitHub
+ * before it is kept, and shown only as whether one is held and what it allows.
+ */
+@Composable
+private fun GitHubSettings(viewModel: StoreViewModel) {
+    val state by viewModel.token.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    var input by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(state.present) {
+        if (state.present) input = ""
+    }
+    Text(
+        text = stringResource(R.string.github_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(R.string.github_token_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+    Text(
+        text = if (state.present) {
+            val limit = state.limit
+            if (limit != null) {
+                stringResource(R.string.github_token_saved, fullNumber(limit.toLong()))
+            } else {
+                stringResource(R.string.github_token_saved_unknown)
+            }
+        } else {
+            stringResource(R.string.github_token_none)
+        },
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    if (state.present) {
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                viewModel.removeToken()
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(stringResource(R.string.action_remove_token))
+        }
+        return
+    }
+    OutlinedTextField(
+        value = input,
+        onValueChange = {
+            input = it
+            viewModel.clearTokenError()
+        },
+        enabled = !state.checking,
+        label = { Text(stringResource(R.string.github_token_hint)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        isError = state.error != null,
+        supportingText = state.error?.let { error ->
+            {
+                Text(
+                    stringResource(
+                        when (error) {
+                            TokenError.REJECTED -> R.string.github_token_rejected
+                            TokenError.NETWORK -> R.string.error_network
+                            TokenError.RATE_LIMIT -> R.string.error_rate_limit
+                        }
+                    )
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done
+        ),
+        keyboardActions = KeyboardActions(onDone = { viewModel.saveToken(input) }),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    )
+    Button(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            viewModel.saveToken(input)
+        },
+        enabled = input.isNotBlank() && !state.checking,
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        Text(stringResource(R.string.action_save_token))
     }
 }
 
@@ -1830,6 +1931,7 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
                                 SourceError.NOT_OPEN -> R.string.sources_error_not_open
                                 SourceError.NETWORK -> R.string.error_network
                                 SourceError.RATE_LIMIT -> R.string.error_rate_limit
+                                SourceError.TOKEN -> R.string.error_token
                             }
                         )
                     )

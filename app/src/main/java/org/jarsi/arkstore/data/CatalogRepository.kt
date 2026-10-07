@@ -765,6 +765,16 @@ class CatalogRepository private constructor(context: Context) {
         )
     }
 
+    /**
+     * Asks GitHub what [token] is good for and returns the hourly limit of requests it
+     * allows. A token GitHub does not know fails with a 401.
+     */
+    @Throws(IOException::class)
+    suspend fun checkToken(token: String): Int = withContext(Dispatchers.IO) {
+        // The limit itself is asked for, which costs nothing of it.
+        GitHubToken.limitOf(Http.getApi("$API/rate_limit", token)) ?: throw IOException("No limit told")
+    }
+
     /** Repositories whose developers have tagged them with the store topic. */
     private fun discoverRepositories(): List<JSONObject> {
         val repos = ArrayList<JSONObject>()

@@ -222,4 +222,14 @@
     <string name="auto_update_unmetered_description">Not on mobile data or another metered network</string>
     <string name="auto_update_charging_switch">Only while charging</string>
     <string name="auto_update_charging_description">Waits until the device is plugged in</string>
+    <string name="error_token">GitHub rejected the token given in the settings. Replace or remove it there.</string>
+    <string name="github_title">GitHub</string>
+    <string name="github_token_description">Without a token GitHub allows 60 requests an hour from the whole network, which a long list of sources can use up; a personal access token allows 5,000. Create a fine-grained token with no permissions at github.com/settings/personal-access-tokens: public repositories can be read without any. The token stays on this device, outside backups and exports, and goes to GitHub alone.</string>
+    <string name="github_token_hint">Personal access token</string>
+    <string name="github_token_none">No token.</string>
+    <string name="github_token_saved">Token in use: %1$s requests an hour.</string>
+    <string name="github_token_saved_unknown">Token in use.</string>
+    <string name="github_token_rejected">GitHub does not accept this token.</string>
+    <string name="action_save_token">Save token</string>
+    <string name="action_remove_token">Remove token</string>
 </resources>

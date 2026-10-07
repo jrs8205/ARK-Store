@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -17,6 +18,7 @@ import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
+import org.jarsi.arkstore.data.GitHubToken
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
@@ -52,9 +54,20 @@ data class AppRow(
             (installed!!.beta || (betaVersion != null && installed.versionCode <= betaVersion))
 }
 
-enum class LoadError { NETWORK, RATE_LIMIT }
+enum class LoadError { NETWORK, RATE_LIMIT, TOKEN }
 
-enum class SourceError { INVALID, DUPLICATE, NOT_FOUND, NOT_OPEN, NETWORK, RATE_LIMIT }
+enum class SourceError { INVALID, DUPLICATE, NOT_FOUND, NOT_OPEN, NETWORK, RATE_LIMIT, TOKEN }
+
+enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
+
+/** Whether a GitHub token is held, and what came of the last one offered. */
+data class TokenUiState(
+    val present: Boolean = false,
+    /** The hourly limit of requests the token allows, when known. */
+    val limit: Int? = null,
+    val checking: Boolean = false,
+    val error: TokenError? = null
+)
 
 data class SourcesUiState(
     val sources: List<String> = emptyList(),
@@ -160,7 +173,11 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             } catch (_: RateLimitedException) {
                 SourceError.RATE_LIMIT
             } catch (e: HttpStatusException) {
-                if (e.code == 404) SourceError.NOT_FOUND else SourceError.NETWORK
+                when (e.code) {
+                    404 -> SourceError.NOT_FOUND
+                    401 -> SourceError.TOKEN
+                    else -> SourceError.NETWORK
+                }
             } catch (_: IOException) {
                 SourceError.NETWORK
             }
@@ -184,6 +201,47 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearSourceError() = _sources.update { it.copy(error = null) }
 
+    private val _token = MutableStateFlow(
+        TokenUiState(present = GitHubToken.get() != null, limit = GitHubToken.limit(application))
+    )
+    val token: StateFlow<TokenUiState> = _token.asStateFlow()
+
+    /** Keeps the token the user typed once GitHub says it is good, and tells what it allows. */
+    fun saveToken(text: String) {
+        val token = GitHubToken.tidy(text)
+        if (token == null) {
+            _token.update { it.copy(error = TokenError.REJECTED) }
+            return
+        }
+        _token.update { it.copy(checking = true, error = null) }
+        viewModelScope.launch {
+            val failure = try {
+                GitHubToken.set(getApplication(), token, repository.checkToken(token))
+                null
+            } catch (_: RateLimitedException) {
+                TokenError.RATE_LIMIT
+            } catch (e: HttpStatusException) {
+                if (e.code == 401) TokenError.REJECTED else TokenError.NETWORK
+            } catch (_: IOException) {
+                TokenError.NETWORK
+            }
+            _token.value = TokenUiState(
+                present = GitHubToken.get() != null,
+                limit = GitHubToken.limit(getApplication()),
+                error = failure
+            )
+            // What the network refused a moment ago may go through now.
+            if (failure == null) refresh()
+        }
+    }
+
+    fun removeToken() {
+        GitHubToken.clear(getApplication())
+        _token.value = TokenUiState()
+    }
+
+    fun clearTokenError() = _token.update { it.copy(error = null) }
+
     /**
      * Refreshes the catalogue. A request made while a refresh is running is not dropped: the
      * running one may have started before a change it should cover (a newly added source), so
@@ -204,6 +262,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                         error.value = null
                     } catch (_: RateLimitedException) {
                         error.value = LoadError.RATE_LIMIT
+                    } catch (e: HttpStatusException) {
+                        error.value = if (e.code == 401) LoadError.TOKEN else LoadError.NETWORK
                     } catch (_: IOException) {
                         error.value = LoadError.NETWORK
                     }

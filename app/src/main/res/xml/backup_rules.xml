@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Backups before Android 12. The GitHub token stays on the device it was given to. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="github.xml" />
+</full-backup-content>
