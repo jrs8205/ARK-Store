@@ -224,9 +224,9 @@
     <string name="auto_update_charging_description">Waits until the device is plugged in</string>
     <string name="error_token">GitHub rejected the token given in the settings. Replace or remove it there.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Without a token GitHub allows 60 requests an hour from the whole network, which a long list of sources can use up; a personal access token allows 5,000. Create a fine-grained token with no permissions at github.com/settings/personal-access-tokens: public repositories can be read without any. The token stays on this device, outside backups and exports, and goes to GitHub alone.</string>
+    <string name="github_token_description">Only needed if you add sources: the store reads the accounts and repositories you have added straight from GitHub, and without a token GitHub lets a network do that 60 times an hour. If the list stops refreshing with a note that GitHub is limiting requests, a token lifts the limit. Create a fine-grained personal access token with no permissions at github.com/settings/personal-access-tokens; public repositories can be read without any. The token stays on this device, outside backups and exports, and goes to GitHub alone.</string>
     <string name="github_token_hint">Personal access token</string>
-    <string name="github_token_none">No token.</string>
+    <string name="github_token_none">No token. Most people need none.</string>
     <string name="github_token_saved">Token in use: %1$s requests an hour.</string>
     <string name="github_token_saved_unknown">Token in use.</string>
     <string name="github_token_rejected">GitHub does not accept this token.</string>

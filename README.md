@@ -61,7 +61,9 @@ the repository is public, has a recognised license and that its latest full rele
 
 Under **Sources** in the app, anyone can type a GitHub user name or paste a link to a profile
 or a repository. That account's apps, or that one app, are then listed on that device, under
-the same two requirements. Useful for trying your own app before adding the topic, or for
+the same two requirements. A source is read from GitHub directly on every refresh, which
+GitHub allows 60 times an hour per network without a token; the store's own list costs
+nothing. Useful for trying your own app before adding the topic, or for
 following a developer who has not added it.
 
 ### Optional extras
@@ -114,8 +116,10 @@ following a developer who has not added it.
   GitLab, and the IzzyOnDroid and F-Droid catalogues. An app offered by several places is
   listed once.
 - No account. The app talks to GitHub and, for files, to Codeberg, GitLab, IzzyOnDroid and
-  F-Droid. A GitHub token given in the settings raises GitHub's limit of requests from 60 an
-  hour to 5,000; it stays on the device, outside backups, and goes to GitHub alone.
+  F-Droid. The list itself comes from the store's index, so the app asks GitHub for nothing
+  unless you add sources; those are read from GitHub directly, 60 times an hour per network
+  without a token. A GitHub token given in the settings lifts that limit; it stays on the
+  device, outside backups, and goes to GitHub alone.
 - The sources, bookmarks and settings can be exported to a file and imported on another
   device.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),

@@ -209,9 +209,9 @@
     <string name="auto_update_charging_description">Odottaa, kunnes laite on latauksessa</string>
     <string name="error_token">GitHub hylkäsi asetuksissa annetun tunnisteen. Vaihda tai poista se asetuksista.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Ilman tunnistetta GitHub sallii 60 pyyntöä tunnissa koko verkosta, minkä pitkä lähdelista voi käyttää loppuun; henkilökohtainen tunniste sallii 5 000. Luo osoitteessa github.com/settings/personal-access-tokens hienojakoinen tunniste ilman oikeuksia: julkiset repot voi lukea ilman niitä. Tunniste pysyy tällä laitteella, varmuuskopioiden ja viennin ulkopuolella, ja lähetetään vain GitHubille.</string>
+    <string name="github_token_description">Tarvitaan vain, jos lisäät lähteitä: kauppa hakee lisäämäsi tilit ja repot suoraan GitHubista, ja ilman tunnistetta GitHub sallii sen samasta verkosta 60 kertaa tunnissa. Jos lista lakkaa päivittymästä ja kauppa kertoo GitHubin rajoittavan pyyntöjä, tunniste poistaa rajan. Luo osoitteessa github.com/settings/personal-access-tokens hienojakoinen henkilökohtainen tunniste ilman oikeuksia; julkiset repot voi lukea ilman niitä. Tunniste pysyy tällä laitteella, varmuuskopioiden ja viennin ulkopuolella, ja lähetetään vain GitHubille.</string>
     <string name="github_token_hint">Henkilökohtainen tunniste</string>
-    <string name="github_token_none">Ei tunnistetta.</string>
+    <string name="github_token_none">Ei tunnistetta. Useimmat eivät tarvitse sitä.</string>
     <string name="github_token_saved">Tunniste käytössä: %1$s pyyntöä tunnissa.</string>
     <string name="github_token_saved_unknown">Tunniste käytössä.</string>
     <string name="github_token_rejected">GitHub ei hyväksy tätä tunnistetta.</string>

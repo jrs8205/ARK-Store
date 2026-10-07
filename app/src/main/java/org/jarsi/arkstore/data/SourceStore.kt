@@ -2,20 +2,21 @@ package org.jarsi.arkstore.data
 
 import android.content.Context
 import androidx.core.content.edit
-import org.jarsi.arkstore.BuildConfig
 import org.json.JSONArray
 
 /**
- * The GitHub accounts and repositories that make up the catalogue. A source is either an
- * account ("owner"), which contributes all of its public repositories, or a single repository
- * ("owner/repo").
+ * The GitHub accounts and repositories the user has added to the catalogue, beside what the
+ * index publishes. A source is either an account ("owner"), which contributes all of its
+ * public repositories, or a single repository ("owner/repo"). There is none to begin with:
+ * the store's own apps come from the index like everyone else's, and each source costs
+ * requests to GitHub, of which a network gets 60 an hour without a token.
  */
 class SourceStore(context: Context) {
 
     private val prefs = context.applicationContext.getSharedPreferences("sources", Context.MODE_PRIVATE)
 
     fun list(): List<String> {
-        val stored = prefs.getString(KEY, null) ?: return listOf(BuildConfig.GITHUB_OWNER)
+        val stored = prefs.getString(KEY, null) ?: return emptyList()
         val array = JSONArray(stored)
         return List(array.length()) { array.getString(it) }
     }
