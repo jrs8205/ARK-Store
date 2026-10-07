@@ -73,6 +73,9 @@ following a developer who has not added it.
   `launcher`, `keyboard`, `dialer` and `weather` are recognised; the rest goes under Other.
 - **Description**: the repository's description is shown on the card, the release notes in
   the details.
+- **Screenshots and a longer description**: the `fastlane/metadata/android/<locale>/` folder
+  that F-Droid reads, with `full_description.txt` and `images/phoneScreenshots/`, is shown in
+  the details. English and Finnish are read; nothing more is needed.
 - **Several APKs**: keep the architecture (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` or
   `universal`) in the file name and each device gets the right one.
 
@@ -101,14 +104,20 @@ following a developer who has not added it.
   Android version the app needs. An installed app whose newest version needs a newer Android
   than the device has stays in the list, with a note; one not installed is left out.
 - Stars and download counts from GitHub.
+- Screenshots and a longer description in the details, when the developer publishes them.
 - Refresh on open, a background check every four hours and a notification for new versions.
+  On Android 12 and later the check can also install the updates of the apps the store
+  itself installed, without asking, only on Wi-Fi or only while charging if you like.
 - A warning before installing over an app signed with a different key.
 - Beta versions on request.
 - More apps with switches in the settings: apps found by searching GitHub, Codeberg and
   GitLab, and the IzzyOnDroid and F-Droid catalogues. An app offered by several places is
   listed once.
 - No account. The app talks to GitHub and, for files, to Codeberg, GitLab, IzzyOnDroid and
-  F-Droid.
+  F-Droid. A GitHub token given in the settings raises GitHub's limit of requests from 60 an
+  hour to 5,000; it stays on the device, outside backups, and goes to GitHub alone.
+- The sources, bookmarks and settings can be exported to a file and imported on another
+  device.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),
   haptics that follow the system setting.
 - English and Finnish.
