@@ -1072,6 +1072,9 @@ class CatalogRepository private constructor(context: Context) {
 
     companion object {
         private const val TAG = "CatalogRepository"
+        /** The source names of the other catalogues, see [setCatalogue]. */
+        val CATALOGUE_NAMES: Set<String> get() = CATALOGUES.keys
+
         private const val PREF_BETA = "include_beta"
         private const val PREF_AUTO = "include_auto"
         private const val PREF_INDEX_ETAG = "index_etag"

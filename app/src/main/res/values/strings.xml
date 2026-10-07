@@ -232,4 +232,12 @@
     <string name="github_token_rejected">GitHub does not accept this token.</string>
     <string name="action_save_token">Save token</string>
     <string name="action_remove_token">Remove token</string>
+    <string name="transfer_title">Export and import</string>
+    <string name="transfer_description">Save the sources, the bookmarks and the settings to a file, and bring them back from one, here or on another device. The GitHub token is not included. Importing adds the file\'s sources and bookmarks to those here and applies its settings.</string>
+    <string name="action_export">Export</string>
+    <string name="action_import">Import</string>
+    <string name="transfer_exported">Saved.</string>
+    <string name="transfer_imported">Imported: %1$d new sources and %2$d new bookmarks. The settings were applied.</string>
+    <string name="transfer_not_backup">This is not a file exported by ARK-Store.</string>
+    <string name="transfer_failed">The file could not be read or written.</string>
 </resources>

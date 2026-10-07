@@ -21,8 +21,17 @@ class Bookmarks(context: Context) {
     val keys: StateFlow<Set<String>> = _keys.asStateFlow()
 
     /** Bookmarks [app], or takes the bookmark away when it has one. */
-    fun toggle(app: StoreApp) {
-        val keys = toggled(_keys.value, app)
+    fun toggle(app: StoreApp) = save(toggled(_keys.value, app))
+
+    /** Adds the bookmarks under [added], and returns how many were not there before. */
+    fun addAll(added: Set<String>): Int {
+        val before = _keys.value.size
+        val keys = _keys.value + added
+        save(keys)
+        return keys.size - before
+    }
+
+    private fun save(keys: Set<String>) {
         preferences.edit { putStringSet(PREF_KEYS, keys) }
         _keys.value = keys
     }

@@ -217,4 +217,12 @@
     <string name="github_token_rejected">GitHub ei hyväksy tätä tunnistetta.</string>
     <string name="action_save_token">Tallenna tunniste</string>
     <string name="action_remove_token">Poista tunniste</string>
+    <string name="transfer_title">Vienti ja tuonti</string>
+    <string name="transfer_description">Tallenna lähteet, kirjanmerkit ja asetukset tiedostoon ja tuo ne tiedostosta takaisin, tähän tai toiseen laitteeseen. GitHub-tunniste ei ole mukana. Tuonti lisää tiedoston lähteet ja kirjanmerkit nykyisten rinnalle ja ottaa sen asetukset käyttöön.</string>
+    <string name="action_export">Vie</string>
+    <string name="action_import">Tuo</string>
+    <string name="transfer_exported">Tallennettu.</string>
+    <string name="transfer_imported">Tuotu: %1$d uutta lähdettä ja %2$d uutta kirjanmerkkiä. Asetukset otettiin käyttöön.</string>
+    <string name="transfer_not_backup">Tämä ei ole ARK-Storen vientitiedosto.</string>
+    <string name="transfer_failed">Tiedostoa ei voitu lukea tai kirjoittaa.</string>
 </resources>

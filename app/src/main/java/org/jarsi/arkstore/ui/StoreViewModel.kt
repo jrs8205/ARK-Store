@@ -1,8 +1,12 @@
 package org.jarsi.arkstore.ui
 
 import android.app.Application
+import android.util.Log
+import android.net.Uri
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.core.content.edit
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,8 +18,11 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Bookmarks
+import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.GitHubToken
@@ -26,6 +33,7 @@ import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.InstallManager
+import org.jarsi.arkstore.work.AutoUpdate
 
 data class AppRow(
     val app: StoreApp,
@@ -59,6 +67,17 @@ enum class LoadError { NETWORK, RATE_LIMIT, TOKEN }
 enum class SourceError { INVALID, DUPLICATE, NOT_FOUND, NOT_OPEN, NETWORK, RATE_LIMIT, TOKEN }
 
 enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
+
+enum class TransferError { NOT_A_BACKUP, FAILED }
+
+/** What came of the last export or import, see [Backup]. */
+data class TransferUiState(
+    val busy: Boolean = false,
+    val exported: Boolean = false,
+    /** How many sources and how many bookmarks the import added. */
+    val imported: Pair<Int, Int>? = null,
+    val error: TransferError? = null
+)
 
 /** Whether a GitHub token is held, and what came of the last one offered. */
 data class TokenUiState(
@@ -242,6 +261,117 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearTokenError() = _token.update { it.copy(error = null) }
 
+    private val _transfer = MutableStateFlow(TransferUiState())
+    val transfer: StateFlow<TransferUiState> = _transfer.asStateFlow()
+
+    private val _imports = MutableStateFlow(0)
+    /** Ticks with each import, so that whatever shows a setting reads it again. */
+    val imports: StateFlow<Int> = _imports.asStateFlow()
+
+    /** Writes the sources, the bookmarks and the settings to the file at [uri]. */
+    fun exportTo(uri: Uri) {
+        _transfer.value = TransferUiState(busy = true)
+        viewModelScope.launch {
+            val written = try {
+                val text = backup().toJson().toString(2)
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openOutputStream(uri, "wt")
+                        ?.use { it.write(text.toByteArray()) }
+                        ?: throw IOException("Nothing to write to")
+                }
+                true
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Could not export", e)
+                false
+            }
+            _transfer.value = if (written) TransferUiState(exported = true) else TransferUiState(error = TransferError.FAILED)
+        }
+    }
+
+    /** Reads a file written by [exportTo] and takes in what it holds, see [take]. */
+    fun importFrom(uri: Uri) {
+        _transfer.value = TransferUiState(busy = true)
+        viewModelScope.launch {
+            val text = try {
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(uri)?.use { input ->
+                        // One byte past the limit tells a file too large from one just at it.
+                        val bytes = ByteArray(Backup.MAX_BYTES + 1)
+                        var read = 0
+                        while (read < bytes.size) {
+                            val n = input.read(bytes, read, bytes.size - read)
+                            if (n < 0) break
+                            read += n
+                        }
+                        if (read > Backup.MAX_BYTES) null else String(bytes, 0, read, Charsets.UTF_8)
+                    }
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.w(TAG, "Could not import", e)
+                null
+            }
+            val backup = text?.let { Backup.fromJson(it) }
+            _transfer.value = when {
+                text == null -> TransferUiState(error = TransferError.FAILED)
+                backup == null -> TransferUiState(error = TransferError.NOT_A_BACKUP)
+                else -> TransferUiState(imported = take(backup))
+            }
+            if (backup != null) {
+                _imports.update { it + 1 }
+                refresh()
+            }
+        }
+    }
+
+    private fun backup(): Backup {
+        val context = getApplication<Application>()
+        val ui = context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
+        return Backup(
+            sources = repository.sources.list(),
+            bookmarks = bookmarks.keys.value,
+            settings = Backup.Settings(
+                includeBeta = repository.includeBeta.value,
+                includeAuto = repository.includeAuto.value,
+                catalogues = CatalogRepository.CATALOGUE_NAMES.associateWith { it in repository.catalogues.value },
+                palette = Palette.fromKey(ui.getString(PREF_PALETTE, null)).key,
+                black = ui.getBoolean(PREF_BLACK, false),
+                material = ui.getBoolean(PREF_MATERIAL, true),
+                hideTop = ui.getBoolean(PREF_HIDE_TOP, true),
+                sort = ui.getString(PREF_SORT, null),
+                autoUpdate = AutoUpdate.read(context)
+            )
+        )
+    }
+
+    /**
+     * Takes in [backup]: its sources and bookmarks join those here, and its settings replace
+     * them. Returns how many sources and how many bookmarks were new. The sources are not
+     * checked with GitHub again; one that is gone is simply empty, as any other would be.
+     */
+    private fun take(backup: Backup): Pair<Int, Int> {
+        val context = getApplication<Application>()
+        val current = repository.sources.list()
+        val added = Backup.mergedSources(current, backup.sources).drop(current.size)
+        added.forEach { repository.sources.add(it) }
+        val newBookmarks = bookmarks.addAll(backup.bookmarks)
+        val settings = backup.settings
+        settings.includeBeta?.let(repository::setIncludeBeta)
+        settings.includeAuto?.let(repository::setIncludeAuto)
+        settings.catalogues.forEach { (source, include) -> repository.setCatalogue(source, include) }
+        context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE).edit {
+            settings.palette?.let { putString(PREF_PALETTE, Palette.fromKey(it).key) }
+            settings.black?.let { putBoolean(PREF_BLACK, it) }
+            settings.material?.let { putBoolean(PREF_MATERIAL, it) }
+            settings.hideTop?.let { putBoolean(PREF_HIDE_TOP, it) }
+            settings.sort?.let { putString(PREF_SORT, it) }
+        }
+        settings.autoUpdate?.let { AutoUpdate.write(context, it) }
+        _sources.update { it.copy(sources = repository.sources.list()) }
+        return added.size to newBookmarks
+    }
+
     /**
      * Refreshes the catalogue. A request made while a refresh is running is not dropped: the
      * running one may have started before a change it should cover (a newly added source), so
@@ -297,6 +427,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private companion object {
+        const val TAG = "StoreViewModel"
         const val RESUME_REFRESH_MS = 5 * 60 * 1000L
     }
 }

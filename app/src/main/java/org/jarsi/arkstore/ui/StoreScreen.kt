@@ -7,6 +7,8 @@ import android.os.Build
 import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -141,6 +143,7 @@ import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppMetadata
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
@@ -171,17 +174,19 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var searchFocused by remember { mutableStateOf(false) }
     var searchBounds by remember { mutableStateOf(Rect.Zero) }
     val preferences = remember { context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE) }
-    var sortOrder by remember {
+    // Read again after each import, which writes them behind the screen's back.
+    val imports by viewModel.imports.collectAsStateWithLifecycle()
+    var sortOrder by remember(imports) {
         mutableStateOf(
             SortOrder.entries.firstOrNull { it.name == preferences.getString(PREF_SORT, null) }
                 ?: SortOrder.NAME
         )
     }
-    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
-    var hideTop by remember { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    var material by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
+    var hideTop by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
     // The theme itself follows these through ThemeSettings; see Theme.kt.
-    var palette by remember { mutableStateOf(Palette.fromKey(preferences.getString(PREF_PALETTE, null))) }
-    var black by remember { mutableStateOf(preferences.getBoolean(PREF_BLACK, false)) }
+    var palette by remember(imports) { mutableStateOf(Palette.fromKey(preferences.getString(PREF_PALETTE, null))) }
+    var black by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_BLACK, false)) }
     // The bar, the search and the filters slide out of view as the list scrolls down and back
     // in as it scrolls up, when the setting says so; see CollapsingTop.
     val top = remember { CollapsingTop() }
@@ -1520,8 +1525,9 @@ private fun SettingsSheet(
                 onCheckedChange = onMaterialChange
             )
         }
-        AutoUpdateSettings()
+        AutoUpdateSettings(viewModel)
         NotificationSetting()
+        TransferSettings(viewModel)
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
@@ -1634,9 +1640,10 @@ private fun GitHubSettings(viewModel: StoreViewModel) {
  * Android 12 the switch stays off and says why.
  */
 @Composable
-private fun AutoUpdateSettings() {
+private fun AutoUpdateSettings(viewModel: StoreViewModel) {
     val context = LocalContext.current
-    var settings by remember { mutableStateOf(AutoUpdate.read(context)) }
+    val imports by viewModel.imports.collectAsStateWithLifecycle()
+    var settings by remember(imports) { mutableStateOf(AutoUpdate.read(context)) }
     val supported = Build.VERSION.SDK_INT >= AutoUpdate.SUPPORTED_SDK
     fun change(changed: AutoUpdate) {
         settings = changed
@@ -1668,6 +1675,72 @@ private fun AutoUpdateSettings() {
         enabled = supported && settings.enabled,
         onCheckedChange = { change(settings.copy(chargingOnly = it)) }
     )
+}
+
+/**
+ * Saves the sources, the bookmarks and the settings to a file the user picks, and brings
+ * them back from one; see [Backup]. The system's file picker does the picking.
+ */
+@Composable
+private fun TransferSettings(viewModel: StoreViewModel) {
+    val state by viewModel.transfer.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(Backup.MIME_TYPE)) { uri ->
+        if (uri != null) viewModel.exportTo(uri)
+    }
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importFrom(uri)
+    }
+    Text(
+        text = stringResource(R.string.transfer_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(R.string.transfer_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                export.launch(Backup.FILE_NAME)
+            }
+        ) {
+            Text(stringResource(R.string.action_export))
+        }
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                import.launch(arrayOf("*/*"))
+            }
+        ) {
+            Text(stringResource(R.string.action_import))
+        }
+    }
+    val imported = state.imported
+    val outcome = when {
+        state.error == TransferError.NOT_A_BACKUP -> stringResource(R.string.transfer_not_backup)
+        state.error == TransferError.FAILED -> stringResource(R.string.transfer_failed)
+        imported != null -> stringResource(R.string.transfer_imported, imported.first, imported.second)
+        state.exported -> stringResource(R.string.transfer_exported)
+        else -> null
+    }
+    if (outcome != null) {
+        Text(
+            text = outcome,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+    }
 }
 
 /**
@@ -1968,9 +2041,9 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
 
 /** What the details keep clear of the screen's edges. */
 private val DETAILS_INSET = 24.dp
-private const val PREF_SORT = "sort"
-private const val PREF_MATERIAL = "material"
-private const val PREF_HIDE_TOP = "hide_top"
+internal const val PREF_SORT = "sort"
+internal const val PREF_MATERIAL = "material"
+internal const val PREF_HIDE_TOP = "hide_top"
 
 /** The room the list keeps below the top however high the top is; see CollapsingTop. */
 private val MIN_LIST_ROOM = 200.dp
