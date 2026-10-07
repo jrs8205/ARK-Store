@@ -252,6 +252,41 @@ class BuildAppTest(unittest.TestCase):
             app = build_index.build_app(REPO, {})
         self.assertEqual((app["downloads"], app["betaDownloads"]), (6, 1))
 
+    def test_entry_carries_its_metadata_when_asked_for_it(self):
+        def api(path):
+            if "/git/trees/" in path:
+                return {"tree": [{"path": "fastlane/metadata/android/en-US/full_description.txt", "type": "blob"}]}
+            return release()
+
+        repo = dict(REPO, default_branch="main")
+        with mock.patch.object(build_index, "api", side_effect=api), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 26)):
+            app = build_index.build_app(repo, {}, metadata_of=build_index.app_metadata)
+            self.assertNotIn("metadata", build_index.build_app(repo, {}, metadata_of=lambda found: None))
+        self.assertEqual(app["metadata"], {"en": {"description": RAW + "en-US/full_description.txt",
+                                                  "screenshots": []}})
+
+    def test_entry_has_no_metadata_unless_asked_for_it(self):
+        repo = dict(REPO, default_branch="main")
+        with mock.patch.object(build_index, "api", return_value=release()) as api, \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 26)):
+            app = build_index.build_app(repo, {})
+            self.assertEqual(api.call_count, 1)
+            # A repository on another forge lists its releases itself and asks GitHub nothing.
+            forge = build_index.build_app(repo, {}, list_releases=lambda found: release())
+            self.assertEqual(api.call_count, 1)
+        self.assertNotIn("metadata", app)
+        self.assertNotIn("metadata", forge)
+
+    def test_repository_with_nothing_to_install_is_not_looked_up(self):
+        metadata_of = mock.Mock()
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest", side_effect=build_index.ManifestError("bad")):
+            self.assertIsNone(build_index.build_app(REPO, {}, metadata_of=metadata_of))
+        metadata_of.assert_not_called()
+
     def test_malformed_apk_is_left_out(self):
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest",
@@ -1106,6 +1141,117 @@ class NotBeforeTest(unittest.TestCase):
             self.assertEqual(build_index.build_app(REPO, {}, not_before=1700000000)["tag"], "v1")
 
 
+def fastlane(*names):
+    """Paths of files in a repository's fastlane/metadata/android folder."""
+    return ["fastlane/metadata/android/" + name for name in names]
+
+
+RAW = "https://raw.githubusercontent.com/owner/app/main/fastlane/metadata/android/"
+
+
+class MetadataTest(unittest.TestCase):
+    def metadata(self, *names):
+        return build_index.metadata_from_paths(fastlane(*names), "owner/app", "main")
+
+    def test_description_and_screenshots_are_given_by_address(self):
+        metadata = self.metadata("en-US/full_description.txt", "en-US/title.txt",
+                                 "en-US/images/phoneScreenshots/1.png", "fi-FI/full_description.txt")
+        self.assertEqual(metadata, {
+            "en": {"description": RAW + "en-US/full_description.txt",
+                   "screenshots": [RAW + "en-US/images/phoneScreenshots/1.png"]},
+            "fi": {"description": RAW + "fi-FI/full_description.txt", "screenshots": []},
+        })
+
+    def test_screenshots_without_a_description_are_given_alone(self):
+        metadata = self.metadata("en-US/images/phoneScreenshots/1.png", "en-GB/full_description.txt")
+        self.assertEqual(metadata, {"en": {"screenshots": [RAW + "en-US/images/phoneScreenshots/1.png"]}})
+
+    def test_folder_of_the_usual_region_comes_first_then_the_language_then_other_regions(self):
+        folders = ["en-GB", "fi", "en-AU", "en", "fi-FI", "en-US", "EN-us"]
+        for wanted in ("en-US", "en", "en-AU", "en-GB"):
+            metadata = self.metadata(*(folder + "/full_description.txt" for folder in folders))
+            self.assertEqual(metadata["en"]["description"], RAW + wanted + "/full_description.txt")
+            folders.remove(wanted)
+        self.assertEqual(metadata["fi"]["description"], RAW + "fi-FI/full_description.txt")
+        self.assertEqual(self.metadata("EN-us/full_description.txt"), {})
+
+    def test_screenshots_come_in_natural_order(self):
+        names = ["10.png", "b.png", "2.png", "a.png", "1.png"]
+        metadata = self.metadata(*("en-US/images/phoneScreenshots/" + name for name in names))
+        self.assertEqual([address.rsplit("/", 1)[1] for address in metadata["en"]["screenshots"]],
+                         ["1.png", "2.png", "10.png", "a.png", "b.png"])
+
+    def test_screenshots_are_capped(self):
+        names = ["%d.png" % number for number in range(12, 0, -1)]
+        metadata = self.metadata(*("en-US/images/phoneScreenshots/" + name for name in names))
+        self.assertEqual([address.rsplit("/", 1)[1] for address in metadata["en"]["screenshots"]],
+                         ["%d.png" % number for number in range(1, build_index.MAX_SCREENSHOTS + 1)])
+
+    def test_only_images_right_in_the_folder_of_phone_screenshots_count(self):
+        metadata = self.metadata(
+            "en-US/images/phoneScreenshots/1.gif", "en-US/images/phoneScreenshots/old/2.png",
+            "en-US/images/tenInchScreenshots/3.png", "en-US/images/icon.png",
+            "en-US/images/phoneScreenshots/4.PNG", "en-US/images/phoneScreenshots/5.jpeg",
+            "en-US/images/phoneScreenshots/6.webp", "en-US/images/phoneScreenshots/7.jpg")
+        self.assertEqual([address.rsplit("/", 1)[1] for address in metadata["en"]["screenshots"]],
+                         ["4.PNG", "5.jpeg", "6.webp", "7.jpg"])
+
+    def test_address_is_percent_encoded(self):
+        metadata = self.metadata("en-US/images/phoneScreenshots/1 main screen.png")
+        self.assertEqual(metadata["en"]["screenshots"],
+                         [RAW + "en-US/images/phoneScreenshots/1%20main%20screen.png"])
+
+    def test_nothing_to_show_is_empty(self):
+        self.assertEqual(self.metadata("en-US/title.txt", "en-US/images/icon.png", "de-DE/full_description.txt"), {})
+        elsewhere = ["metadata/en-US/full_description.txt", "app/fastlane/metadata/android/en-US/full_description.txt"]
+        self.assertEqual(build_index.metadata_from_paths(elsewhere, "owner/app", "main"), {})
+
+    TREE = {"truncated": True, "tree": [
+        {"path": "fastlane/metadata/android/en-US/full_description.txt", "type": "blob"},
+        {"path": "fastlane/metadata/android/en-US/images/phoneScreenshots", "type": "tree"},
+        {"path": "fastlane/metadata/android/en-US/images/phoneScreenshots/1.png", "type": "tree"},
+        {"path": "fastlane/metadata/android/en-US/images/phoneScreenshots/2.png", "type": "blob"},
+    ]}
+
+    def test_lookup_reads_the_tree_of_the_default_branch_once(self):
+        with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
+            metadata = build_index.fastlane_metadata("owner/app", "main")
+        api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
+        self.assertEqual(metadata, {"en": {"description": RAW + "en-US/full_description.txt",
+                                           "screenshots": [RAW + "en-US/images/phoneScreenshots/2.png"]}})
+
+    def test_missing_tree_is_no_metadata_but_other_errors_propagate(self):
+        missing = urllib.error.HTTPError("https://api.github.com/", 404, "Not Found", {}, None)
+        with mock.patch.object(build_index, "api", side_effect=missing):
+            self.assertEqual(build_index.fastlane_metadata("owner/app", "main"), {})
+        failing = urllib.error.HTTPError("https://api.github.com/", 502, "Bad Gateway", {}, None)
+        with mock.patch.object(build_index, "api", side_effect=failing):
+            with self.assertRaises(urllib.error.HTTPError):
+                build_index.fastlane_metadata("owner/app", "main")
+
+    KNOWN = {"fullName": "owner/app", "pushedAt": REPO["pushed_at"],
+             "metadata": {"en": {"screenshots": ["https://x/1.png"]}}}
+
+    def test_metadata_stands_while_the_repository_is_not_pushed_to(self):
+        with mock.patch.object(build_index, "api") as api:
+            metadata = build_index.app_metadata(dict(REPO, default_branch="main"), self.KNOWN)
+        api.assert_not_called()
+        self.assertEqual(metadata, self.KNOWN["metadata"])
+
+    def test_metadata_is_looked_up_after_a_push_or_when_not_known(self):
+        unknown = {key: value for key, value in self.KNOWN.items() if key != "metadata"}
+        for previous in (dict(self.KNOWN, pushedAt="2025-12-01T00:00:00Z"), unknown, None):
+            with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
+                metadata = build_index.app_metadata(dict(REPO, default_branch="main"), previous)
+            api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
+            self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt")
+
+    def test_repository_whose_branch_is_not_known_has_no_metadata_yet(self):
+        with mock.patch.object(build_index, "api") as api:
+            self.assertIsNone(build_index.app_metadata(REPO, None))
+        api.assert_not_called()
+
+
 class CategoryTest(unittest.TestCase):
     def test_topic_names_the_category(self):
         self.assertEqual(build_index.guess_category(["android", "music-player"], ""), "media")
@@ -1216,6 +1362,16 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual(build_app.call_count, 1)
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
 
+    def test_metadata_of_an_examined_app_stands_while_it_is_not_pushed_to(self):
+        metadata = {"en": {"screenshots": ["https://x/1.png"]}}
+        previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadata=metadata)}
+        _, _, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], previous=previous, state={"other/app": self.examined(0)})
+        metadata_of = build_app.call_args.kwargs["metadata_of"]
+        with mock.patch.object(build_index, "api") as api:
+            self.assertEqual(metadata_of(dict(self.candidate(), default_branch="main")), metadata)
+        api.assert_not_called()
+
     def test_prereleases_are_not_looked_at(self):
         _, _, build_app = self.run_auto([self.candidate()], [self.entry()])
         self.assertFalse(build_app.call_args.kwargs["with_prerelease"])
@@ -1299,9 +1455,10 @@ class MainTest(unittest.TestCase):
             raise urllib.error.URLError("down")
         return release(asset_id=8)
 
-    def run_main(self, previous, candidates=(), previous_auto=None):
+    def run_main(self, previous, candidates=(), previous_auto=None, repo=REPO, api=None, manifest=None):
         """Runs main while GitHub cannot be reached, so that only what the previous files
-        hold can be listed. Returns the index and the list of automatically found apps."""
+        hold can be listed, unless api and manifest say what GitHub and the APKs answer.
+        Returns the index and the list of automatically found apps."""
         with tempfile.TemporaryDirectory() as directory:
             paths = {name: os.path.join(directory, name)
                      for name in ("previous.json", "previous-auto.json", "index.json", "auto.json")}
@@ -1313,12 +1470,12 @@ class MainTest(unittest.TestCase):
             argv = ["build_index.py", "--previous", paths["previous.json"],
                     "--previous-auto", paths["previous-auto.json"],
                     "--output", paths["index.json"], "--auto-output", paths["auto.json"]]
-            with mock.patch.object(build_index, "discover", return_value=[REPO]), \
+            with mock.patch.object(build_index, "discover", return_value=[repo]), \
                     mock.patch.object(build_index, "discover_candidates",
                                       return_value=list(candidates)), \
-                    mock.patch.object(build_index, "api", side_effect=self.api), \
-                    mock.patch.object(build_index, "read_manifest",
-                                      side_effect=OSError("range request not honoured")), \
+                    mock.patch.object(build_index, "api", side_effect=api or self.api), \
+                    mock.patch.object(build_index, "read_manifest", return_value=manifest,
+                                      side_effect=None if manifest else OSError("range request not honoured")), \
                     mock.patch.object(build_index.time, "time", return_value=1790000000), \
                     mock.patch("sys.argv", argv):
                 build_index.main()
@@ -1338,6 +1495,26 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("autoApps", index)
         self.assertEqual([app["fullName"] for app in auto["autoApps"]], ["other/app"])
         self.assertEqual(auto["generatedAt"], index["generatedAt"])
+
+    def test_metadata_of_a_published_app_is_looked_up_once_per_push(self):
+        asked = []
+
+        def api(path):
+            asked.append(path)
+            if "/git/trees/" in path:
+                return {"tree": [{"path": "fastlane/metadata/android/en-US/full_description.txt", "type": "blob"}]}
+            return release(asset_id=8)
+
+        known = dict(self.KNOWN, pushedAt=REPO["pushed_at"], metadata={"en": {"screenshots": ["https://x/1.png"]}})
+        found = {"repo": dict(REPO, default_branch="main"), "api": api,
+                 "manifest": ("org.example", 4, "1.4", "Example", None, 26)}
+        index, _ = self.run_main({"apps": [known]}, **found)
+        self.assertEqual(index["apps"][0]["metadata"], known["metadata"])
+        self.assertEqual(asked, ["/repos/owner/app/releases?per_page=100"])
+        index, _ = self.run_main({"apps": [dict(known, pushedAt="2025-12-01T00:00:00Z")]}, **found)
+        self.assertEqual(index["apps"][0]["metadata"],
+                         {"en": {"description": RAW + "en-US/full_description.txt", "screenshots": []}})
+        self.assertEqual(asked[-1], "/repos/owner/app/git/trees/main?recursive=1")
 
     def test_previous_list_inside_an_old_index_is_still_used(self):
         _, auto = self.run_main(

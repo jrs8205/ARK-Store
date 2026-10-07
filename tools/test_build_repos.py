@@ -9,6 +9,7 @@ import unittest
 import urllib.error
 from unittest import mock
 
+import build_index
 import build_repos
 
 SHA = "ab" * 32
@@ -91,6 +92,40 @@ class BuildAppTest(unittest.TestCase):
         self.assertIsNone(build(package([version(1)]))["icon"])
         self.assertIsNone(build(package([version(1)], icon={"en-US": {"name": "icon.png"}}))["icon"])
         self.assertIsNone(build(package([version(1)], icon={"en-US": "odd"}))["icon"])
+
+    def test_phone_screenshots_are_given_for_each_language(self):
+        def files(locale, *names):
+            return [{"name": "/org.example/%s/phoneScreenshots/%s" % (locale, name), "sha256": SHA, "size": 1}
+                    for name in names]
+
+        screenshots = {
+            "phone": {"en-GB": files("en-GB", "1.png"), "en-US": files("en-US", "10.png", "my shot.png", "2.png"),
+                      "fi": files("fi", "1.jpg", "2.gif"), "de-DE": files("de-DE", "1.png")},
+            "tenInch": {"fi-FI": [{"name": "/org.example/fi-FI/tenInchScreenshots/1.png"}]},
+        }
+        for source, address in (("fdroid", "https://f-droid.org/repo"),
+                                ("izzy", "https://apt.izzysoft.de/fdroid/repo")):
+            with self.subTest(source=source):
+                app = build(package([version(1)], screenshots=screenshots), source)
+                shots = address + "/org.example/%s/phoneScreenshots/"
+                self.assertEqual(app["metadata"], {
+                    "en": {"screenshots": [shots % "en-US" + "2.png", shots % "en-US" + "10.png",
+                                           shots % "en-US" + "my%20shot.png"]},
+                    "fi": {"screenshots": [shots % "fi" + "1.jpg"]},
+                })
+
+    def test_screenshots_are_capped(self):
+        names = [{"name": "/org.example/en-US/phoneScreenshots/%d.png" % number} for number in range(12, 0, -1)]
+        app = build(package([version(1)], screenshots={"phone": {"en-US": names}}))
+        self.assertEqual([address.rsplit("/", 1)[1] for address in app["metadata"]["en"]["screenshots"]],
+                         ["%d.png" % number for number in range(1, build_index.MAX_SCREENSHOTS + 1)])
+
+    def test_app_without_screenshots_has_empty_metadata(self):
+        self.assertEqual(build(package([version(1)]))["metadata"], {})
+        for odd in ("odd", {"phone": []}, {"phone": {"en-US": "odd"}}, {"phone": {"en-US": [{"name": "1.png"}]}},
+                    {"phone": {"en-US": ["odd", {"name": 5}]}}):
+            with self.subTest(screenshots=odd):
+                self.assertEqual(build(package([version(1)], screenshots=odd))["metadata"], {})
 
     def test_narrow_category_is_preferred_to_a_broad_one(self):
         self.assertEqual(build(package([version(1)]))["topics"], ["arkstore-communication"])
@@ -196,7 +231,8 @@ class UpdateTest(unittest.TestCase):
                  "index": {"name": "/index-v2.json", "sha256": checksum or hashlib.sha256(data).hexdigest()}}
         return {"/entry.json": json.dumps(entry).encode(), "/index-v2.json": data}
 
-    PREVIOUS = {"version": 1, "source": "fdroid", "timestamp": 5, "apps": [{"fullName": "fdroid:old", "icon": None}]}
+    PREVIOUS = {"version": 1, "source": "fdroid", "timestamp": 5,
+                "apps": [{"fullName": "fdroid:old", "icon": None, "metadata": {}}]}
 
     def test_changed_catalogue_is_rebuilt(self):
         written, _ = self.run_update(self.responses(timestamp=6), self.PREVIOUS)
@@ -208,6 +244,14 @@ class UpdateTest(unittest.TestCase):
         written, _ = self.run_update(self.responses(timestamp=5), before_icons)
         self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
         self.assertIn("icon", written["apps"][0])
+
+    def test_list_written_before_screenshots_is_rebuilt_once(self):
+        before_screenshots = dict(self.PREVIOUS, apps=[{"fullName": "fdroid:old", "icon": None}])
+        written, _ = self.run_update(self.responses(timestamp=5), before_screenshots)
+        self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
+        self.assertIn("metadata", written["apps"][0])
+        _, asked = self.run_update(self.responses(timestamp=5), written)
+        self.assertEqual(len(asked), 1)
 
     def test_unchanged_catalogue_is_not_downloaded_again(self):
         written, asked = self.run_update(self.responses(timestamp=5), self.PREVIOUS)
