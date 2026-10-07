@@ -27,6 +27,17 @@ class AppMetadataTest {
     }
 
     @Test
+    fun aDescriptionWrittenAsNullIsNone() {
+        // Android's org.json reads a null as the string "null" unless asked whether it is null.
+        val written = JSONObject().put(
+            "fi",
+            JSONObject().put("description", JSONObject.NULL).put("screenshots", JSONArray().put(JSONObject.NULL).put("https://x/fi/1.png"))
+        )
+        assertEquals(mapOf("fi" to AppMetadata(null, listOf("https://x/fi/1.png"))), AppMetadata.mapOf(written))
+        assertEquals(mapOf("fi" to finnish), AppMetadata.mapOf(JSONObject().put("fi", finnish.toJson())))
+    }
+
+    @Test
     fun anAppWithoutMetadataHasNone() {
         assertTrue(AppMetadata.mapOf(null).isEmpty())
         assertTrue(AppMetadata.mapOf(JSONObject()).isEmpty())

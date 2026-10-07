@@ -40,4 +40,10 @@ class DescriptionsTest {
         val lines = Descriptions.lines("Line one\nline two\n\nLine three")
         assertEquals(listOf("Line one line two", "Line three"), lines.map { it.text })
     }
+
+    @Test
+    fun entitiesAreReadAfterTheTagsSoThatAnEscapedTagStaysText() {
+        val line = Descriptions.lines("Backup &amp; restore, &lt;b&gt;not bold&lt;/b&gt;, &quot;x&quot; &#39;y&#39; a&nbsp;b &#8211; &#x2014; &unknown;").single()
+        assertEquals("Backup & restore, <b>not bold</b>, \"x\" 'y' a b – — &unknown;", line.text)
+    }
 }

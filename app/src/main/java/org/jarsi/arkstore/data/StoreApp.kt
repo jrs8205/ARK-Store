@@ -247,10 +247,12 @@ data class AppMetadata(val description: String?, val screenshots: List<String>) 
             val metadata = LinkedHashMap<String, AppMetadata>()
             for (language in json.keys()) {
                 val entry = json.optJSONObject(language) ?: continue
-                val description = entry.optString("description").takeIf { it.isNotBlank() }
+                // Asked for as what it is: Android's optString reads a null as the word "null".
+                val description = (entry.opt("description") as? String)?.takeIf { it.isNotBlank() }
                 val screenshots = entry.optJSONArray("screenshots")
-                    ?.let { array -> List(array.length()) { array.optString(it) } }
+                    ?.let { array -> List(array.length()) { array.opt(it) as? String } }
                     .orEmpty()
+                    .filterNotNull()
                     .filter { it.isNotBlank() }
                 if (description != null || screenshots.isNotEmpty()) {
                     metadata[language] = AppMetadata(description, screenshots)

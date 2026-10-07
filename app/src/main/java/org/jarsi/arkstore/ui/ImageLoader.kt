@@ -19,40 +19,30 @@ import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.data.Http
 
 /** The icons the index publishes: small, and many on screen at once. */
-val IconLoader = ImageLoader("icons", maxBytes = 512 * 1024, maxPixels = 192, memoryBytes = 6 * 1024 * 1024, parallel = 4)
+val IconLoader = ImageLoader(
+    CachedFiles("icons", maxBytes = 512 * 1024, parallel = 4, budget = 24L * 1024 * 1024),
+    maxPixels = 192,
+    memoryBytes = 6 * 1024 * 1024
+)
+
+private val screenshotFiles = CachedFiles("screenshots", maxBytes = 2 * 1024 * 1024, parallel = 2, budget = 64L * 1024 * 1024)
 
 /** Screenshots in the strip the details show, decoded at about half of a phone's screen. */
-val ScreenshotLoader = ImageLoader(
-    "screenshots",
-    maxBytes = 2 * 1024 * 1024,
-    maxPixels = 720,
-    memoryBytes = 16 * 1024 * 1024,
-    parallel = 2,
-    config = Bitmap.Config.RGB_565
-)
+val ScreenshotLoader = ImageLoader(screenshotFiles, maxPixels = 720, memoryBytes = 16 * 1024 * 1024, config = Bitmap.Config.RGB_565)
 
 /** The same screenshots filling the screen, from the same copies on disk. */
-val ScreenshotViewerLoader = ImageLoader(
-    "screenshots",
-    maxBytes = 2 * 1024 * 1024,
-    maxPixels = 1440,
-    memoryBytes = 12 * 1024 * 1024,
-    parallel = 2,
-    config = Bitmap.Config.RGB_565
-)
+val ScreenshotViewerLoader = ImageLoader(screenshotFiles, maxPixels = 1440, memoryBytes = 12 * 1024 * 1024, config = Bitmap.Config.RGB_565)
 
 /**
  * Fetches images from the web and keeps them: in memory for what is on screen, on disk
- * for the next start. An image is decoded no larger than [maxPixels] on a side, in
- * [config]. An address that could not be had is not asked for again until the app
- * starts again.
+ * in [files] for the next start. An image is decoded no larger than [maxPixels] on a
+ * side, in [config]. An address that could not be had is not asked for again until the
+ * app starts again.
  */
 class ImageLoader(
-    folder: String,
-    maxBytes: Int,
+    private val files: CachedFiles,
     private val maxPixels: Int,
     memoryBytes: Int,
-    parallel: Int,
     private val config: Bitmap.Config = Bitmap.Config.ARGB_8888
 ) {
     sealed class Loaded(val bytes: Int) {
@@ -60,7 +50,6 @@ class ImageLoader(
         class Vector(val image: ImageVector) : Loaded(4 * 1024)
     }
 
-    private val files = CachedFiles(folder, maxBytes, parallel)
     private val memory = object : LruCache<String, Loaded>(memoryBytes) {
         override fun sizeOf(key: String, value: Loaded): Int = value.bytes
     }
@@ -120,14 +109,19 @@ class ImageLoader(
 
 /**
  * Files fetched from the web and kept under [folder] of the cache directory, at most
- * [maxBytes] each and [parallel] fetches at a time.
+ * [maxBytes] each and [parallel] fetches at a time. When the copies outgrow [budget],
+ * the ones least recently fetched go.
  */
-class CachedFiles(private val folder: String, private val maxBytes: Int, parallel: Int) {
+class CachedFiles(private val folder: String, private val maxBytes: Int, parallel: Int, private val budget: Long) {
     private val fetching = Semaphore(parallel)
+
+    /** A copy on disk: its name, its size and when it was written. */
+    data class Kept(val name: String, val bytes: Long, val modified: Long)
 
     /** The file at [address], from the copy on disk or, failing that, the network. */
     suspend fun bytes(context: Context, address: String): ByteArray {
-        val file = File(context.cacheDir, "$folder/" + digest(address))
+        val directory = File(context.cacheDir, folder)
+        val file = File(directory, digest(address))
         try {
             if (file.exists()) return file.readBytes()
         } catch (e: IOException) {
@@ -135,22 +129,51 @@ class CachedFiles(private val folder: String, private val maxBytes: Int, paralle
         }
         val bytes = fetching.withPermit { Http.getBytes(address, maxBytes) }
         try {
-            // Written beside and moved into place, so that a file cut short is never read.
-            file.parentFile?.mkdirs()
-            val part = File(file.path + ".part")
+            // Written beside, under a name of this fetch alone, and moved into place, so that
+            // neither a file cut short nor two fetches of one address writing at once is read.
+            directory.mkdirs()
+            val part = File(file.path + "." + System.nanoTime() + PART)
             part.writeBytes(bytes)
             if (!part.renameTo(file)) part.delete()
+            trim(directory)
         } catch (e: IOException) {
             Log.w(TAG, "Could not keep a copy of $address", e)
         }
         return bytes
     }
 
+    private fun trim(directory: File) {
+        val kept = directory.listFiles()
+            ?.filter { it.isFile && !it.name.endsWith(PART) }
+            ?.map { Kept(it.name, it.length(), it.lastModified()) }
+            ?: return
+        for (name in surplus(kept, budget)) File(directory, name).delete()
+    }
+
     private fun digest(text: String): String =
         MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
             .joinToString("") { "%02x".format(it) }.take(32)
 
-    private companion object {
-        const val TAG = "CachedFiles"
+    companion object {
+        private const val TAG = "CachedFiles"
+        private const val PART = ".part"
+
+        /**
+         * The names of those among [kept] to delete, oldest first, when together they
+         * outgrow [budget]: enough to come down to three quarters of it, so that the next
+         * fetch does not trim again at once.
+         */
+        fun surplus(kept: List<Kept>, budget: Long): List<String> {
+            var total = kept.sumOf { it.bytes }
+            if (total <= budget) return emptyList()
+            val floor = budget * 3 / 4
+            val gone = ArrayList<String>()
+            for (file in kept.sortedBy { it.modified }) {
+                if (total <= floor) break
+                gone += file.name
+                total -= file.bytes
+            }
+            return gone
+        }
     }
 }

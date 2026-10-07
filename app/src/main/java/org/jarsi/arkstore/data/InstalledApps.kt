@@ -256,9 +256,6 @@ object InstalledApps {
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
-    fun countUpdates(context: Context, apps: List<StoreApp>): List<StoreApp> =
-        updates(context, apps).map { it.first }
-
     /** The apps among [apps] that have an update to offer, each with what is installed of it. */
     fun updates(context: Context, apps: List<StoreApp>): List<Pair<StoreApp, InstalledVersion>> {
         val installed = snapshot(context)

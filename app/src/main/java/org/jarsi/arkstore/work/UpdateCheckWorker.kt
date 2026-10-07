@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.os.BatteryManager
 import android.os.Build
@@ -64,6 +65,14 @@ internal fun newToAnnounce(waiting: Set<String>, announced: Set<String>): Boolea
 internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<StoreApp> =
     updates.filter { it.fullName !in settled }
 
+/** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
+internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
+    updates.filter { announcement(it) !in failed }
+
+/** Those of [failed] that are still among the [updates] offered; the rest are forgotten. */
+internal fun stillFailed(failed: Set<String>, updates: List<StoreApp>): Set<String> =
+    updates.map(::announcement).filter { it in failed }.toSet()
+
 /**
  * Periodically refreshes the catalogue, installs the updates it may unasked (see
  * [AutoUpdate]) and tells the user of the rest.
@@ -72,6 +81,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
+        val started = SystemClock.elapsedRealtime()
         val repository = CatalogRepository.get(applicationContext)
         val failure = try {
             repository.refresh(foreground = false)
@@ -82,10 +92,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         // A refresh that failed for one source has still updated the others, so whatever the
         // catalogue holds now is worth acting on.
         val found = InstalledApps.updates(applicationContext, repository.catalog.value.apps)
-        val settled = installUnasked(found)
+        val preferences = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val settled = installUnasked(found, started, preferences)
         val updates = toAnnounce(found.map { it.first }, settled)
         val waiting = updates.map(::announcement).toSet()
-        val preferences = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val announced = preferences.getStringSet(PREF_ANNOUNCED, null).orEmpty()
         // Each update is announced once. A check that fails is retried, and every later check
         // finds the same updates again; a notification the user has dismissed must not come
@@ -101,25 +111,38 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
 
     /**
      * Installs, without asking, the updates among [found] that the settings allow now and
-     * that the store itself installed, one after the other, as long as the time a run is
-     * given lasts. Returns the full names of those settled: installed, or handed to the
-     * user to confirm. One that failed is announced like any other update.
+     * that the store itself installed, one after the other, as long as the time a run
+     * [started] at is given lasts. Returns the full names of those settled: installed, or
+     * handed to the user to confirm. One that failed is announced like any other update,
+     * and not tried unasked again until a newer version is offered; its failure is not
+     * left for the user to find on a screen, as they did not ask for the install.
      */
-    private suspend fun installUnasked(found: List<Pair<StoreApp, InstalledVersion>>): Set<String> {
+    private suspend fun installUnasked(
+        found: List<Pair<StoreApp, InstalledVersion>>,
+        started: Long,
+        preferences: SharedPreferences
+    ): Set<String> {
         val context = applicationContext
         val settings = AutoUpdate.read(context)
         if (!settings.allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) return emptySet()
+        val updates = found.map { it.first }
+        val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
+        val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
         val settled = HashSet<String>()
-        val deadline = SystemClock.elapsedRealtime() + INSTALL_BUDGET_MS
-        for ((app, installed) in found) {
-            if (installed.installer != context.packageName) continue
+        val deadline = started + INSTALL_BUDGET_MS
+        for (app in toTry(owned, failed)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
             when (InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))) {
                 Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
-                Outcome.FAILED, null -> {}
+                Outcome.FAILED -> {
+                    failed += announcement(app)
+                    InstallManager.dismissFailure(app.fullName)
+                }
+                null -> {}
             }
         }
+        preferences.edit { putStringSet(PREF_FAILED, failed) }
         return settled
     }
 
@@ -136,8 +159,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         private const val INTERVAL_HOURS = 4L
         private const val PREFS = "updates"
         private const val PREF_ANNOUNCED = "announced"
-        // A run is given ten minutes; what is not done in time waits for the next.
-        private const val INSTALL_BUDGET_MS = 6 * 60 * 1000L
+        private const val PREF_FAILED = "failed_unasked"
+        // A run is given ten minutes in all, the refresh included; what is not done in time
+        // waits for the next.
+        private const val INSTALL_BUDGET_MS = 7 * 60 * 1000L
         private const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
 
         fun schedule(context: Context) {

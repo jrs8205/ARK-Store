@@ -28,6 +28,14 @@ class SourceStore(context: Context) {
         return true
     }
 
+    /** Adds those of [sources] not there yet, under whatever case, and returns how many. */
+    fun addAll(sources: List<String>): Int {
+        val current = list()
+        val added = sources.filter { source -> current.none { it.equals(source, ignoreCase = true) } }
+        if (added.isNotEmpty()) save(current + added)
+        return added.size
+    }
+
     fun remove(source: String) = save(list() - source)
 
     /** Replaces [source] with [renamed], the name its repository goes by now. */

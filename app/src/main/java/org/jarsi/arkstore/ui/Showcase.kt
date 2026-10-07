@@ -183,18 +183,15 @@ private fun ScreenshotViewer(addresses: List<String>, start: Int, onDismiss: () 
     }
 }
 
-/** The description at [address], once it has been fetched; nothing while it has not. */
+/** The description at [address], once it has been fetched and read; nothing while it has not. */
 @Composable
 private fun LongDescription(address: String) {
     val context = LocalContext.current.applicationContext
-    var text by remember(address) { mutableStateOf(Texts.cached(address)) }
+    var lines by remember(address) { mutableStateOf(Texts.cached(address)) }
     LaunchedEffect(address) {
-        if (text == null) text = Texts.load(context, address)
+        if (lines == null) lines = Texts.load(context, address)
     }
-    text?.let {
-        val lines = remember(it) { Descriptions.lines(it) }
-        NotesText(lines, modifier = Modifier.padding(top = 12.dp))
-    }
+    lines?.let { NotesText(it, modifier = Modifier.padding(top = 12.dp)) }
 }
 
 /**
@@ -220,32 +217,33 @@ private const val PHONE_RATIO = 9f / 19.5f
 private val SCRIM = Color.Black.copy(alpha = 0.5f)
 
 /**
- * Texts fetched from the web, such as descriptions, kept like images are: in memory for
- * what is on screen, on disk for the next time, and not asked for again until the app
- * starts again once they could not be had.
+ * Descriptions fetched from the web and read into lines (see [Descriptions]), kept like
+ * images are: in memory for what is on screen, on disk for the next time, and not asked
+ * for again until the app starts again once they could not be had.
  */
-object Texts {
+internal object Texts {
     private const val TAG = "Texts"
     private const val MAX_BYTES = 256 * 1024
 
-    private val files = CachedFiles("texts", MAX_BYTES, parallel = 2)
-    private val memory = LruCache<String, String>(16)
+    private val files = CachedFiles("texts", MAX_BYTES, parallel = 2, budget = 4L * 1024 * 1024)
+    private val memory = LruCache<String, List<ReleaseNotes.Line>>(16)
     private val failed: MutableSet<String> = Collections.synchronizedSet(HashSet())
 
-    fun cached(address: String): String? = memory.get(address)
+    fun cached(address: String): List<ReleaseNotes.Line>? = memory.get(address)
 
-    suspend fun load(context: Context, address: String): String? {
+    suspend fun load(context: Context, address: String): List<ReleaseNotes.Line>? {
         memory.get(address)?.let { return it }
         if (address in failed) return null
-        val text = withContext(Dispatchers.IO) {
+        val lines = withContext(Dispatchers.IO) {
             try {
-                String(files.bytes(context, address), Charsets.UTF_8)
+                // Read off the main thread: a description may run to many kilobytes.
+                Descriptions.lines(String(files.bytes(context, address), Charsets.UTF_8))
             } catch (e: IOException) {
                 Log.w(TAG, "No text from $address: $e")
                 null
             }
         }
-        if (text == null) failed += address else memory.put(address, text)
-        return text
+        if (lines == null) failed += address else memory.put(address, lines)
+        return lines
     }
 }

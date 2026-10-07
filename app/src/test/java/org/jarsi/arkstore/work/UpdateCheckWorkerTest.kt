@@ -70,4 +70,16 @@ class UpdateCheckWorkerTest {
         assertEquals(listOf(failed, other), toAnnounce(updates, settled))
         assertEquals(updates, toAnnounce(updates, emptySet()))
     }
+
+    @Test
+    fun anUnaskedInstallThatFailedIsNotTriedAgainBeforeANewVersion() {
+        val broken = testApp(fullName = "alice/app", versionCode = 5)
+        val fixed = testApp(fullName = "alice/app", versionCode = 6)
+        val other = testApp(fullName = "bob/app", versionCode = 2)
+        val failed = setOf(announcement(broken), announcement(testApp(fullName = "gone/app", versionCode = 1)))
+        assertEquals(listOf(other), toTry(listOf(broken, other), failed))
+        assertEquals(listOf(fixed, other), toTry(listOf(fixed, other), failed))
+        // What is no longer offered is forgotten, so that the set does not grow for ever.
+        assertEquals(setOf(announcement(broken)), stillFailed(failed, listOf(broken, other)))
+    }
 }

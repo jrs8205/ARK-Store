@@ -352,9 +352,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun take(backup: Backup): Pair<Int, Int> {
         val context = getApplication<Application>()
-        val current = repository.sources.list()
-        val added = Backup.mergedSources(current, backup.sources).drop(current.size)
-        added.forEach { repository.sources.add(it) }
+        val newSources = repository.sources.addAll(backup.sources)
         val newBookmarks = bookmarks.addAll(backup.bookmarks)
         val settings = backup.settings
         settings.includeBeta?.let(repository::setIncludeBeta)
@@ -369,7 +367,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
         settings.autoUpdate?.let { AutoUpdate.write(context, it) }
         _sources.update { it.copy(sources = repository.sources.list()) }
-        return added.size to newBookmarks
+        return newSources to newBookmarks
     }
 
     /**

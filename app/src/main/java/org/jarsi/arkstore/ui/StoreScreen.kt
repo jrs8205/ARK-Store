@@ -1377,13 +1377,15 @@ private fun StoreButton(
 private fun StoreOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
     val metal = LocalMaterial.current
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = true),
+        enabled = enabled,
+        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = enabled),
         contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
     ) {
         ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
@@ -1545,7 +1547,8 @@ private fun SettingsSheet(
 private fun GitHubSettings(viewModel: StoreViewModel) {
     val state by viewModel.token.collectAsStateWithLifecycle()
     val haptics = LocalHapticFeedback.current
-    var input by rememberSaveable { mutableStateOf("") }
+    // Not saved with the screen's state: a token belongs in its own preferences alone.
+    var input by remember { mutableStateOf("") }
     LaunchedEffect(state.present) {
         if (state.present) input = ""
     }
@@ -1618,7 +1621,7 @@ private fun GitHubSettings(viewModel: StoreViewModel) {
             keyboardType = KeyboardType.Password,
             imeAction = ImeAction.Done
         ),
-        keyboardActions = KeyboardActions(onDone = { viewModel.saveToken(input) }),
+        keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) viewModel.saveToken(input) }),
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp)
@@ -1712,7 +1715,8 @@ private fun TransferSettings(viewModel: StoreViewModel) {
             onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                 export.launch(Backup.FILE_NAME)
-            }
+            },
+            enabled = !state.busy
         ) {
             Text(stringResource(R.string.action_export))
         }
@@ -1720,7 +1724,8 @@ private fun TransferSettings(viewModel: StoreViewModel) {
             onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                 import.launch(arrayOf("*/*"))
-            }
+            },
+            enabled = !state.busy
         ) {
             Text(stringResource(R.string.action_import))
         }

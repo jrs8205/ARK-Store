@@ -16,6 +16,8 @@ internal object Descriptions {
     private val paragraph = Regex("""<p>""", RegexOption.IGNORE_CASE)
     private val bold = Regex("""</?(?:b|strong)>""", RegexOption.IGNORE_CASE)
     private val bullet = Regex("""^[ \t]*[•·][ \t]*""", RegexOption.MULTILINE)
+    private val entity = Regex("""&(#\d{1,7}|#[xX][0-9a-fA-F]{1,6}|amp|lt|gt|quot|apos|nbsp);""")
+    private val named = mapOf("amp" to "&", "lt" to "<", "gt" to ">", "quot" to "\"", "apos" to "'", "nbsp" to "\u00a0")
 
     fun lines(text: String): List<ReleaseNotes.Line> {
         // Lines of a paragraph run together, as F-Droid reads them, so a break the text
@@ -26,6 +28,22 @@ internal object Descriptions {
             .replace(paragraph, "\n\n")
             .replace(bold, "**")
             .replace(bullet, "- ")
-        return ReleaseNotes.parse(marked, LIMIT)
+        // Entities are read once the tags have been: "&lt;b&gt;" is text, not a tag.
+        return ReleaseNotes.parse(marked, LIMIT).map { line ->
+            line.copy(spans = line.spans.map { it.copy(text = unescaped(it.text)) })
+        }
+    }
+
+    private fun unescaped(text: String): String = text.replace(entity) { match ->
+        val name = match.groupValues[1]
+        val code = when {
+            name.startsWith("#x") || name.startsWith("#X") -> name.substring(2).toIntOrNull(16)
+            name.startsWith("#") -> name.substring(1).toIntOrNull()
+            else -> null
+        }
+        when {
+            code != null -> if (code in 1..0x10FFFF) String(Character.toChars(code)) else match.value
+            else -> named[name] ?: match.value
+        }
     }
 }

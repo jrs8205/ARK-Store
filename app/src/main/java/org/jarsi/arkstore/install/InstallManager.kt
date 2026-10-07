@@ -121,6 +121,13 @@ object InstallManager {
      * as any other's.
      */
     suspend fun installAndAwait(context: Context, app: StoreApp, timeoutMillis: Long): Outcome? = coroutineScope {
+        // One already on its way settles on its own: a waiting confirmation is the user's to
+        // give, and anything else is not worth waiting for twice.
+        if (isBusy(app.fullName)) {
+            val asked = confirmations.waiting().any { it.repo == app.fullName } ||
+                confirmations.next.value?.repo == app.fullName
+            return@coroutineScope if (asked) Outcome.CONFIRMATION_NEEDED else null
+        }
         // Listening before starting, so that an outcome settled at once is not missed.
         val outcome = async(start = CoroutineStart.UNDISPATCHED) {
             outcomes.first { it.first == app.fullName }.second
