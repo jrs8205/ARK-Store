@@ -668,7 +668,8 @@ class CatalogRepository private constructor(context: Context) {
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.
             antiFeatures = list(if (apk.has("antiFeatures")) apk else json, "antiFeatures"),
-            icon = AppIcon.of(json.opt("icon"))
+            icon = AppIcon.of(json.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
         )
     }
 
@@ -759,7 +760,8 @@ class CatalogRepository private constructor(context: Context) {
             signer = StoreApp.indexedSigner(apk),
             minSdk = StoreApp.minSdkOf(apk),
             minSdkCodename = StoreApp.minSdkCodenameOf(apk),
-            icon = AppIcon.of(apk.opt("icon"))
+            icon = AppIcon.of(apk.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
         )
     }
 

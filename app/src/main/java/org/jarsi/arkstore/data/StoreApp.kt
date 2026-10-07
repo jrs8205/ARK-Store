@@ -76,7 +76,12 @@ data class StoreApp(
     /** What a catalogue warns about in the app, such as tracking, in its own words. */
     val antiFeatures: List<String> = emptyList(),
     /** The app's icon as the index publishes it, or null when it publishes none. */
-    val icon: AppIcon? = null
+    val icon: AppIcon? = null,
+    /**
+     * What the developer publishes of the app beyond its summary, by language ("en", "fi"),
+     * as the index tells it; empty when it tells nothing.
+     */
+    val metadata: Map<String, AppMetadata> = emptyMap()
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
@@ -141,6 +146,7 @@ data class StoreApp(
         .put("minSdkCodename", minSdkCodename ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
+        .put("metadata", JSONObject().also { json -> metadata.forEach { (language, it) -> json.put(language, it.toJson()) } })
 
     companion object {
         const val SOURCE_GITHUB = "github"
@@ -214,8 +220,59 @@ data class StoreApp(
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }
                 .orEmpty(),
-            icon = AppIcon.of(json.opt("icon"))
+            icon = AppIcon.of(json.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
         )
+    }
+}
+
+/**
+ * What the developer publishes of the app in one language, as the index tells it: the
+ * address of a [description] longer than the summary, or null when there is none, and
+ * the addresses of [screenshots] taken on a phone.
+ */
+data class AppMetadata(val description: String?, val screenshots: List<String>) {
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("description", description ?: JSONObject.NULL)
+        .put("screenshots", JSONArray(screenshots))
+
+    companion object {
+        /**
+         * The metadata an index entry's "metadata" field describes, by language; a language
+         * with nothing to show is left out.
+         */
+        fun mapOf(json: JSONObject?): Map<String, AppMetadata> {
+            if (json == null) return emptyMap()
+            val metadata = LinkedHashMap<String, AppMetadata>()
+            for (language in json.keys()) {
+                val entry = json.optJSONObject(language) ?: continue
+                val description = entry.optString("description").takeIf { it.isNotBlank() }
+                val screenshots = entry.optJSONArray("screenshots")
+                    ?.let { array -> List(array.length()) { array.optString(it) } }
+                    .orEmpty()
+                    .filter { it.isNotBlank() }
+                if (description != null || screenshots.isNotEmpty()) {
+                    metadata[language] = AppMetadata(description, screenshots)
+                }
+            }
+            return metadata
+        }
+
+        /**
+         * The metadata to show of [metadata] on a device whose [languages] are those, in
+         * order of preference: the description of the first language that has one, else of
+         * English, else of whatever there is, and the screenshots likewise, as a developer
+         * often publishes the screenshots in one language only; null when there is none.
+         */
+        fun pick(metadata: Map<String, AppMetadata>, languages: List<String>): AppMetadata? {
+            if (metadata.isEmpty()) return null
+            val inOrder = (languages + "en" + metadata.keys).distinct().mapNotNull { metadata[it] }
+            return AppMetadata(
+                inOrder.firstNotNullOfOrNull { it.description },
+                inOrder.firstOrNull { it.screenshots.isNotEmpty() }?.screenshots.orEmpty()
+            )
+        }
     }
 }
 

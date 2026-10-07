@@ -96,6 +96,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -136,6 +137,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.data.AppMetadata
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
@@ -967,7 +969,13 @@ private fun Progress(progress: Float?) {
 @Composable
 private fun ReleaseNotesText(markdown: String) {
     val lines = remember(markdown) { ReleaseNotes.parse(markdown) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    NotesText(lines)
+}
+
+/** Lines read the way release notes are, shown with their headings, bullets, bold and code. */
+@Composable
+internal fun NotesText(lines: List<ReleaseNotes.Line>, modifier: Modifier = Modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         lines.forEach { line ->
             val text = buildAnnotatedString {
                 line.spans.forEach { span ->
@@ -1012,7 +1020,7 @@ private fun DetailsSheet(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
-            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            .padding(start = DETAILS_INSET, end = DETAILS_INSET, bottom = 24.dp)
     ) {
         Text(
             text = app.title,
@@ -1025,6 +1033,11 @@ private fun DetailsSheet(
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp)
             )
+        }
+        val locales = LocalConfiguration.current.locales
+        val languages = remember(locales) { List(locales.size()) { locales[it].language } }
+        AppMetadata.pick(app.metadata, languages)?.let {
+            Showcase(it, inset = DETAILS_INSET, modifier = Modifier.padding(top = 12.dp))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -1807,6 +1820,8 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
     }
 }
 
+/** What the details keep clear of the screen's edges. */
+private val DETAILS_INSET = 24.dp
 private const val PREF_SORT = "sort"
 private const val PREF_MATERIAL = "material"
 private const val PREF_HIDE_TOP = "hide_top"

@@ -213,4 +213,5 @@
     <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>
     <string name="channel_installs">Ready to install</string>
     <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
+    <string name="screenshot_description">Screenshot %1$d of %2$d</string>
 </resources>

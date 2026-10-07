@@ -114,4 +114,18 @@ class StoreAppTest {
             assertEquals(icon, StoreApp.fromJson(JSONObject(app.toJson().toString())).icon)
         }
     }
+
+    @Test
+    fun metadataSurvivesTheCatalogueCache() {
+        val metadata = mapOf(
+            "en" to AppMetadata("https://x/en/full_description.txt", listOf("https://x/en/1.png")),
+            "fi" to AppMetadata(null, listOf("https://x/fi/1.png", "https://x/fi/2.png"))
+        )
+        val app = testApp().copy(metadata = metadata)
+        assertEquals(metadata, StoreApp.fromJson(JSONObject(app.toJson().toString())).metadata)
+        assertTrue(StoreApp.fromJson(testApp().toJson()).metadata.isEmpty())
+        val older = testApp().toJson()
+        older.remove("metadata")
+        assertTrue(StoreApp.fromJson(older).metadata.isEmpty())
+    }
 }

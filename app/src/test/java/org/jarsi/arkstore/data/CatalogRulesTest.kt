@@ -247,6 +247,20 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun metadataComesFromAnyPlaceThatHasIt() {
+        val published = app()
+        val metadata = mapOf("en" to AppMetadata(null, listOf("https://x/org.example/1.png")))
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "dev").copy(metadata = metadata)
+        val row = merged(listOf(published, fdroid)).single()
+        assertEquals(published.fullName, row.app.fullName)
+        assertEquals(metadata, row.app.metadata)
+        // Metadata of the app's own is kept.
+        val own = mapOf("en" to AppMetadata("https://x/full_description.txt", emptyList()))
+        assertEquals(own, merged(listOf(published.copy(metadata = own), fdroid)).single().app.metadata)
+        assertTrue(merged(listOf(published)).single().app.metadata.isEmpty())
+    }
+
+    @Test
     fun appWithoutAnIconIsShownByItsFirstLetterOrDigit() {
         assertEquals("B", CatalogRules.initial("bitwarden"))
         assertEquals("7", CatalogRules.initial("7-Zip"))

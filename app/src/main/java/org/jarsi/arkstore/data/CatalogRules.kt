@@ -299,10 +299,12 @@ internal object CatalogRules {
             val project = project(row)
             val withIt = inLine.filter { it === row || it.fromRepository || project(it).let { named -> named == null || named == project } }
             val others = withIt.filter { it !in kept }.map { it.source }.distinct()
-            // The icon comes from any place that has one: the app is the same wherever it
-            // comes from, and few places tell its icon.
-            val icon = withIt.firstNotNullOfOrNull { it.icon }
-            Merged(if (row.icon == null && icon != null) row.copy(icon = icon) else row, others)
+            // The icon and the metadata come from any place that has them: the app is the
+            // same wherever it comes from, and few places tell its icon.
+            val icon = row.icon ?: withIt.firstNotNullOfOrNull { it.icon }
+            val metadata = row.metadata.ifEmpty { withIt.firstOrNull { it.metadata.isNotEmpty() }?.metadata.orEmpty() }
+            val filled = if (icon != row.icon || metadata != row.metadata) row.copy(icon = icon, metadata = metadata) else row
+            Merged(filled, others)
         }
     }
 

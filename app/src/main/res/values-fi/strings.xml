@@ -198,4 +198,5 @@
     <string name="other_build_detail">Asennettu sovellus on allekirjoitettu avaimella, jota toinen tätä pakettia tarjoava paikka käyttää, eikä tämän version avainta vielä tiedetä, joten se voi olla toisen tekijän samanniminen versio. ARK-Store ei tarjoa sitä päivityksenä. Voit silti kokeilla: avaimet verrataan, kun tiedosto on ladattu, ja päivitys tehdään vain, jos ne täsmäävät.</string>
     <string name="channel_installs">Valmiina asennettavaksi</string>
     <string name="channel_installs_description">Kertoo, kun ladattu sovellus odottaa, että vahvistat asennuksen</string>
+    <string name="screenshot_description">Kuvakaappaus %1$d/%2$d</string>
 </resources>

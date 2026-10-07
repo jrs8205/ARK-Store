@@ -1,9 +1,6 @@
 package org.jarsi.arkstore.ui
 
 import android.content.Context
-import android.graphics.BitmapFactory
-import android.util.Log
-import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -21,7 +18,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.SolidColor
@@ -41,17 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import java.io.File
-import java.io.IOException
-import java.security.MessageDigest
-import java.util.Collections
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.data.AppIcon
 import org.jarsi.arkstore.data.CatalogRules
-import org.jarsi.arkstore.data.Http
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -140,111 +127,23 @@ private fun Initial(name: String, size: Dp) {
  * icon of its app changes, and then shows the new one.
  */
 @Composable
-private fun rememberIcon(address: String?): IconLoader.Loaded? {
+private fun rememberIcon(address: String?): ImageLoader.Loaded? = rememberImage(IconLoader, address)
+
+/** The image at [address] as [loader] has it, once it has been loaded; see [rememberIcon]. */
+@Composable
+internal fun rememberImage(loader: ImageLoader, address: String?): ImageLoader.Loaded? {
     val context = LocalContext.current.applicationContext
-    val loaded = remember(address) { mutableStateOf(address?.let { IconLoader.cached(it) }) }
-    LaunchedEffect(address) {
-        if (address != null && loaded.value == null) loaded.value = IconLoader.load(context, address)
+    val loaded = remember(loader, address) { mutableStateOf(address?.let { loader.cached(it) }) }
+    LaunchedEffect(loader, address) {
+        if (address != null && loaded.value == null) loaded.value = loader.load(context, address)
     }
     return loaded.value
 }
 
 @Composable
-private fun IconLoader.Loaded.painter(): Painter = when (this) {
-    is IconLoader.Loaded.Image -> remember(this) { BitmapPainter(bitmap) }
-    is IconLoader.Loaded.Vector -> rememberVectorPainter(image)
-}
-
-/**
- * Fetches the icons the index publishes and keeps them: in memory for the rows on screen,
- * on disk for the next start. An address that could not be had is not asked for again
- * until the app starts again.
- */
-object IconLoader {
-    private const val TAG = "IconLoader"
-    private const val MAX_BYTES = 512 * 1024
-    /** An image is decoded no larger than this on a side: a row shows it at 48 dp. */
-    private const val MAX_PIXELS = 192
-    private const val MEMORY_BYTES = 6 * 1024 * 1024
-
-    sealed class Loaded(val bytes: Int) {
-        class Image(val bitmap: ImageBitmap) : Loaded(bitmap.width * bitmap.height * 4)
-        class Vector(val image: ImageVector) : Loaded(4 * 1024)
-    }
-
-    private val memory = object : LruCache<String, Loaded>(MEMORY_BYTES) {
-        override fun sizeOf(key: String, value: Loaded): Int = value.bytes
-    }
-    private val failed: MutableSet<String> = Collections.synchronizedSet(HashSet())
-    private val fetching = Semaphore(4)
-
-    fun cached(address: String): Loaded? = memory.get(address)
-
-    suspend fun load(context: Context, address: String): Loaded? {
-        memory.get(address)?.let { return it }
-        if (address in failed) return null
-        val loaded = withContext(Dispatchers.IO) {
-            try {
-                decode(address, bytes(context, address))
-            } catch (e: IOException) {
-                Log.w(TAG, "No icon from $address: $e")
-                null
-            } catch (e: RuntimeException) {
-                // A file that is not what it should be: JSON that is not an icon, say.
-                Log.w(TAG, "Odd icon from $address", e)
-                null
-            }
-        }
-        if (loaded == null) failed += address else memory.put(address, loaded)
-        return loaded
-    }
-
-    /** The file at [address], from the copy on disk or, failing that, the network. */
-    private suspend fun bytes(context: Context, address: String): ByteArray {
-        val file = File(context.cacheDir, "icons/" + digest(address))
-        try {
-            if (file.exists()) return file.readBytes()
-        } catch (e: IOException) {
-            Log.w(TAG, "Could not read the copy of $address", e)
-        }
-        val bytes = fetching.withPermit { Http.getBytes(address, MAX_BYTES) }
-        try {
-            // Written beside and moved into place, so that a file cut short is never read.
-            file.parentFile?.mkdirs()
-            val part = File(file.path + ".part")
-            part.writeBytes(bytes)
-            if (!part.renameTo(file)) part.delete()
-        } catch (e: IOException) {
-            Log.w(TAG, "Could not keep a copy of $address", e)
-        }
-        return bytes
-    }
-
-    private fun decode(address: String, bytes: ByteArray): Loaded? {
-        if (address.substringBefore('?').endsWith(".json")) {
-            return VectorDrawables.fromJson(String(bytes, Charsets.UTF_8))?.let { Loaded.Vector(it) }
-        }
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
-        val options = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight) }
-        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)?.let { Loaded.Image(it.asImageBitmap()) }
-    }
-
-    /**
-     * The fraction, as a power of two, at which an image [width] by [height] is decoded: its
-     * longer side ends up under twice [MAX_PIXELS], so that neither a large icon nor a long
-     * strip of an image takes more memory than a row's icon is worth.
-     */
-    fun sampleSize(width: Int, height: Int): Int {
-        var size = 1
-        while (maxOf(width, height) / (size * 2) >= MAX_PIXELS) size *= 2
-        return size
-    }
-
-    private fun digest(text: String): String =
-        MessageDigest.getInstance("SHA-256").digest(text.toByteArray())
-            .joinToString("") { "%02x".format(it) }.take(32)
+internal fun ImageLoader.Loaded.painter(): Painter = when (this) {
+    is ImageLoader.Loaded.Image -> remember(this) { BitmapPainter(bitmap) }
+    is ImageLoader.Loaded.Vector -> rememberVectorPainter(image)
 }
 
 /**
