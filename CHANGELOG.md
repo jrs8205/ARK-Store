@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.8.0-beta.1
+
+- The details show the screenshots and the longer description a developer publishes in the
+  repository's `fastlane/metadata/android/` folder, the one F-Droid reads; a screenshot opens
+  to fill the screen. The F-Droid and IzzyOnDroid catalogues contribute their screenshots too
+- Automatic updates: on Android 12 and later, a switch in the settings lets the background
+  check install the updates of the apps the store itself installed without asking, only on
+  Wi-Fi or only while charging if wanted. Other apps, and an update Android wants confirmed,
+  still get a notification
+- A GitHub token in the settings raises GitHub's limit of requests from 60 an hour for the
+  whole network to 5,000. It is checked with GitHub before it is kept, goes to GitHub's API
+  alone, and stays out of backups, device transfers and exports
+- Export and import of the sources, the bookmarks and the settings as a file, through the
+  system's file picker. Importing adds the sources and bookmarks to those on the device and
+  applies the settings
+
 ## 1.7.0-beta.3
 
 - A chosen theme takes effect at once; in 1.7.0-beta.2 it showed only after the store was

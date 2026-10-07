@@ -1,0 +1,1 @@
+Kuvakaappaukset ja pidempi kuvaus tietosivulla repon fastlane-tiedoista. Kaupan asentamien sovellusten automaattinen päivitys Android 12:sta alkaen. GitHub-tunniste asetuksiin suurempaa pyyntörajaa varten. Lähteiden, kirjanmerkkien ja asetusten vienti ja tuonti.

@@ -1,0 +1,1 @@
+Screenshots and a longer description in the details, from the repository's fastlane metadata. Automatic updates of the apps the store installed, on Android 12 and later. A GitHub token in the settings for a higher request limit. Export and import of the sources, bookmarks and settings.
