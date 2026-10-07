@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0-beta.2
+
+- No source to begin with: the store's own apps come from the index like everyone else's, so
+  a fresh install asks GitHub for nothing and never runs into its limit of 60 requests an
+  hour per network. The GitHub token is explained as what it is, something only those who
+  add many sources need. An install that already has a source keeps it; remove the store's
+  own account under Sources if you no longer want it read from GitHub
+
 ## 1.8.0-beta.1
 
 - The details show the screenshots and the longer description a developer publishes in the

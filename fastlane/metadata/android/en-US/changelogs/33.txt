@@ -1,0 +1,1 @@
+No source to begin with: the store's own apps come from the index, so a fresh install asks GitHub for nothing and never hits its hourly limit. The GitHub token is explained as something only those who add many sources need.
