@@ -1576,21 +1576,26 @@ def fastlane_metadata(full_name, default_branch, stamp=None):
 
 
 def app_metadata(repo, previous=None):
-    """The "metadata" of a repository's entry, or None when its default branch is not known,
-    so that the entry goes without and a later run looks it up. previous is the repository's
-    entry from an earlier run, whose metadata stands while the repository is not pushed to,
-    and while a lookup fails: the metadata is an extra, and a passing error must not cost the
-    entry its release."""
+    """The fields that tell a repository's entry its "metadata": the metadata itself and
+    "metadataAt", the push it was read for. None when the default branch is not known, so
+    that the entry goes without and a later run looks it up. previous is the repository's
+    entry from an earlier run: its metadata stands while it was read for the current push,
+    and while a lookup fails, with its old mark, so that the next run looks again. The
+    metadata is an extra, and a passing error must not cost the entry its release."""
     known = previous.get("metadata") if previous and "metadata" in previous else None
-    if previous and known is not None and previous.get("pushedAt") == (repo.get("pushed_at") or ""):
-        return known
+    pushed_at = repo.get("pushed_at") or ""
+    if known is not None and previous.get("metadataAt") == pushed_at:
+        return {"metadata": known, "metadataAt": pushed_at}
     if not repo.get("default_branch"):
         return None
     try:
-        return fastlane_metadata(repo["full_name"], repo["default_branch"], stamp_of(repo.get("pushed_at")))
+        metadata = fastlane_metadata(repo["full_name"], repo["default_branch"], stamp_of(pushed_at))
     except (urllib.error.URLError, OSError, ValueError) as error:
         print("%s: metadata not read: %s" % (repo["full_name"], error), file=sys.stderr)
-        return known
+        if known is None:
+            return None
+        return {"metadata": known, "metadataAt": previous.get("metadataAt")}
+    return {"metadata": metadata, "metadataAt": pushed_at}
 
 
 def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None,
@@ -1600,7 +1605,7 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
     With not_before, a repository whose newest full release was published earlier than that
     is given up on at once, before any of its APKs are examined. With icons, an IconStore,
     the icons of the apps are read and kept there. With metadata_of, a function given the
-    repository such as app_metadata, what it returns is written under "metadata", unless None.
+    repository such as app_metadata, the fields it returns are written into the entry, unless None.
 
     The entry describes the newest full release. When the release at the top of the list is a
     prerelease that upgrades it, that is added under "beta" for users who have asked for beta
@@ -1665,9 +1670,9 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
     else:
         app.update(beta_info)
         app["betaOnly"] = True
-    metadata = metadata_of(repo) if metadata_of is not None else None
-    if metadata is not None:
-        app["metadata"] = metadata
+    fields = metadata_of(repo) if metadata_of is not None else None
+    if fields:
+        app.update(fields)
     return app
 
 
