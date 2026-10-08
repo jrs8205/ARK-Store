@@ -80,8 +80,9 @@ MAX_SCREENSHOTS = 8
 # The short description is carried in the index itself, which this keeps small.
 MAX_SUMMARY = 200
 # Raised when the metadata is read differently, so that what an earlier run read is read
-# again: 2 reads the short description, 3 reads the common languages beyond English and Finnish.
-METADATA_READER = 3
+# again: 2 reads the short description, 3 reads the common languages beyond English and Finnish,
+# 4 passes over a folder whose short description is empty.
+METADATA_READER = 4
 # How much of a text file is read for it.
 MAX_TEXT_BYTES = 16 * 1024
 RAW_ADDRESS = "https://raw.githubusercontent.com"
@@ -1503,14 +1504,17 @@ def is_upgrade(beta_info, stable_info):
     return False
 
 
+def locale_candidates(language, locales):
+    """The ones of locales to read language from, in order of preference: the locale of the
+    language's usual region (DEFAULT_REGIONS), then the language alone, then its other
+    regions in alphabetical order."""
+    first = [locale for locale in ("%s-%s" % (language, DEFAULT_REGIONS[language]), language) if locale in locales]
+    return first + sorted(locale for locale in locales if locale.startswith(language + "-") and locale not in first)
+
+
 def preferred_locale(language, locales):
-    """The one of locales to read language from, or None: the locale of the language's usual
-    region (DEFAULT_REGIONS), failing that the language alone, failing that the first of its
-    other regions."""
-    for locale in ("%s-%s" % (language, DEFAULT_REGIONS[language]), language):
-        if locale in locales:
-            return locale
-    return min((locale for locale in locales if locale.startswith(language + "-")), default=None)
+    """The one of locales to read language from, or None, see locale_candidates."""
+    return next(iter(locale_candidates(language, locales)), None)
 
 
 def natural_order(path):
@@ -1578,19 +1582,20 @@ def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=
     useful = set(summaries) | set(descriptions) | {locale for locale, found in shown.items() if found}
     metadata = {}
     for language in LANGUAGES:
-        locale = preferred_locale(language, useful)
-        if locale is None:
-            continue
-        found = {}
-        if locale in summaries:
-            summary = summary_text(read_text(raw_address(full_name, default_branch, summaries[locale], stamp)))
-            if summary:
-                found["summary"] = summary
-        if locale in descriptions:
-            found["description"] = raw_address(full_name, default_branch, descriptions[locale], stamp)
-        found["screenshots"] = [raw_address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
-        if found["screenshots"] or len(found) > 1:
-            metadata[language] = found
+        # A folder whose short description turns out empty, and that has nothing else, must
+        # not hide the next folder of the language.
+        for locale in locale_candidates(language, useful):
+            found = {}
+            if locale in summaries:
+                summary = summary_text(read_text(raw_address(full_name, default_branch, summaries[locale], stamp)))
+                if summary:
+                    found["summary"] = summary
+            if locale in descriptions:
+                found["description"] = raw_address(full_name, default_branch, descriptions[locale], stamp)
+            found["screenshots"] = [raw_address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
+            if found["screenshots"] or len(found) > 1:
+                metadata[language] = found
+                break
     return metadata
 
 
