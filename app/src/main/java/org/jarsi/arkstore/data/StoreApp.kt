@@ -110,12 +110,20 @@ data class StoreApp(
         get() = versionName ?: tag.removePrefix("v")
 
     /**
-     * The short text that tells what the app is, on a device whose [languages] are those:
-     * the summary the developer wrote for the store, as [AppMetadata.pick] chooses it, and
-     * failing that the [description] of the repository or catalogue.
+     * The short text that tells what the app is, on a device whose [languages] are those, in
+     * order of preference: the summary the developer wrote for the store in the first of them
+     * that has one, else in English, and failing that the [description]. The description
+     * counts as English: a catalogue writes its English summary there and leaves it out of
+     * the metadata, and a repository's description is English as a rule. So a summary in a
+     * language the device does not read never wins over it.
      */
-    fun summary(languages: List<String>): String =
-        AppMetadata.pick(metadata, languages)?.summary ?: description
+    fun summary(languages: List<String>): String {
+        for (language in languages) {
+            metadata[language]?.summary?.let { return it }
+            if (language == "en" && description.isNotBlank()) return description
+        }
+        return metadata["en"]?.summary ?: description
+    }
 
     /** What the APK's manifest said of it, or null when the manifest could not be read. */
     val apkInfo: ApkInfo?
@@ -274,18 +282,21 @@ data class AppMetadata(val description: String?, val screenshots: List<String>, 
 
         /**
          * The metadata to show of [metadata] on a device whose [languages] are those, in
-         * order of preference: the summary and the description each of the first language
-         * that has one, else of English, else of whatever there is, and the screenshots
-         * likewise, as a developer often publishes the screenshots in one language only;
-         * null when there is none.
+         * order of preference: the description of the first language that has one, else of
+         * English, else of whatever there is, and the screenshots likewise, as a developer
+         * often publishes the screenshots in one language only; the summary of the first
+         * language that has one, else of English, but never of another language, since the
+         * description stands in for English then (see [StoreApp.summary]); null when there
+         * is nothing at all.
          */
         fun pick(metadata: Map<String, AppMetadata>, languages: List<String>): AppMetadata? {
             if (metadata.isEmpty()) return null
-            val inOrder = (languages + "en" + metadata.keys).distinct().mapNotNull { metadata[it] }
+            val read = (languages + "en").distinct().mapNotNull { metadata[it] }
+            val inOrder = read + metadata.keys.filter { it !in languages && it != "en" }.mapNotNull { metadata[it] }
             return AppMetadata(
                 inOrder.firstNotNullOfOrNull { it.description },
                 inOrder.firstOrNull { it.screenshots.isNotEmpty() }?.screenshots.orEmpty(),
-                inOrder.firstNotNullOfOrNull { it.summary }
+                read.firstNotNullOfOrNull { it.summary }
             )
         }
     }

@@ -78,12 +78,14 @@ class AppMetadataTest {
     }
 
     @Test
-    fun summaryOfTheLanguageOfTheDeviceIsPickedFirstThenEnglishThenAny() {
+    fun summaryOfTheLanguageOfTheDeviceIsPickedFirstThenEnglishButNeverAnother() {
         val both = mapOf("en" to english.copy(summary = "English"), "fi" to finnish.copy(summary = "Suomi"))
         assertEquals("Suomi", AppMetadata.pick(both, listOf("fi", "en"))!!.summary)
         assertEquals("English", AppMetadata.pick(both, listOf("sv"))!!.summary)
-        assertEquals("Suomi", AppMetadata.pick(mapOf("fi" to finnish.copy(summary = "Suomi")), listOf("sv"))!!.summary)
-        // A language without a summary does not hide the summary of another.
+        // A summary in a language the device does not read is no better than the description.
+        assertNull(AppMetadata.pick(mapOf("fi" to finnish.copy(summary = "Suomi")), listOf("sv"))!!.summary)
+        assertNull(AppMetadata.pick(mapOf("fi" to finnish.copy(summary = "Suomi")), listOf("en"))!!.summary)
+        // A language without a summary does not hide the English one.
         val pictured = mapOf("fi" to finnish, "en" to english.copy(summary = "English"))
         assertEquals("English", AppMetadata.pick(pictured, listOf("fi"))!!.summary)
         assertNull(AppMetadata.pick(mapOf("en" to english), listOf("en"))!!.summary)
