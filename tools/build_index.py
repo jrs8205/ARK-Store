@@ -70,14 +70,18 @@ USER_AGENT = "ARK-Store-index"
 # An app's long description and phone screenshots are read from where the F-Droid tools take
 # them, fastlane/metadata/android/<locale>/, for each of these languages.
 METADATA_FOLDER = "fastlane/metadata/android/"
-LANGUAGES = ("en", "fi")
-DEFAULT_REGIONS = {"en": "US", "fi": "FI"}
+LANGUAGES = ("en", "fi", "de", "es", "fr", "it", "pt", "ru", "uk", "pl", "nl", "tr", "zh", "ja", "ko", "ar", "hi")
+# The region whose folder is read first for each language, see preferred_locale.
+DEFAULT_REGIONS = {
+    "en": "US", "fi": "FI", "de": "DE", "es": "ES", "fr": "FR", "it": "IT", "pt": "BR", "ru": "RU", "uk": "UA",
+    "pl": "PL", "nl": "NL", "tr": "TR", "zh": "CN", "ja": "JP", "ko": "KR", "ar": "SA", "hi": "IN",
+}
 MAX_SCREENSHOTS = 8
 # The short description is carried in the index itself, which this keeps small.
 MAX_SUMMARY = 200
 # Raised when the metadata is read differently, so that what an earlier run read is read
-# again: 2 reads the short description.
-METADATA_READER = 2
+# again: 2 reads the short description, 3 reads the common languages beyond English and Finnish.
+METADATA_READER = 3
 # How much of a text file is read for it.
 MAX_TEXT_BYTES = 16 * 1024
 RAW_ADDRESS = "https://raw.githubusercontent.com"
