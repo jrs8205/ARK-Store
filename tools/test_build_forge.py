@@ -501,3 +501,125 @@ class BuildListTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+TREE = ["README.md", "fastlane/metadata/android/en-US/short_description.txt",
+        "fastlane/metadata/android/en-US/full_description.txt",
+        "fastlane/metadata/android/en-US/images/phoneScreenshots/1.png",
+        "fastlane/metadata/android/fi/short_description.txt"]
+
+
+class MetadataTest(unittest.TestCase):
+    """The fastlane metadata of a repository elsewhere, read the way build_index reads it on
+    GitHub, from the place's own list of files and raw addresses."""
+
+    def test_codeberg_lists_the_files_of_the_branch_and_addresses_them_raw(self):
+        tree = {"tree": [{"path": path, "type": "blob"} for path in TREE] + [{"path": "fastlane", "type": "tree"}],
+                "truncated": False}
+        texts = {}
+        def raw_text(address):
+            texts.setdefault(address, 0)
+            texts[address] += 1
+            return "Chat for everyone" if "/en-US/" in address else "Juttelua kaikille"
+        repo = dict(build_forge.as_repo(dict(REPO, default_branch="main"), "MIT"))
+        with mock.patch.object(build_forge, "forge", return_value=tree) as forge, \
+                mock.patch.object(build_index, "raw_text", side_effect=raw_text):
+            metadata = build_forge.Codeberg.metadata(repo, "20260920100000")
+        forge.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=true&per_page=%d&page=1"
+                                      % build_forge.TREE_PAGE_SIZE)
+        raw = "https://codeberg.org/owner/app/raw/branch/main/fastlane/metadata/android/"
+        self.assertEqual(metadata, {
+            "en": {"summary": "Chat for everyone", "description": raw + "en-US/full_description.txt?at=20260920100000",
+                   "screenshots": [raw + "en-US/images/phoneScreenshots/1.png?at=20260920100000"]},
+            "fi": {"summary": "Juttelua kaikille", "screenshots": []},
+        })
+        self.assertEqual(set(texts), {raw + "en-US/short_description.txt?at=20260920100000",
+                                      raw + "fi/short_description.txt?at=20260920100000"})
+
+    def test_codeberg_reads_a_long_list_page_by_page_but_only_so_far(self):
+        pages = [{"tree": [{"path": "a%d" % i, "type": "blob"}], "truncated": True} for i in range(10)]
+        pages[2]["tree"].append({"path": TREE[2], "type": "blob"})
+        with mock.patch.object(build_forge, "forge", side_effect=pages) as forge:
+            metadata = build_forge.Codeberg.metadata(build_forge.as_repo(dict(REPO, default_branch="main"), "MIT"), None)
+        self.assertEqual(forge.call_count, build_forge.MAX_TREE_PAGES)
+        self.assertEqual(list(metadata), ["en"])
+        self.assertEqual(metadata["en"]["description"],
+                         "https://codeberg.org/owner/app/raw/branch/main/fastlane/metadata/android/en-US/full_description.txt")
+
+    def test_codeberg_repository_without_a_tree_has_no_metadata_but_other_errors_propagate(self):
+        repo = build_forge.as_repo(dict(REPO, default_branch="main"), "MIT")
+        missing = urllib.error.HTTPError("https://codeberg.org/", 404, "Not Found", {}, None)
+        with mock.patch.object(build_forge, "forge", side_effect=missing):
+            self.assertEqual(build_forge.Codeberg.metadata(repo, None), {})
+        failing = urllib.error.HTTPError("https://codeberg.org/", 502, "Bad Gateway", {}, None)
+        with mock.patch.object(build_forge, "forge", side_effect=failing):
+            with self.assertRaises(urllib.error.HTTPError):
+                build_forge.Codeberg.metadata(repo, None)
+
+    def test_gitlab_lists_the_metadata_folder_page_by_page_and_addresses_the_files_raw(self):
+        listed = [{"path": path, "type": "blob"} for path in TREE if path.startswith("fastlane/")]
+        pages = {1: listed[:2], 2: listed[2:]}
+        asked = []
+        def gitlab(path):
+            asked.append(path)
+            page = int(path.rsplit("page=", 1)[1])
+            return pages.get(page, [])
+        with mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
+                mock.patch.object(build_forge, "GITLAB_TREE_PAGE_SIZE", 2), \
+                mock.patch.object(build_index, "raw_text", return_value="Chat for everyone"):
+            metadata = build_forge.GitLab.metadata({"project_id": 12, "forge_name": "group/sub/app",
+                                                    "default_branch": "main"}, "1")
+        self.assertEqual(asked, [
+            "/projects/12/repository/tree?recursive=true&path=fastlane%2Fmetadata%2Fandroid&per_page=2&page=1",
+            "/projects/12/repository/tree?recursive=true&path=fastlane%2Fmetadata%2Fandroid&per_page=2&page=2",
+            # A full page may have more behind it; only an empty one tells the end.
+            "/projects/12/repository/tree?recursive=true&path=fastlane%2Fmetadata%2Fandroid&per_page=2&page=3",
+        ])
+        raw = "https://gitlab.com/group/sub/app/-/raw/main/fastlane/metadata/android/"
+        self.assertEqual(metadata["en"], {
+            "summary": "Chat for everyone", "description": raw + "en-US/full_description.txt?at=1",
+            "screenshots": [raw + "en-US/images/phoneScreenshots/1.png?at=1"]})
+
+    def test_gitlab_project_without_the_folder_has_no_metadata(self):
+        missing = urllib.error.HTTPError("https://gitlab.com/", 404, "Not Found", {}, None)
+        with mock.patch.object(build_forge, "gitlab", side_effect=missing):
+            self.assertEqual(build_forge.GitLab.metadata({"project_id": 12, "forge_name": "group/sub/app",
+                                                          "default_branch": "main"}, None), {})
+
+    def test_places_tell_the_default_branch(self):
+        self.assertEqual(build_forge.as_repo(dict(REPO, default_branch="develop"), "MIT")["default_branch"], "develop")
+        with mock.patch.object(build_forge, "gitlab", return_value=dict(PROJECT, default_branch="trunk",
+                                                                         license={"key": "mit"})):
+            self.assertEqual(build_forge.GitLab.describe(PROJECT)["default_branch"], "trunk")
+
+
+class ExamineMetadataTest(unittest.TestCase):
+    def test_examined_entry_carries_the_metadata_of_its_place(self):
+        metadata = {"en": {"screenshots": ["https://codeberg.org/x/1.png"]}}
+        def forge(path, raw=False, limit=None):
+            return RELEASES
+        with mock.patch.object(build_forge, "forge", side_effect=forge), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_forge.Codeberg, "metadata", return_value=metadata) as read, \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 3, "1.0", "Example")):
+            app = build_forge.examine(dict(REPO, default_branch="main"), None, NOW, False)
+        read.assert_called_once()
+        self.assertEqual(read.call_args.args[0]["full_name"], "codeberg:owner/app")
+        self.assertEqual(read.call_args.args[1], "20260920100000")
+        self.assertEqual(app["metadata"], metadata)
+        self.assertEqual(app["metadataAt"], "2026-09-20T10:00:00Z")
+        self.assertEqual(app["metadataReader"], build_index.METADATA_READER)
+
+    def test_metadata_known_for_the_push_is_not_read_again(self):
+        metadata = {"en": {"screenshots": ["https://codeberg.org/x/1.png"]}}
+        previous = {"pushedAt": "2026-09-01T00:00:00Z", "examinedAt": 0, "metadata": metadata,
+                    "metadataAt": "2026-09-20T10:00:00Z", "metadataReader": build_index.METADATA_READER}
+        def forge(path, raw=False, limit=None):
+            return RELEASES
+        with mock.patch.object(build_forge, "forge", side_effect=forge), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_forge.Codeberg, "metadata") as read, \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 3, "1.0", "Example")):
+            app = build_forge.examine(dict(REPO, default_branch="main"), previous, NOW, False)
+        read.assert_not_called()
+        self.assertEqual(app["metadata"], metadata)

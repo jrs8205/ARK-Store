@@ -39,6 +39,10 @@ GITLAB_HOST = "https://gitlab.com"
 GITLAB = "gitlab"
 GITLAB_PAGE_SIZE = 100
 GITLAB_RELEASES = 20
+GITLAB_TREE_PAGE_SIZE = 100
+TREE_PAGE_SIZE = 1000
+# A list of files too long for this many pages is read as far as they go.
+MAX_TREE_PAGES = 5
 USER_AGENT = "ARK-Store-index"
 PAGE_SIZE = 50
 MAX_PAGES = 20
@@ -300,7 +304,61 @@ def as_repo(repo, license_name):
         "topics": repo.get("topics") or [],
         "license": {"spdx_id": license_name},
         "pushed_at": to_utc(repo.get("updated_at")),
+        "default_branch": repo.get("default_branch"),
     }
+
+
+def tree_paths(repo):
+    """The paths of the files on the default branch of a Forgejo repository, read page by
+    page as far as MAX_TREE_PAGES; none when the branch is not there to list."""
+    paths = []
+    for page in range(1, MAX_TREE_PAGES + 1):
+        try:
+            tree = forge("/repos/%s/git/trees/%s?recursive=true&per_page=%d&page=%d"
+                         % (repo["forge_name"], urllib.parse.quote(repo["default_branch"], safe=""),
+                            TREE_PAGE_SIZE, page))
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            return []
+        paths.extend(item.get("path") or "" for item in tree.get("tree") or [] if item.get("type") == "blob")
+        if not tree.get("truncated"):
+            break
+    return paths
+
+
+def raw_address(repo, branch, path, stamp=None):
+    """The address a file on a branch of a Forgejo repository is served at, marked with the
+    stamp the way build_index.raw_address marks one."""
+    address = "%s/%s/raw/branch/%s/%s" % (HOST, repo, urllib.parse.quote(branch, safe="/"),
+                                          urllib.parse.quote(path, safe="/"))
+    return address + "?at=" + stamp if stamp else address
+
+
+def gitlab_tree_paths(repo):
+    """The paths of the files in the metadata folder of a GitLab project, read page by page
+    as far as MAX_TREE_PAGES; none when the folder is not there to list."""
+    paths = []
+    folder = urllib.parse.quote(build_index.METADATA_FOLDER.rstrip("/"), safe="")
+    for page in range(1, MAX_TREE_PAGES + 1):
+        try:
+            items = gitlab("/projects/%d/repository/tree?recursive=true&path=%s&per_page=%d&page=%d"
+                           % (repo["project_id"], folder, GITLAB_TREE_PAGE_SIZE, page))
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            return []
+        paths.extend(item.get("path") or "" for item in items if item.get("type") == "blob")
+        if len(items) < GITLAB_TREE_PAGE_SIZE:
+            break
+    return paths
+
+
+def gitlab_raw_address(project, branch, path, stamp=None):
+    """The address a file on a branch of a GitLab project is served at, see raw_address."""
+    address = "%s/%s/-/raw/%s/%s" % (GITLAB_HOST, project, urllib.parse.quote(branch, safe="/"),
+                                     urllib.parse.quote(path, safe="/"))
+    return address + "?at=" + stamp if stamp else address
 
 
 def list_releases(repo):
@@ -358,6 +416,14 @@ class Codeberg:
     @staticmethod
     def list_releases(repo):
         return list_releases(repo)
+
+    @staticmethod
+    def metadata(repo, stamp):
+        """The fastlane metadata of a repository, see build_index.metadata_from_paths, from
+        the list of its files and the short descriptions read from the raw server."""
+        return build_index.metadata_from_paths(
+            tree_paths(repo), repo["forge_name"], repo["default_branch"], stamp,
+            read_text=build_index.raw_text, address=raw_address)
 
 
 def gitlab(path):
@@ -484,6 +550,7 @@ class GitLab:
             "topics": repo.get("topics") or [],
             "license": {"spdx_id": license_name},
             "pushed_at": to_utc(repo.get("last_activity_at")),
+            "default_branch": detail.get("default_branch"),
         }
 
     @staticmethod
@@ -522,6 +589,13 @@ class GitLab:
             })
         return result
 
+    @staticmethod
+    def metadata(repo, stamp):
+        """The fastlane metadata of a project, see Codeberg.metadata."""
+        return build_index.metadata_from_paths(
+            gitlab_tree_paths(repo), repo["forge_name"], repo["default_branch"], stamp,
+            read_text=build_index.raw_text, address=gitlab_raw_address)
+
 
 PLACES = (Codeberg, GitLab)
 
@@ -543,6 +617,7 @@ def examine(repo, previous, today, found, place=Codeberg, icons=None):
             described, build_index.known_apks(previous),
             not_before=today - build_index.AUTO_RELEASE_DAYS * 86400 if found else None,
             with_prerelease=not found, list_releases=place.list_releases, icons=icons,
+            metadata_of=lambda repo: build_index.app_metadata(repo, previous, read=place.metadata),
         )
         if app is None:
             return None

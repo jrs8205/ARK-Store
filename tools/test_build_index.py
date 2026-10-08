@@ -1348,6 +1348,26 @@ class MetadataTest(unittest.TestCase):
              "metadataReader": READER, "metadata": {"en": {"screenshots": ["https://x/1.png"]}}}
     STAMPED = RAW + "en-US/full_description.txt?at=20260101000000"
 
+    def test_files_are_addressed_the_way_the_caller_says(self):
+        paths = ["fastlane/metadata/android/en-US/full_description.txt",
+                 "fastlane/metadata/android/en-US/images/phoneScreenshots/1.png"]
+        def address(full_name, branch, path, stamp=None):
+            return "https://elsewhere/%s/%s/%s#%s" % (full_name, branch, path, stamp)
+        metadata = build_index.metadata_from_paths(paths, "owner/app", "main", "7", address=address)
+        self.assertEqual(metadata, {"en": {
+            "description": "https://elsewhere/owner/app/main/fastlane/metadata/android/en-US/full_description.txt#7",
+            "screenshots": ["https://elsewhere/owner/app/main/fastlane/metadata/android/en-US/images/phoneScreenshots/1.png#7"],
+        }})
+
+    def test_metadata_is_read_by_the_reader_the_caller_gives(self):
+        read = mock.Mock(return_value={"en": {"screenshots": ["https://elsewhere/1.png"]}})
+        with mock.patch.object(build_index, "api") as api:
+            fields = build_index.app_metadata(dict(REPO, default_branch="main"), None, read=read)
+        api.assert_not_called()
+        read.assert_called_once_with(dict(REPO, default_branch="main"), "20260101000000")
+        self.assertEqual(fields, {"metadata": read.return_value, "metadataAt": REPO["pushed_at"],
+                                  "metadataReader": self.READER})
+
     def test_metadata_stands_while_the_repository_is_not_pushed_to(self):
         with mock.patch.object(build_index, "api") as api:
             fields = build_index.app_metadata(dict(REPO, default_branch="main"), self.KNOWN)
