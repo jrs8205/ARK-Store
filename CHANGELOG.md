@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.8.0
+
+- Several updates at once go in order. Three files are downloaded at a time and the rest
+  wait in a queue, shown as such; the store's own update is installed last, once every other
+  install is done with, since installing it ends the process. The next install prompt opens
+  only once the system has settled the previous install, not as soon as its prompt closes:
+  on Android 11 and earlier, where every install is confirmed, a prompt opened over an
+  install still running showed as a dark screen that took no touch until it was done. An
+  install whose session the system dropped without a word can be tried again
+- A download, waiting or running, is cancelled by tapping its ring. An unasked update's
+  download stops when the Wi-Fi is left, the charger unplugged or the switch turned off,
+  instead of running on regardless
+- Skip this version or do not update this app, from the details of an update: the app moves
+  to the installed ones with a note, is not counted or announced, and is not installed
+  unasked; the next version is offered again after a skip. Both go with the export
+- The screenshots and descriptions of apps published on Codeberg and GitLab, and of the
+  sources added on the device, are read too; a source added on the device costs one request
+  per push for them
+- Everything from the 1.8.0 betas below: screenshots and longer descriptions, automatic
+  updates, the GitHub token, export and import, no source to begin with, the short
+  description in the device's language, and the store in 17 languages
+
 ## 1.8.0-beta.4
 
 - The store speaks 17 languages: German, Spanish, French, Italian, Portuguese, Russian,

@@ -99,7 +99,9 @@ following a developer who has not added it.
 ## For users
 
 - One list: updates, installed apps and apps to install. One tap to install or update,
-  **Update all** when several updates wait. Downloads continue in the background.
+  **Update all** when several updates wait; they go in order, the store's own last, and a
+  download is cancelled by tapping its ring. Downloads continue in the background.
+- An update can be skipped, or an app held back from updates altogether, from its details.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
 - Every app with its own icon, read from the APK or given by its catalogue.
@@ -110,7 +112,8 @@ following a developer who has not added it.
   Android version the app needs. An installed app whose newest version needs a newer Android
   than the device has stays in the list, with a note; one not installed is left out.
 - Stars and download counts from GitHub.
-- Screenshots and a longer description in the details, when the developer publishes them.
+- Screenshots and a longer description in the details, when the developer publishes them,
+  whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.
 - Refresh on open, a background check every four hours and a notification for new versions.
   On Android 12 and later the check can also install the updates of the apps the store
   itself installed, without asking, only on Wi-Fi or only while charging if you like.
