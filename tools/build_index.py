@@ -85,6 +85,8 @@ MAX_SUMMARY = 200
 METADATA_READER = 4
 # How much of a text file is read for it.
 MAX_TEXT_BYTES = 16 * 1024
+# How many folders of one language are looked at before the language is given up on.
+MAX_FOLDERS_TRIED = 3
 RAW_ADDRESS = "https://raw.githubusercontent.com"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -1583,8 +1585,9 @@ def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=
     metadata = {}
     for language in LANGUAGES:
         # A folder whose short description turns out empty, and that has nothing else, must
-        # not hide the next folder of the language.
-        for locale in locale_candidates(language, useful):
+        # not hide the next folder of the language; but only so many are tried, as each
+        # short description read is a request.
+        for locale in locale_candidates(language, useful)[:MAX_FOLDERS_TRIED]:
             found = {}
             if locale in summaries:
                 summary = summary_text(read_text(raw_address(full_name, default_branch, summaries[locale], stamp)))
