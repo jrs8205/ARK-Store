@@ -54,6 +54,14 @@
     <string name="action_remove_source">%1$s kaynağını kaldır</string>
     <string name="state_downloading">İndiriliyor</string>
     <string name="state_installing">Yükleniyor</string>
+    <string name="state_queued">Sırada</string>
+    <string name="action_cancel_download">İndirmeyi iptal et</string>
+    <string name="version_skipped">%1$s (güncelleme atlandı)</string>
+    <string name="action_skip_version">Bu sürümü atla</string>
+    <string name="action_hold_updates">Bu uygulamayı güncelleme</string>
+    <string name="action_offer_updates">Güncellemeleri yeniden sun</string>
+    <string name="skipped_detail">%1$s sürümü atlanıyor. Bir sonraki yeniden sunulacak.</string>
+    <string name="held_detail">Bu uygulamanın güncellemeleri sunulmaz. Listelenmez, sayılmaz ve otomatik olarak kurulmaz.</string>
     <plurals name="stat_stars">
         <item quantity="one">%d yıldız</item>
         <item quantity="other">%d yıldız</item>

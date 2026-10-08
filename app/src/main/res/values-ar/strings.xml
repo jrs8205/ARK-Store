@@ -62,6 +62,14 @@
     <string name="action_remove_source">إزالة المصدر %1$s</string>
     <string name="state_downloading">جارٍ التنزيل</string>
     <string name="state_installing">جارٍ التثبيت</string>
+    <string name="state_queued">في قائمة الانتظار</string>
+    <string name="action_cancel_download">إلغاء التنزيل</string>
+    <string name="version_skipped">%1$s (تم تخطي التحديث)</string>
+    <string name="action_skip_version">تخطي هذا الإصدار</string>
+    <string name="action_hold_updates">عدم تحديث هذا التطبيق</string>
+    <string name="action_offer_updates">عرض التحديثات مجددًا</string>
+    <string name="skipped_detail">تم تخطي الإصدار %1$s. سيُعرض الإصدار التالي مجددًا.</string>
+    <string name="held_detail">لا تُعرض تحديثات هذا التطبيق: فهي لا تُدرج ولا تُحتسب ولا تُثبَّت تلقائيًا.</string>
     <plurals name="stat_stars">
         <item quantity="zero">%d نجمة</item>
         <item quantity="one">نجمة واحدة</item>

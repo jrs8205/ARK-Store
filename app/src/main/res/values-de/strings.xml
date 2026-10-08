@@ -54,6 +54,14 @@
     <string name="action_remove_source">Quelle %1$s entfernen</string>
     <string name="state_downloading">Wird heruntergeladen</string>
     <string name="state_installing">Wird installiert</string>
+    <string name="state_queued">In der Warteschlange</string>
+    <string name="action_cancel_download">Download abbrechen</string>
+    <string name="version_skipped">%1$s (Update übersprungen)</string>
+    <string name="action_skip_version">Diese Version überspringen</string>
+    <string name="action_hold_updates">Diese App nicht aktualisieren</string>
+    <string name="action_offer_updates">Updates wieder anbieten</string>
+    <string name="skipped_detail">Version %1$s wird übersprungen. Die nächste wird wieder angeboten.</string>
+    <string name="held_detail">Updates dieser App werden nicht angeboten. Sie werden weder aufgeführt noch gezählt noch automatisch installiert.</string>
     <plurals name="stat_stars">
         <item quantity="one">%d Stern</item>
         <item quantity="other">%d Sterne</item>

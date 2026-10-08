@@ -52,6 +52,14 @@
     <string name="action_remove_source">移除来源 %1$s</string>
     <string name="state_downloading">正在下载</string>
     <string name="state_installing">正在安装</string>
+    <string name="state_queued">排队中</string>
+    <string name="action_cancel_download">取消下载</string>
+    <string name="version_skipped">%1$s（已跳过更新）</string>
+    <string name="action_skip_version">跳过此版本</string>
+    <string name="action_hold_updates">不更新此应用</string>
+    <string name="action_offer_updates">重新提供更新</string>
+    <string name="skipped_detail">已跳过版本 %1$s。下一个版本会再次提供。</string>
+    <string name="held_detail">不提供此应用的更新：不会列出、不会计数，也不会自动安装。</string>
     <plurals name="stat_stars">
         <item quantity="other">%d 个星标</item>
     </plurals>

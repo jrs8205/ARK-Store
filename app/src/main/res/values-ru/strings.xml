@@ -58,6 +58,14 @@
     <string name="action_remove_source">Удалить источник %1$s</string>
     <string name="state_downloading">Скачивание</string>
     <string name="state_installing">Установка</string>
+    <string name="state_queued">В очереди</string>
+    <string name="action_cancel_download">Отменить загрузку</string>
+    <string name="version_skipped">%1$s (обновление пропущено)</string>
+    <string name="action_skip_version">Пропустить эту версию</string>
+    <string name="action_hold_updates">Не обновлять это приложение</string>
+    <string name="action_offer_updates">Снова предлагать обновления</string>
+    <string name="skipped_detail">Версия %1$s пропущена. Следующая будет предложена снова.</string>
+    <string name="held_detail">Обновления этого приложения не предлагаются: они не показываются, не учитываются и не устанавливаются автоматически.</string>
     <plurals name="stat_stars">
         <item quantity="one">%d звезда</item>
         <item quantity="few">%d звезды</item>

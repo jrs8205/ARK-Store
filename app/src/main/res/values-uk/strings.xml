@@ -58,6 +58,14 @@
     <string name="action_remove_source">Видалити джерело %1$s</string>
     <string name="state_downloading">Завантаження</string>
     <string name="state_installing">Установлення</string>
+    <string name="state_queued">У черзі</string>
+    <string name="action_cancel_download">Скасувати завантаження</string>
+    <string name="version_skipped">%1$s (оновлення пропущено)</string>
+    <string name="action_skip_version">Пропустити цю версію</string>
+    <string name="action_hold_updates">Не оновлювати цей застосунок</string>
+    <string name="action_offer_updates">Знову пропонувати оновлення</string>
+    <string name="skipped_detail">Версію %1$s пропущено. Наступну буде запропоновано знову.</string>
+    <string name="held_detail">Оновлення цього застосунку не пропонуються: вони не показуються, не враховуються й не встановлюються автоматично.</string>
     <plurals name="stat_stars">
         <item quantity="one">%d зірка</item>
         <item quantity="few">%d зірки</item>

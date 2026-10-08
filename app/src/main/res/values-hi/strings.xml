@@ -54,6 +54,14 @@
     <string name="action_remove_source">%1$s स्रोत हटाएं</string>
     <string name="state_downloading">डाउनलोड हो रहा है</string>
     <string name="state_installing">इंस्टॉल हो रहा है</string>
+    <string name="state_queued">कतार में</string>
+    <string name="action_cancel_download">डाउनलोड रद्द करें</string>
+    <string name="version_skipped">%1$s (अपडेट छोड़ा गया)</string>
+    <string name="action_skip_version">यह संस्करण छोड़ें</string>
+    <string name="action_hold_updates">इस ऐप को अपडेट न करें</string>
+    <string name="action_offer_updates">अपडेट फिर से दिखाएँ</string>
+    <string name="skipped_detail">संस्करण %1$s छोड़ दिया गया है। अगला संस्करण फिर से दिखाया जाएगा।</string>
+    <string name="held_detail">इस ऐप के अपडेट नहीं दिखाए जाते। वे सूची में नहीं आते, गिने नहीं जाते और अपने आप इंस्टॉल नहीं होते।</string>
     <plurals name="stat_stars">
         <item quantity="one">%d स्टार</item>
         <item quantity="other">%d स्टार</item>

@@ -52,6 +52,14 @@
     <string name="action_remove_source">%1$s 소스 삭제</string>
     <string name="state_downloading">다운로드 중</string>
     <string name="state_installing">설치 중</string>
+    <string name="state_queued">대기 중</string>
+    <string name="action_cancel_download">다운로드 취소</string>
+    <string name="version_skipped">%1$s (업데이트 건너뜀)</string>
+    <string name="action_skip_version">이 버전 건너뛰기</string>
+    <string name="action_hold_updates">이 앱 업데이트 안 함</string>
+    <string name="action_offer_updates">업데이트 다시 제공</string>
+    <string name="skipped_detail">버전 %1$s을(를) 건너뜁니다. 다음 버전은 다시 제공됩니다.</string>
+    <string name="held_detail">이 앱의 업데이트는 제공되지 않습니다. 목록에 표시되지 않고, 개수에 포함되지 않으며, 자동으로 설치되지 않습니다.</string>
     <plurals name="stat_stars">
         <item quantity="other">별 %d개</item>
     </plurals>

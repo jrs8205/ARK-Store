@@ -54,6 +54,14 @@
     <string name="action_remove_source">Bron %1$s verwijderen</string>
     <string name="state_downloading">Bezig met downloaden</string>
     <string name="state_installing">Bezig met installeren</string>
+    <string name="state_queued">In de wachtrij</string>
+    <string name="action_cancel_download">Download annuleren</string>
+    <string name="version_skipped">%1$s (update overgeslagen)</string>
+    <string name="action_skip_version">Deze versie overslaan</string>
+    <string name="action_hold_updates">Deze app niet bijwerken</string>
+    <string name="action_offer_updates">Updates weer aanbieden</string>
+    <string name="skipped_detail">Versie %1$s wordt overgeslagen. De volgende wordt weer aangeboden.</string>
+    <string name="held_detail">Updates van deze app worden niet aangeboden. Ze worden niet getoond, niet geteld en niet automatisch geïnstalleerd.</string>
     <plurals name="stat_stars">
         <item quantity="one">%d ster</item>
         <item quantity="other">%d sterren</item>
