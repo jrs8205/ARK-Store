@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0-beta.4
+
+- The store speaks 17 languages: German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi join English
+  and Finnish, in the app itself and in the store's own listing. The index reads the
+  descriptions, short descriptions and screenshots developers publish in those languages, and
+  the F-Droid and IzzyOnDroid catalogues contribute their translated summaries
+- The short description is chosen in the device's language, else in English; one in another
+  language no longer takes the place of the English description
+
 ## 1.8.0-beta.3
 
 - The short description a developer writes for the store, `short_description.txt` in the
