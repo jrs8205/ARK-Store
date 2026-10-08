@@ -100,7 +100,7 @@ class BuildAppTest(unittest.TestCase):
 
         screenshots = {
             "phone": {"en-GB": files("en-GB", "1.png"), "en-US": files("en-US", "10.png", "my shot.png", "2.png"),
-                      "fi": files("fi", "1.jpg", "2.gif"), "de-DE": files("de-DE", "1.png")},
+                      "fi": files("fi", "1.jpg", "2.gif"), "sv-SE": files("sv-SE", "1.png")},
             "tenInch": {"fi-FI": [{"name": "/org.example/fi-FI/tenInchScreenshots/1.png"}]},
         }
         for source, address in (("fdroid", "https://f-droid.org/repo"),

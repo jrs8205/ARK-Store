@@ -31,8 +31,9 @@ MAX_ENTRY = 1024 * 1024
 MAX_INDEX = 256 * 1024 * 1024
 MAX_NOTES = 500
 # Raised when the lists are built differently, so that a list an earlier run wrote is built
-# again whether the catalogue has changed or not: 2 carries the translated summaries.
-BUILDER = 2
+# again whether the catalogue has changed or not: 2 carries the translated summaries, 3 the common
+# languages beyond English and Finnish.
+BUILDER = 3
 # Apps built for one CPU architecture at a time have a version for each; this many of an
 # app's newest versions are looked at to find them all.
 MAX_VERSIONS = 12

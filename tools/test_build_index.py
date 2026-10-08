@@ -1248,8 +1248,18 @@ class MetadataTest(unittest.TestCase):
         self.assertIsNone(build_index.stamp_of(None))
         self.assertIsNone(build_index.stamp_of(""))
 
+    def test_common_languages_are_read_each_from_its_usual_region_first(self):
+        common = {"en", "fi", "de", "es", "fr", "it", "pt", "ru", "uk", "pl", "nl", "tr", "zh", "ja", "ko", "ar", "hi"}
+        self.assertEqual(set(build_index.LANGUAGES), common)
+        self.assertEqual(set(build_index.DEFAULT_REGIONS), common)
+        metadata = self.metadata("de-DE/full_description.txt", "pt-PT/full_description.txt", "pt-BR/full_description.txt",
+                                 "zh-TW/full_description.txt", "zh-CN/full_description.txt", "ar/full_description.txt",
+                                 "ja/full_description.txt")
+        self.assertEqual({language: entry["description"].split("/")[-2] for language, entry in metadata.items()},
+                         {"de": "de-DE", "pt": "pt-BR", "zh": "zh-CN", "ar": "ar", "ja": "ja"})
+
     def test_nothing_to_show_is_empty(self):
-        self.assertEqual(self.metadata("en-US/title.txt", "en-US/images/icon.png", "de-DE/full_description.txt"), {})
+        self.assertEqual(self.metadata("en-US/title.txt", "en-US/images/icon.png", "sv-SE/full_description.txt"), {})
         elsewhere = ["metadata/en-US/full_description.txt", "app/fastlane/metadata/android/en-US/full_description.txt"]
         self.assertEqual(build_index.metadata_from_paths(elsewhere, "owner/app", "main"), {})
 
