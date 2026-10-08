@@ -55,6 +55,13 @@ class StoreAppTest {
     }
 
     @Test
+    fun thePushTheMetadataWasReadForIsKeptInTheStoredCopy() {
+        val app = testApp().copy(metadataAt = "2026-10-08T10:00:00Z")
+        assertEquals("2026-10-08T10:00:00Z", StoreApp.fromJson(app.toJson()).metadataAt)
+        assertNull(StoreApp.fromJson(testApp().toJson()).metadataAt)
+    }
+
+    @Test
     fun lowestAndroidVersionIsKeptInTheStoredCopy() {
         val app = testApp().copy(minSdk = 26)
         assertEquals(26, StoreApp.fromJson(app.toJson()).minSdk)

@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.data
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.edit
@@ -81,6 +82,11 @@ class CatalogRepository private constructor(context: Context) {
     private val thisAndroid = CatalogRules.Android.THIS
 
     private val packages = context.packageManager
+
+    /** The languages the device reads, most preferred first; what metadata is read for. */
+    private val deviceLanguages: List<String> = context.resources.configuration.locales.let { locales ->
+        List(locales.size()) { locales[it].language }
+    }
 
     private val preferences = context.getSharedPreferences("catalog", Context.MODE_PRIVATE)
 
@@ -761,7 +767,8 @@ class CatalogRepository private constructor(context: Context) {
             minSdk = StoreApp.minSdkOf(apk),
             minSdkCodename = StoreApp.minSdkCodenameOf(apk),
             icon = AppIcon.of(apk.opt("icon")),
-            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata")),
+            metadataAt = (json.opt("metadataAt") as? String)?.takeIf { it.isNotEmpty() }
         )
     }
 
@@ -840,6 +847,7 @@ class CatalogRepository private constructor(context: Context) {
         val page = JSONArray(Http.getApi("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
         val releases = page.filter { !it.optBoolean("draft") }
+        val metadata = repoMetadata(repo, previous)
 
         fun apkAssets(release: JSONObject): List<JSONObject> {
             val assets = release.optJSONArray("assets") ?: return emptyList()
@@ -903,7 +911,9 @@ class CatalogRepository private constructor(context: Context) {
                 // taken to be called what the one before it was.
                 label = knownApp?.label
                     ?: CatalogRules.inheritedLabel(previous, info?.packageName, prerelease),
-                allDownloads = downloads
+                allDownloads = downloads,
+                metadata = metadata.first,
+                metadataAt = metadata.second
             )
         }
 
@@ -924,6 +934,50 @@ class CatalogRepository private constructor(context: Context) {
         val newest = releases.firstOrNull()?.takeIf { it.optBoolean("prerelease") }
         return stable?.let { build(it, prerelease = false) } to
             newest?.let { build(it, prerelease = true) }
+    }
+
+    /**
+     * What the repository [repo] publishes of its app (see [FastlaneMetadata]), with the push
+     * it was read for: as one of the [previous] apps knows it, when that was read for the
+     * current push, so that a lookup costs a request only once per push; else read now, from
+     * the list of the files on the default branch, which is one request to the API, and the
+     * short descriptions, which are not. Nothing, unmarked, when it cannot be read, so that
+     * the next lookup tries again: it is an extra, not worth failing the release for.
+     */
+    private fun repoMetadata(repo: JSONObject, previous: List<StoreApp>): Pair<Map<String, AppMetadata>, String?> {
+        val stamp = repo.optString("pushed_at").takeIf { it.isNotEmpty() } ?: return emptyMap<String, AppMetadata>() to null
+        previous.firstOrNull { it.metadataAt == stamp }?.let { return it.metadata to it.metadataAt }
+        val fullName = repo.getString("full_name")
+        val branch = repo.optString("default_branch").takeIf { it.isNotEmpty() } ?: return emptyMap<String, AppMetadata>() to null
+        val encodedBranch = Uri.encode(branch, "/")
+        val marked = stamp.filter { it.isDigit() }
+        return try {
+            val tree = try {
+                JSONObject(Http.getApi("$API/repos/$fullName/git/trees/${Uri.encode(branch)}?recursive=1"))
+            } catch (e: HttpStatusException) {
+                if (e.code == 404) return emptyMap<String, AppMetadata>() to stamp else throw e
+            }
+            val paths = tree.optJSONArray("tree")?.let { array ->
+                (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+                    .filter { it.optString("type") == "blob" }
+                    .map { it.optString("path") }
+            }.orEmpty()
+            FastlaneMetadata.read(
+                paths,
+                deviceLanguages,
+                address = { path -> "$RAW/$fullName/$encodedBranch/${Uri.encode(path, "/")}?at=$marked" }
+            ) { address ->
+                try {
+                    String(Http.getBytes(address, MAX_TEXT_BYTES), Charsets.UTF_8)
+                } catch (e: IOException) {
+                    Log.w(TAG, "Could not read $address", e)
+                    null
+                }
+            } to stamp
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not read metadata of $fullName", e)
+            emptyMap<String, AppMetadata>() to null
+        }
     }
 
     /**
@@ -1091,6 +1145,9 @@ class CatalogRepository private constructor(context: Context) {
             StoreApp.SOURCE_FDROID to BuildConfig.FDROID_INDEX_URL
         )
         private const val API = "https://api.github.com"
+        private const val RAW = "https://raw.githubusercontent.com"
+        /** The most a short description is read for; the index reads as far. */
+        private const val MAX_TEXT_BYTES = 16 * 1024
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100
         private const val MAX_REPO_PAGES = 10

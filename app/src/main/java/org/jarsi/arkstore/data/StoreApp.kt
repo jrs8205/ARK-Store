@@ -81,7 +81,12 @@ data class StoreApp(
      * What the developer publishes of the app beyond its summary, by language ("en", "fi"),
      * as the index tells it; empty when it tells nothing.
      */
-    val metadata: Map<String, AppMetadata> = emptyMap()
+    val metadata: Map<String, AppMetadata> = emptyMap(),
+    /**
+     * The push of the repository the [metadata] was read for, as the index marks it, or null
+     * when it has not been read for a push, as for an app of a catalogue.
+     */
+    val metadataAt: String? = null
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
@@ -163,6 +168,7 @@ data class StoreApp(
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
         .put("metadata", JSONObject().also { json -> metadata.forEach { (language, it) -> json.put(language, it.toJson()) } })
+        .put("metadataAt", metadataAt ?: JSONObject.NULL)
 
     companion object {
         const val SOURCE_GITHUB = "github"
@@ -237,7 +243,8 @@ data class StoreApp(
                 ?.let { array -> List(array.length()) { array.getString(it) } }
                 .orEmpty(),
             icon = AppIcon.of(json.opt("icon")),
-            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata")),
+            metadataAt = (json.opt("metadataAt") as? String)?.takeIf { it.isNotEmpty() }
         )
     }
 }
