@@ -124,9 +124,9 @@
     <string name="action_settings">Instellingen</string>
     <string name="settings_title">Instellingen</string>
     <string name="appearance_title">Weergave</string>
-    <string name="hide_top_switch">Bovenkant verbergen tijdens scrollen</string>
+    <string name="hide_top_switch">Bovenste balk verbergen bij scrollen</string>
     <string name="hide_top_description">De titelbalk, de zoekbalk en de filters schuiven uit beeld als je de lijst omlaag scrolt, en komen terug zodra je weer omhoog scrolt. Staat dit uit, dan blijven ze boven de lijst staan.</string>
-    <string name="material_switch">Materiaaloppervlakken</string>
+    <string name="material_switch">Metaalafwerking</string>
     <string name="material_description">Geeft het scherm en alles erop weer als geborsteld metaal dat van bovenaf wordt belicht, berekend door de grafische processor. Standaard aan op Android 13 en hoger; zet het hier uit als je effen kleuren prettiger vindt of stroom wilt besparen.</string>
     <string name="material_unavailable">Niet beschikbaar op dit apparaat: de grafische driver kon de oppervlakken niet weergeven, dus de effen kleuren blijven.</string>
     <string name="theme_title">Thema</string>
@@ -194,7 +194,7 @@
     <string name="newer_android_note">De nieuwste versie vereist %1$s. Die werkt niet op dit apparaat en wordt daarom niet aangeboden.</string>
     <string name="newer_android_detail">De nieuwste versie vereist %1$s. Die werkt niet op dit apparaat, dus ARK-Store biedt deze niet aan. De geïnstalleerde versie blijft staan.</string>
     <string name="action_try_install">Proberen te installeren</string>
-    <string name="other_app_detail">Onder deze pakketnaam staat %1$s, geïnstalleerd via %2$s. Dat is een andere app, ondertekend met een andere sleutel. Deze app is niet geïnstalleerd en kan ook niet worden geïnstalleerd zolang de andere app er staat. Als je die verwijdert, worden ook de gegevens ervan verwijderd.</string>
+    <string name="other_app_detail">Onder deze pakketnaam is %1$s geïnstalleerd (installatiemethode: %2$s). Dat is een andere app, ondertekend met een andere sleutel. Deze app is niet geïnstalleerd en kan ook niet worden geïnstalleerd zolang de andere app er staat. Als je die verwijdert, worden ook de gegevens ervan verwijderd.</string>
     <string name="other_build_detail">De geïnstalleerde app is ondertekend met de sleutel van een andere plek die dit pakket aanbiedt, en de sleutel van deze versie is nog niet bekend. Het kan dus een build van een andere ontwikkelaar onder dezelfde pakketnaam zijn. ARK-Store biedt deze versie daarom niet als update aan. Je kunt het toch proberen: de sleutels worden vergeleken zodra het bestand is gedownload, en de update gaat alleen door als ze overeenkomen.</string>
     <string name="channel_installs">Klaar om te installeren</string>
     <string name="channel_installs_description">Meldt wanneer een gedownloade app wacht tot je de installatie bevestigt</string>
@@ -209,7 +209,7 @@
     <string name="auto_update_charging_description">Wacht tot het apparaat aan de oplader is aangesloten</string>
     <string name="error_token">GitHub heeft het token uit de instellingen geweigerd. Vervang of verwijder het daar.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Alleen nodig als je bronnen toevoegt: de store haalt de accounts en repository\'s die je hebt toegevoegd rechtstreeks op bij GitHub, en zonder token staat GitHub dat per netwerk 60 keer per uur toe. Als de lijst niet meer wordt vernieuwd en je de melding ziet dat GitHub verzoeken beperkt, heft een token die limiet op. Maak een fine-grained persoonlijk toegangstoken zonder rechten aan op github.com/settings/personal-access-tokens; openbare repository\'s kun je ook zonder rechten lezen. Het token blijft op dit apparaat, buiten back-ups en exports, en wordt alleen naar GitHub gestuurd.</string>
+    <string name="github_token_description">Alleen nodig als je bronnen toevoegt: de store haalt de accounts en repository\'s die je hebt toegevoegd rechtstreeks op bij GitHub, en zonder token staat GitHub dat per netwerk 60 keer per uur toe. Als de lijst niet meer wordt vernieuwd en je de melding ziet dat GitHub verzoeken beperkt, verhoogt een token die limiet voor verzoeken. Maak een fine-grained persoonlijk toegangstoken zonder rechten aan op github.com/settings/personal-access-tokens; openbare repository\'s kun je ook zonder rechten lezen. Het token blijft op dit apparaat, buiten back-ups en exports, en wordt alleen naar GitHub gestuurd.</string>
     <string name="github_token_hint">Persoonlijk toegangstoken</string>
     <string name="github_token_none">Geen token. De meeste mensen hebben er geen nodig.</string>
     <string name="github_token_saved">Token in gebruik: %1$s verzoeken per uur.</string>
@@ -222,7 +222,7 @@
     <string name="action_export">Exporteren</string>
     <string name="action_import">Importeren</string>
     <string name="transfer_exported">Opgeslagen.</string>
-    <string name="transfer_imported">Geïmporteerd: %1$d nieuwe bronnen en %2$d nieuwe bladwijzers. De instellingen zijn toegepast.</string>
+    <string name="transfer_imported">Import voltooid. Nieuwe bronnen: %1$d. Nieuwe bladwijzers: %2$d. De instellingen zijn toegepast.</string>
     <string name="transfer_not_backup">Dit is geen exportbestand van ARK-Store.</string>
     <string name="transfer_failed">Het bestand kan niet worden gelezen of geschreven.</string>
 </resources>

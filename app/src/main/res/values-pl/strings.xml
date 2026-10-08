@@ -140,9 +140,9 @@
     <string name="appearance_title">Wygląd</string>
     <string name="hide_top_switch">Ukrywaj górną część podczas przewijania</string>
     <string name="hide_top_description">Pasek tytułu, wyszukiwarka i filtry chowają się podczas przewijania listy w dół i wracają, gdy tylko zaczniesz przewijać w górę. Gdy ta opcja jest wyłączona, pozostają nad listą.</string>
-    <string name="material_switch">Faktura powierzchni</string>
-    <string name="material_description">Rysuje ekran i wszystko, co się na nim znajduje, jako szczotkowany metal oświetlony z góry. Obliczenia wykonuje procesor graficzny. Domyślnie włączone w Androidzie 13 i nowszym; wyłącz tę opcję tutaj, jeśli wolisz płaskie kolory lub chcesz oszczędzać energię.</string>
-    <string name="material_unavailable">Niedostępne na tym urządzeniu: sterownik grafiki nie potrafił narysować powierzchni, więc pozostają płaskie kolory.</string>
+    <string name="material_switch">Metaliczne powierzchnie</string>
+    <string name="material_description">Rysuje ekran i wszystko, co się na nim znajduje, jako szczotkowany metal oświetlony z góry. Obliczenia wykonuje procesor graficzny. Domyślnie włączone w Androidzie 13 i nowszym; wyłącz tę opcję tutaj, jeśli wolisz jednolite kolory lub chcesz oszczędzać energię.</string>
+    <string name="material_unavailable">Niedostępne na tym urządzeniu: sterownik grafiki nie potrafił narysować powierzchni, więc pozostają jednolite kolory.</string>
     <string name="theme_title">Motyw</string>
     <string name="palette_ark">ARK</string>
     <string name="palette_forest">Las</string>
@@ -197,7 +197,7 @@
     <string name="detail_also_from">Dostępna także w</string>
     <string name="detail_warnings">Ostrzeżenia</string>
     <string name="install_ready_title">Aplikacja %1$s jest gotowa do instalacji</string>
-    <string name="install_ready_text">Kliknij, aby kontynuować</string>
+    <string name="install_ready_text">Dotknij, aby kontynuować</string>
     <string name="newer_version_note">Zainstalowana jest nowsza wersja niż ta dostępna tutaj.</string>
     <string name="detail_installed_from">Źródło instalacji</string>
     <string name="installer_other">inna aplikacja lub instalacja ręczna</string>
@@ -225,7 +225,7 @@
     <string name="auto_update_charging_description">Czeka, aż urządzenie zostanie podłączone do ładowarki</string>
     <string name="error_token">GitHub odrzucił token podany w ustawieniach. Zastąp go tam innym lub usuń.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Potrzebny tylko wtedy, gdy dodajesz źródła: sklep odczytuje dodane konta i repozytoria bezpośrednio z GitHuba, a bez tokenu GitHub pozwala na to z jednej sieci 60 razy na godzinę. Jeśli lista przestanie się odświeżać i pojawi się komunikat, że GitHub ogranicza liczbę żądań, token zniesie ten limit. Na stronie github.com/settings/personal-access-tokens utwórz osobisty token dostępu typu fine-grained bez żadnych uprawnień – publiczne repozytoria można odczytywać bez nich. Token pozostaje na tym urządzeniu, nie trafia do kopii zapasowych ani plików eksportu i jest wysyłany wyłącznie do GitHuba.</string>
+    <string name="github_token_description">Potrzebny tylko wtedy, gdy dodajesz źródła: sklep odczytuje dodane konta i repozytoria bezpośrednio z GitHuba, a bez tokenu GitHub pozwala na to z jednej sieci 60 razy na godzinę. Jeśli lista przestanie się odświeżać i pojawi się komunikat, że GitHub ogranicza liczbę żądań, token zwiększy ten limit żądań. Na stronie github.com/settings/personal-access-tokens utwórz osobisty token dostępu typu fine-grained bez żadnych uprawnień – publiczne repozytoria można odczytywać bez nich. Token pozostaje na tym urządzeniu, nie trafia do kopii zapasowych ani plików eksportu i jest wysyłany wyłącznie do GitHuba.</string>
     <string name="github_token_hint">Osobisty token dostępu</string>
     <string name="github_token_none">Brak tokenu. Większość osób go nie potrzebuje.</string>
     <string name="github_token_saved">Token w użyciu. Limit żądań na godzinę: %1$s.</string>

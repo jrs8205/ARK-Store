@@ -119,9 +119,9 @@
     <string name="appearance_title">外観</string>
     <string name="hide_top_switch">スクロール時に上部を隠す</string>
     <string name="hide_top_description">リストを下にスクロールすると、タイトルバー、検索、フィルタが画面の外に隠れ、上にスクロールするとすぐに戻ります。オフにすると、常にリストの上に表示されます。</string>
-    <string name="material_switch">質感のある表示</string>
+    <string name="material_switch">金属調の表示</string>
     <string name="material_description">画面とそこに表示されるすべてを、上から光が当たったヘアライン仕上げの金属のように GPU で描画します。Android 13 以降ではデフォルトでオンになっています。フラットな色のほうが好みの場合や、バッテリーを節約したい場合は、ここでオフにしてください。</string>
-    <string name="material_unavailable">このデバイスでは利用できません。グラフィックドライバで表面を描画できなかったため、フラットな色のままになります。</string>
+    <string name="material_unavailable">このデバイスでは利用できません。グラフィックドライバが金属調の描画に対応していないため、単色で表示します。</string>
     <string name="theme_title">テーマ</string>
     <string name="palette_ark">ARK</string>
     <string name="palette_forest">森</string>

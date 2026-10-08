@@ -126,7 +126,7 @@
     <string name="appearance_title">Görünüm</string>
     <string name="hide_top_switch">Kaydırırken üst kısmı gizle</string>
     <string name="hide_top_description">Liste aşağı kaydırıldığında başlık çubuğu, arama ve filtreler kayarak gizlenir; liste yukarı kaydırılır kaydırılmaz geri gelir. Bu ayar kapalıyken listenin üstünde sabit kalırlar.</string>
-    <string name="material_switch">Dokulu yüzeyler</string>
+    <string name="material_switch">Metalik yüzeyler</string>
     <string name="material_description">Ekranı ve üzerindeki her şeyi, grafik işlemcisinin hesapladığı, üstten ışık alan fırçalanmış metal gibi çizer. Android 13 ve üzeri sürümlerde varsayılan olarak açıktır. Düz renkleri tercih ediyorsanız veya güç tasarrufu yapmak istiyorsanız buradan kapatabilirsiniz.</string>
     <string name="material_unavailable">Bu cihazda kullanılamıyor: Grafik sürücüsü yüzeyleri çizemediği için düz renkler kullanılmaya devam ediyor.</string>
     <string name="theme_title">Tema</string>
@@ -209,7 +209,7 @@
     <string name="auto_update_charging_description">Cihaz şarja takılana kadar bekler</string>
     <string name="error_token">GitHub, ayarlarda girilen jetonu reddetti. Jetonu ayarlardan değiştirin veya kaldırın.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Yalnızca kaynak eklediyseniz gerekir: Mağaza, eklediğiniz hesapları ve depoları doğrudan GitHub\'dan okur. Jeton olmadan GitHub, aynı ağdan buna saatte yalnızca 60 kez izin verir. Liste yenilenmeyi bırakır ve GitHub\'ın istekleri sınırladığını belirten bir not görünürse jeton bu sınırı kaldırır. Jetonu github.com/settings/personal-access-tokens adresinde, hiçbir izin vermeden ince ayarlı (fine-grained) bir kişisel erişim jetonu olarak oluşturun. Herkese açık depolar izin gerektirmeden okunabilir. Jeton bu cihazda, yedeklerin ve dışa aktarılan dosyaların dışında kalır ve yalnızca GitHub\'a gönderilir.</string>
+    <string name="github_token_description">Yalnızca kaynak eklediyseniz gerekir: Mağaza, eklediğiniz hesapları ve depoları doğrudan GitHub\'dan okur. Jeton olmadan GitHub, aynı ağdan buna saatte yalnızca 60 kez izin verir. Liste yenilenmeyi bırakır ve GitHub\'ın istekleri sınırladığını belirten bir not görünürse jeton bu istek sınırını yükseltir. Jetonu github.com/settings/personal-access-tokens adresinde, hiçbir izin vermeden ince ayarlı (fine-grained) bir kişisel erişim jetonu olarak oluşturun. Herkese açık depolar izin gerektirmeden okunabilir. Jeton bu cihazda, yedeklerin ve dışa aktarılan dosyaların dışında kalır ve yalnızca GitHub\'a gönderilir.</string>
     <string name="github_token_hint">Kişisel erişim jetonu</string>
     <string name="github_token_none">Jeton yok. Çoğu kişinin jetona ihtiyacı olmaz.</string>
     <string name="github_token_saved">Jeton kullanımda: saatte %1$s istek.</string>

@@ -202,7 +202,7 @@
     <string name="newer_android_note">A versão mais nova requer %1$s. Este dispositivo não consegue executá-la, por isso ela não é oferecida.</string>
     <string name="newer_android_detail">A versão mais nova requer %1$s. Este dispositivo não consegue executá-la, por isso a ARK-Store não a oferece. A versão instalada continua no dispositivo.</string>
     <string name="action_try_install">Tentar instalar</string>
-    <string name="other_app_detail">Com este nome de pacote está instalado %1$s, via %2$s: um app diferente, assinado com outra chave. Este app não está instalado e não pode ser instalado enquanto o outro estiver no dispositivo; desinstalar o outro apaga os dados dele.</string>
+    <string name="other_app_detail">Com este nome de pacote está instalado %1$s (origem da instalação: %2$s): um app diferente, assinado com outra chave. Este app não está instalado e não pode ser instalado enquanto o outro estiver no dispositivo; desinstalar o outro apaga os dados dele.</string>
     <string name="other_build_detail">O app instalado foi assinado com a chave usada por outra origem que oferece este pacote, e a chave desta versão ainda não é conhecida, então pode ser a compilação de outro desenvolvedor com o mesmo nome de pacote. A ARK-Store não a oferece como atualização. Mesmo assim, você pode tentar: as chaves são comparadas depois que o arquivo é baixado, e a atualização só é feita se elas coincidirem.</string>
     <string name="channel_installs">Prontos para instalar</string>
     <string name="channel_installs_description">Avisa quando um app baixado está aguardando você confirmar a instalação</string>
@@ -212,12 +212,12 @@
     <string name="auto_update_description">Os apps instalados pela ARK-Store são atualizados sem perguntar quando a verificação em segundo plano encontra uma versão mais recente. Para os outros apps, você continua recebendo uma notificação, e o mesmo vale para as atualizações que o Android pede para confirmar.</string>
     <string name="auto_update_unsupported">Requer o Android 12 ou mais recente. Neste dispositivo, a verificação em segundo plano só envia notificações.</string>
     <string name="auto_update_unmetered_switch">Somente por Wi-Fi</string>
-    <string name="auto_update_unmetered_description">Não usa dados móveis nem outras redes limitadas</string>
+    <string name="auto_update_unmetered_description">Não usa dados móveis nem outras redes com limite de dados</string>
     <string name="auto_update_charging_switch">Somente durante o carregamento</string>
     <string name="auto_update_charging_description">Aguarda até o dispositivo ser conectado ao carregador</string>
     <string name="error_token">O GitHub rejeitou o token informado nas configurações. Substitua ou remova o token lá.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Só é necessário se você adicionar fontes: a loja lê as contas e os repositórios que você adicionou diretamente do GitHub, e sem um token o GitHub permite que cada rede faça isso 60 vezes por hora. Se a lista parar de atualizar com um aviso de que o GitHub está limitando as solicitações, um token remove esse limite. Crie um token de acesso pessoal refinado, sem nenhuma permissão, em github.com/settings/personal-access-tokens; os repositórios públicos podem ser lidos sem permissões. O token fica neste dispositivo, fora dos backups e das exportações, e é enviado somente para o GitHub.</string>
+    <string name="github_token_description">Só é necessário se você adicionar fontes: a loja lê as contas e os repositórios que você adicionou diretamente do GitHub, e sem um token o GitHub permite que cada rede faça isso 60 vezes por hora. Se a lista parar de atualizar com um aviso de que o GitHub está limitando as solicitações, um token aumenta esse limite de solicitações. Crie um token de acesso pessoal refinado, sem nenhuma permissão, em github.com/settings/personal-access-tokens; os repositórios públicos podem ser lidos sem permissões. O token fica neste dispositivo, fora dos backups e das exportações, e é enviado somente para o GitHub.</string>
     <string name="github_token_hint">Token de acesso pessoal</string>
     <string name="github_token_none">Nenhum token. A maioria das pessoas não precisa de um.</string>
     <string name="github_token_saved">Token em uso: %1$s solicitações por hora.</string>
@@ -230,7 +230,7 @@
     <string name="action_export">Exportar</string>
     <string name="action_import">Importar</string>
     <string name="transfer_exported">Salvo.</string>
-    <string name="transfer_imported">Importação concluída: %1$d novas fontes e %2$d novos favoritos. As configurações foram aplicadas.</string>
+    <string name="transfer_imported">Importação concluída. Novas fontes: %1$d. Novos favoritos: %2$d. As configurações foram aplicadas.</string>
     <string name="transfer_not_backup">Este não é um arquivo exportado pela ARK-Store.</string>
     <string name="transfer_failed">Não foi possível ler ou gravar o arquivo.</string>
 </resources>

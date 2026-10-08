@@ -126,7 +126,7 @@
     <string name="appearance_title">Darstellung</string>
     <string name="hide_top_switch">Kopfbereich beim Scrollen ausblenden</string>
     <string name="hide_top_description">Titelleiste, Suche und Filter werden ausgeblendet, wenn du in der Liste nach unten scrollst, und erscheinen wieder, sobald du nach oben scrollst. Ist die Option aus, bleiben sie über der Liste sichtbar.</string>
-    <string name="material_switch">Materialoberflächen</string>
+    <string name="material_switch">Metalloptik</string>
     <string name="material_description">Stellt den Bildschirm und alles darauf als gebürstetes, von oben beleuchtetes Metall dar, berechnet vom Grafikprozessor. Ab Android 13 standardmäßig aktiviert. Schalte die Option hier aus, wenn du einfarbige Flächen bevorzugst oder Energie sparen möchtest.</string>
     <string name="material_unavailable">Auf diesem Gerät nicht verfügbar: Der Grafiktreiber konnte die Oberflächen nicht darstellen, daher bleibt es bei einfarbigen Flächen.</string>
     <string name="theme_title">Design</string>
@@ -194,7 +194,7 @@
     <string name="newer_android_note">Die neueste Version erfordert %1$s. Auf diesem Gerät läuft sie nicht, daher wird sie nicht angeboten.</string>
     <string name="newer_android_detail">Die neueste Version erfordert %1$s. Auf diesem Gerät läuft sie nicht, daher bietet ARK-Store sie nicht an. Die installierte Version bleibt erhalten.</string>
     <string name="action_try_install">Installation versuchen</string>
-    <string name="other_app_detail">Unter diesem Paketnamen ist %1$s installiert (über %2$s): eine andere App, die mit einem anderen Schlüssel signiert ist. Diese App hier ist nicht installiert und lässt sich auch nicht installieren, solange die andere vorhanden ist. Wird die andere entfernt, werden ihre Daten gelöscht.</string>
+    <string name="other_app_detail">Unter diesem Paketnamen ist %1$s installiert (Installationsart: %2$s): eine andere App, die mit einem anderen Schlüssel signiert ist. Diese App hier ist nicht installiert und lässt sich auch nicht installieren, solange die andere vorhanden ist. Wird die andere entfernt, werden ihre Daten gelöscht.</string>
     <string name="other_build_detail">Die installierte App ist mit dem Schlüssel signiert, den eine andere Bezugsquelle dieses Pakets verwendet. Der Schlüssel dieser Version ist noch nicht bekannt, es könnte sich also um eine App eines anderen Entwicklers mit demselben Paketnamen handeln. ARK-Store bietet diese Version daher nicht als Update an. Du kannst es trotzdem versuchen: Die Schlüssel werden verglichen, sobald die Datei heruntergeladen ist, und das Update wird nur ausgeführt, wenn sie übereinstimmen.</string>
     <string name="channel_installs">Bereit zur Installation</string>
     <string name="channel_installs_description">Benachrichtigt dich, wenn eine heruntergeladene App darauf wartet, dass du die Installation bestätigst</string>
@@ -204,12 +204,12 @@
     <string name="auto_update_description">Apps, die ARK-Store installiert hat, werden ohne Nachfrage aktualisiert, sobald die Hintergrundprüfung eine neuere Version findet. Für andere Apps gibt es weiterhin eine Benachrichtigung, ebenso für Updates, die Android bestätigt haben möchte.</string>
     <string name="auto_update_unsupported">Erfordert Android 12 oder höher. Auf diesem Gerät benachrichtigt die Hintergrundprüfung nur.</string>
     <string name="auto_update_unmetered_switch">Nur über WLAN</string>
-    <string name="auto_update_unmetered_description">Nicht über mobile Daten oder andere kostenpflichtige Netzwerke</string>
+    <string name="auto_update_unmetered_description">Nicht über mobile Daten oder andere getaktete Netzwerke</string>
     <string name="auto_update_charging_switch">Nur beim Laden</string>
     <string name="auto_update_charging_description">Wartet, bis das Gerät geladen wird</string>
     <string name="error_token">GitHub hat das in den Einstellungen eingegebene Token abgelehnt. Ersetze oder entferne es dort.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Nur nötig, wenn du Quellen hinzufügst: ARK-Store liest die von dir hinzugefügten Konten und Repositorys direkt von GitHub, und ohne Token erlaubt GitHub das einem Netzwerk nur 60 Mal pro Stunde. Wenn die Liste nicht mehr aktualisiert wird und ein Hinweis erscheint, dass GitHub Anfragen begrenzt, hebt ein Token diese Begrenzung auf. Erstelle unter github.com/settings/personal-access-tokens ein persönliches Zugriffstoken vom Typ „Fine-grained“ ohne Berechtigungen; öffentliche Repositorys lassen sich auch ohne Berechtigungen lesen. Das Token bleibt auf diesem Gerät, ist nicht in Sicherungen und Exporten enthalten und wird nur an GitHub gesendet.</string>
+    <string name="github_token_description">Nur nötig, wenn du Quellen hinzufügst: ARK-Store liest die von dir hinzugefügten Konten und Repositorys direkt von GitHub, und ohne Token erlaubt GitHub das einem Netzwerk nur 60 Mal pro Stunde. Wenn die Liste nicht mehr aktualisiert wird und ein Hinweis erscheint, dass GitHub Anfragen begrenzt, erhöht ein Token dieses Anfragelimit. Erstelle unter github.com/settings/personal-access-tokens ein persönliches Zugriffstoken vom Typ „Fine-grained“ ohne Berechtigungen; öffentliche Repositorys lassen sich auch ohne Berechtigungen lesen. Das Token bleibt auf diesem Gerät, ist nicht in Sicherungen und Exporten enthalten und wird nur an GitHub gesendet.</string>
     <string name="github_token_hint">Persönliches Zugriffstoken</string>
     <string name="github_token_none">Kein Token. Die meisten brauchen keines.</string>
     <string name="github_token_saved">Token aktiv: %1$s Anfragen pro Stunde.</string>

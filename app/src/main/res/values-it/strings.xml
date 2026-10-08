@@ -133,7 +133,7 @@
     <string name="appearance_title">Aspetto</string>
     <string name="hide_top_switch">Nascondi la parte superiore durante lo scorrimento</string>
     <string name="hide_top_description">La barra del titolo, la ricerca e i filtri scompaiono quando scorri l\'elenco verso il basso e ricompaiono non appena torni a scorrere verso l\'alto. Se l\'opzione è disattivata, restano fissi sopra l\'elenco.</string>
-    <string name="material_switch">Superfici materiche</string>
+    <string name="material_switch">Effetto metallico</string>
     <string name="material_description">Disegna lo schermo e tutto ciò che contiene come metallo spazzolato illuminato dall\'alto, calcolato dal processore grafico. È attiva per impostazione predefinita su Android 13 e versioni successive; disattivala qui se preferisci colori uniformi o vuoi risparmiare batteria.</string>
     <string name="material_unavailable">Non disponibile su questo dispositivo: il driver grafico non è riuscito a disegnare le superfici, quindi restano i colori uniformi.</string>
     <string name="theme_title">Tema</string>
@@ -168,17 +168,17 @@
         <item quantity="other">Download di %d app in corso</item>
     </plurals>
     <string name="download_notification_installing">Installazione in corso</string>
-    <string name="badge_auto">Trovata su GitHub</string>
-    <string name="auto_switch">Trovate su GitHub</string>
+    <string name="badge_auto">Da ricerche su GitHub</string>
+    <string name="auto_switch">Da ricerche su GitHub</string>
     <string name="auto_description">App open source trovate con una ricerca su GitHub. I loro sviluppatori non le hanno pubblicate su ARK-Store e nessuno le ha verificate. Sono incluse solo app in sviluppo attivo con una release recente.</string>
     <string name="auto_detail">Questa app è stata trovata con una ricerca su GitHub. Il suo sviluppatore non l\'ha pubblicata su ARK-Store.</string>
     <string name="origins_title">Provenienza delle app</string>
     <string name="origin_published">Pubblicate su ARK-Store</string>
     <string name="origin_published_description">App aggiunte ad ARK-Store dai loro stessi sviluppatori, su GitHub, Codeberg o GitLab. Sempre visibili.</string>
-    <string name="codeberg_switch">Trovate su Codeberg</string>
+    <string name="codeberg_switch">Da ricerche su Codeberg</string>
     <string name="codeberg_description">App open source trovate con una ricerca su Codeberg, un servizio di hosting del codice simile a GitHub. I loro sviluppatori non le hanno pubblicate su ARK-Store e nessuno le ha verificate.</string>
     <string name="auto_detail_codeberg">Questa app è stata trovata con una ricerca su Codeberg. Il suo sviluppatore non l\'ha pubblicata su ARK-Store.</string>
-    <string name="gitlab_switch">Trovate su GitLab</string>
+    <string name="gitlab_switch">Da ricerche su GitLab</string>
     <string name="gitlab_description">App open source trovate con una ricerca su GitLab, un altro servizio di hosting del codice. Lì pochi progetti allegano le proprie app alle release, quindi questo elenco è breve. Nessuno ha verificato queste app.</string>
     <string name="auto_detail_gitlab">Questa app è stata trovata con una ricerca su GitLab. Il suo sviluppatore non l\'ha pubblicata su ARK-Store.</string>
     <string name="izzy_description">Un catalogo di app open source gestito in modo indipendente. Distribuisce i file forniti dagli sviluppatori stessi, dopo averli analizzati.</string>
@@ -202,7 +202,7 @@
     <string name="newer_android_note">La versione più recente richiede %1$s. Questo dispositivo non può eseguirla, quindi non viene proposta.</string>
     <string name="newer_android_detail">La versione più recente richiede %1$s. Questo dispositivo non può eseguirla, quindi ARK-Store non la propone. La versione installata resta.</string>
     <string name="action_try_install">Prova a installare</string>
-    <string name="other_app_detail">Con questo nome di pacchetto è presente %1$s (installata da: %2$s): un\'app diversa, firmata con un\'altra chiave. Questa app non è installata e non può esserlo finché c\'è l\'altra; rimuovendo l\'altra se ne eliminano i dati.</string>
+    <string name="other_app_detail">Con questo nome di pacchetto è presente %1$s (modalità di installazione: %2$s): un\'app diversa, firmata con un\'altra chiave. Questa app non è installata e non può esserlo finché c\'è l\'altra; rimuovendo l\'altra se ne eliminano i dati.</string>
     <string name="other_build_detail">L\'app installata è firmata con la chiave usata da un\'altra piattaforma che offre questo pacchetto e la chiave di questa versione non è ancora nota: potrebbe quindi trattarsi di una versione compilata da un altro sviluppatore con lo stesso nome di pacchetto. ARK-Store non la propone come aggiornamento. Puoi comunque provare: le chiavi vengono confrontate dopo il download del file e l\'aggiornamento viene eseguito solo se corrispondono.</string>
     <string name="channel_installs">Pronte per l\'installazione</string>
     <string name="channel_installs_description">Ti avvisa quando un\'app scaricata attende la tua conferma per essere installata</string>
@@ -217,7 +217,7 @@
     <string name="auto_update_charging_description">Aspetta che il dispositivo sia collegato alla corrente</string>
     <string name="error_token">GitHub ha rifiutato il token inserito nelle impostazioni. Sostituiscilo o rimuovilo da lì.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Serve solo se aggiungi delle fonti: lo store legge direttamente da GitHub gli account e i repository che hai aggiunto e, senza token, GitHub consente a una stessa rete di farlo 60 volte all\'ora. Se l\'elenco smette di aggiornarsi con un avviso che GitHub sta limitando le richieste, un token rimuove il limite. Crea un token di accesso personale fine-grained senza autorizzazioni su github.com/settings/personal-access-tokens: i repository pubblici si leggono anche senza. Il token resta su questo dispositivo, escluso da backup ed esportazioni, e viene inviato soltanto a GitHub.</string>
+    <string name="github_token_description">Serve solo se aggiungi delle fonti: lo store legge direttamente da GitHub gli account e i repository che hai aggiunto e, senza token, GitHub consente a una stessa rete di farlo 60 volte all\'ora. Se l\'elenco smette di aggiornarsi con un avviso che GitHub sta limitando le richieste, un token aumenta il limite di richieste. Crea un token di accesso personale fine-grained senza autorizzazioni su github.com/settings/personal-access-tokens: i repository pubblici si leggono anche senza. Il token resta su questo dispositivo, escluso da backup ed esportazioni, e viene inviato soltanto a GitHub.</string>
     <string name="github_token_hint">Token di accesso personale</string>
     <string name="github_token_none">Nessun token. Alla maggior parte delle persone non serve.</string>
     <string name="github_token_saved">Token in uso: %1$s richieste all\'ora.</string>

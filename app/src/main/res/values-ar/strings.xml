@@ -12,8 +12,8 @@
 
     <plurals name="section_updates">
         <item quantity="zero">%d تحديث متاح</item>
-        <item quantity="one">تحديث واحد متاح (%d)</item>
-        <item quantity="two">تحديثان متاحان (%d)</item>
+        <item quantity="one">تحديث واحد متاح</item>
+        <item quantity="two">تحديثان متاحان</item>
         <item quantity="few">%d تحديثات متاحة</item>
         <item quantity="many">%d تحديثًا متاحًا</item>
         <item quantity="other">%d تحديث متاح</item>
@@ -49,8 +49,8 @@
     <string name="channel_updates">تحديثات التطبيقات</string>
     <plurals name="notification_updates_title">
         <item quantity="zero">تتوفّر تحديثات لـ%d تطبيق</item>
-        <item quantity="one">يتوفّر تحديث لتطبيق واحد (%d)</item>
-        <item quantity="two">تتوفّر تحديثات لتطبيقين (%d)</item>
+        <item quantity="one">يتوفّر تحديث لتطبيق واحد</item>
+        <item quantity="two">تتوفّر تحديثات لتطبيقين</item>
         <item quantity="few">تتوفّر تحديثات لـ%d تطبيقات</item>
         <item quantity="many">تتوفّر تحديثات لـ%d تطبيقًا</item>
         <item quantity="other">تتوفّر تحديثات لـ%d تطبيق</item>
@@ -64,16 +64,16 @@
     <string name="state_installing">جارٍ التثبيت</string>
     <plurals name="stat_stars">
         <item quantity="zero">%d نجمة</item>
-        <item quantity="one">نجمة واحدة (%d)</item>
-        <item quantity="two">نجمتان (%d)</item>
+        <item quantity="one">نجمة واحدة</item>
+        <item quantity="two">نجمتان</item>
         <item quantity="few">%d نجوم</item>
         <item quantity="many">%d نجمة</item>
         <item quantity="other">%d نجمة</item>
     </plurals>
     <plurals name="stat_downloads">
         <item quantity="zero">%d تنزيل</item>
-        <item quantity="one">تنزيل واحد (%d)</item>
-        <item quantity="two">تنزيلان (%d)</item>
+        <item quantity="one">تنزيل واحد</item>
+        <item quantity="two">تنزيلان</item>
         <item quantity="few">%d تنزيلات</item>
         <item quantity="many">%d تنزيلًا</item>
         <item quantity="other">%d تنزيل</item>
@@ -93,16 +93,16 @@
     <string name="list_no_match">لا توجد تطبيقات تطابق البحث.</string>
     <plurals name="count_apps">
         <item quantity="zero">%d تطبيق</item>
-        <item quantity="one">تطبيق واحد (%d)</item>
-        <item quantity="two">تطبيقان (%d)</item>
+        <item quantity="one">تطبيق واحد</item>
+        <item quantity="two">تطبيقان</item>
         <item quantity="few">%d تطبيقات</item>
         <item quantity="many">%d تطبيقًا</item>
         <item quantity="other">%d تطبيق</item>
     </plurals>
     <plurals name="count_apps_filtered">
         <item quantity="zero">عرض %1$d من أصل %2$d تطبيق</item>
-        <item quantity="one">عرض %1$d من أصل تطبيق واحد (%2$d)</item>
-        <item quantity="two">عرض %1$d من أصل تطبيقين (%2$d)</item>
+        <item quantity="one">عرض %1$d من أصل تطبيق واحد</item>
+        <item quantity="two">عرض %1$d من أصل تطبيقين</item>
         <item quantity="few">عرض %1$d من أصل %2$d تطبيقات</item>
         <item quantity="many">عرض %1$d من أصل %2$d تطبيقًا</item>
         <item quantity="other">عرض %1$d من أصل %2$d تطبيق</item>
@@ -132,8 +132,8 @@
     <string name="sources_error_not_open">ليس لهذا المستودع ترخيص مفتوح المصدر يتعرّف عليه GitHub، لذا لا يمكن إدراجه.</string>
     <plurals name="footer_store_downloads">
         <item quantity="zero">نُزِّل ARK-Store حتى الآن %s مرة</item>
-        <item quantity="one">نُزِّل ARK-Store حتى الآن مرة واحدة (%s)</item>
-        <item quantity="two">نُزِّل ARK-Store حتى الآن مرتين (%s)</item>
+        <item quantity="one">نُزِّل ARK-Store مرة واحدة</item>
+        <item quantity="two">نُزِّل ARK-Store مرتين</item>
         <item quantity="few">نُزِّل ARK-Store حتى الآن %s مرات</item>
         <item quantity="many">نُزِّل ARK-Store حتى الآن %s مرة</item>
         <item quantity="other">نُزِّل ARK-Store حتى الآن %s مرة</item>
@@ -185,8 +185,8 @@
     <string name="download_notification_one">جارٍ تنزيل %1$s</string>
     <plurals name="download_notification_many">
         <item quantity="zero">جارٍ تنزيل %d تطبيق</item>
-        <item quantity="one">جارٍ تنزيل تطبيق واحد (%d)</item>
-        <item quantity="two">جارٍ تنزيل تطبيقين (%d)</item>
+        <item quantity="one">جارٍ تنزيل تطبيق واحد</item>
+        <item quantity="two">جارٍ تنزيل تطبيقين</item>
         <item quantity="few">جارٍ تنزيل %d تطبيقات</item>
         <item quantity="many">جارٍ تنزيل %d تطبيقًا</item>
         <item quantity="other">جارٍ تنزيل %d تطبيق</item>
@@ -236,7 +236,7 @@
     <string name="auto_update_description">تُحدَّث التطبيقات التي ثبّتها ARK-Store دون سؤالك عندما يعثر التحقّق في الخلفية على إصدار أحدث. أما التطبيقات الأخرى فيظل يصلك إشعار بتحديثاتها، وكذلك التحديث الذي يطلب Android تأكيده.</string>
     <string name="auto_update_unsupported">يتطلّب Android 12 أو إصدارًا أحدث. على هذا الجهاز، يكتفي التحقّق في الخلفية بإرسال إشعار.</string>
     <string name="auto_update_unmetered_switch">عبر Wi-Fi فقط</string>
-    <string name="auto_update_unmetered_description">ليس عبر بيانات الجوّال أو أي شبكة أخرى تفرض تكلفة استخدام</string>
+    <string name="auto_update_unmetered_description">ليس عبر بيانات الجوّال أو أي شبكة أخرى محدودة الاستخدام</string>
     <string name="auto_update_charging_switch">أثناء الشحن فقط</string>
     <string name="auto_update_charging_description">ينتظر إلى أن يتم توصيل الجهاز بالشاحن</string>
     <string name="error_token">رفض GitHub رمز الوصول المُدخل في الإعدادات. استبدله أو أزِله من هناك.</string>

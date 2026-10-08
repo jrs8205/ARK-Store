@@ -140,14 +140,14 @@
     <string name="appearance_title">Внешний вид</string>
     <string name="hide_top_switch">Скрывать верхнюю панель при прокрутке</string>
     <string name="hide_top_description">При прокрутке списка вниз заголовок, поиск и фильтры скрываются, а при прокрутке вверх сразу появляются снова. Если функция отключена, они всегда остаются над списком.</string>
-    <string name="material_switch">Фактурные поверхности</string>
+    <string name="material_switch">Металлические поверхности</string>
     <string name="material_description">Экран и всё, что на нём есть, выглядит как шлифованный металл, освещённый сверху. Изображение рассчитывает графический процессор. По умолчанию функция включена на Android 13 и выше. Если вам больше нравятся однотонные цвета или нужно сэкономить заряд батареи, отключите её здесь.</string>
     <string name="material_unavailable">Недоступно на этом устройстве: графический драйвер не смог отрисовать поверхности, поэтому цвета остаются однотонными.</string>
     <string name="theme_title">Тема</string>
     <string name="palette_ark">ARK</string>
     <string name="palette_forest">Лес</string>
     <string name="palette_graphite">Графит</string>
-    <string name="palette_wine">Вино</string>
+    <string name="palette_wine">Винный</string>
     <string name="palette_midnight">Полночь</string>
     <string name="palette_wallpaper">Обои</string>
     <string name="black_switch">Чёрный фон в тёмной теме</string>
@@ -170,10 +170,10 @@
     <string name="channel_downloads_description">Показывает ход скачивания приложений</string>
     <string name="download_notification_one">Скачивается %1$s</string>
     <plurals name="download_notification_many">
-        <item quantity="one">Скачивается %d приложение</item>
-        <item quantity="few">Скачиваются %d приложения</item>
-        <item quantity="many">Скачиваются %d приложений</item>
-        <item quantity="other">Скачиваются %d приложений</item>
+        <item quantity="one">Скачивание %d приложения</item>
+        <item quantity="few">Скачивание %d приложений</item>
+        <item quantity="many">Скачивание %d приложений</item>
+        <item quantity="other">Скачивание %d приложений</item>
     </plurals>
     <string name="download_notification_installing">Установка</string>
     <string name="badge_auto">Найдено на GitHub</string>
@@ -210,7 +210,7 @@
     <string name="newer_android_note">Для последней версии требуется %1$s. На этом устройстве она не запустится, поэтому не предлагается.</string>
     <string name="newer_android_detail">Для последней версии требуется %1$s. На этом устройстве она не запустится, поэтому ARK-Store её не предлагает. Установленная версия останется.</string>
     <string name="action_try_install">Попробовать установить</string>
-    <string name="other_app_detail">Под этим именем пакета установлено «%1$s» (источник установки: %2$s) — другое приложение с другим ключом подписи. Это приложение не установлено, и установить его нельзя, пока установлено то. Если удалить то приложение, будут удалены и его данные.</string>
+    <string name="other_app_detail">Под этим именем пакета установлено «%1$s» (источник установки: %2$s) — другое приложение с другим ключом подписи. Предлагаемое здесь приложение не установлено. Его можно установить только после удаления другого приложения вместе с его данными.</string>
     <string name="other_build_detail">Установленное приложение подписано ключом, который использует другая площадка, предлагающая этот пакет, а ключ этой версии пока неизвестен. Поэтому это может быть сборка другого разработчика с тем же именем пакета, и ARK-Store не предлагает её как обновление. Но вы можете попробовать: ключи сравниваются после скачивания файла, и обновление будет установлено, только если они совпадут.</string>
     <string name="channel_installs">Готово к установке</string>
     <string name="channel_installs_description">Сообщает, когда скачанное приложение ждёт, пока вы подтвердите установку</string>
@@ -225,7 +225,7 @@
     <string name="auto_update_charging_description">Ожидает, пока устройство не будет подключено к зарядке</string>
     <string name="error_token">GitHub отклонил токен, указанный в настройках. Замените или удалите его там.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Нужен, только если вы добавляете источники: магазин считывает добавленные вами аккаунты и репозитории напрямую с GitHub, а без токена GitHub разрешает одной сети делать это 60 раз в час. Если список перестал обновляться и появилось сообщение о том, что GitHub ограничивает запросы, токен снимет это ограничение. Создайте детализированный (fine-grained) личный токен доступа без разрешений на странице github.com/settings/personal-access-tokens: общедоступные репозитории можно читать и без них. Токен хранится только на этом устройстве, не попадает в резервные копии и файлы экспорта и передаётся только GitHub.</string>
+    <string name="github_token_description">Нужен, только если вы добавляете источники: магазин считывает добавленные вами аккаунты и репозитории напрямую с GitHub, а без токена GitHub разрешает одной сети делать это 60 раз в час. Если список перестал обновляться и появилось сообщение о том, что GitHub ограничивает запросы, токен увеличит лимит запросов. Создайте детализированный (fine-grained) личный токен доступа без разрешений на странице github.com/settings/personal-access-tokens: общедоступные репозитории можно читать и без них. Токен хранится только на этом устройстве, не попадает в резервные копии и файлы экспорта и передаётся только GitHub.</string>
     <string name="github_token_hint">Личный токен доступа</string>
     <string name="github_token_none">Токена нет. Большинству пользователей он не нужен.</string>
     <string name="github_token_saved">Токен используется: лимит %1$s запросов в час.</string>

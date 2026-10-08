@@ -168,17 +168,17 @@
         <item quantity="other">Descargando %d aplicaciones</item>
     </plurals>
     <string name="download_notification_installing">Instalando</string>
-    <string name="badge_auto">Encontrada en GitHub</string>
-    <string name="auto_switch">Encontradas en GitHub</string>
+    <string name="badge_auto">De búsquedas en GitHub</string>
+    <string name="auto_switch">De búsquedas en GitHub</string>
     <string name="auto_description">Aplicaciones de código abierto encontradas mediante búsquedas en GitHub. Sus desarrolladores no las han publicado en ARK-Store y nadie las ha revisado. Solo se incluyen aplicaciones en desarrollo activo con una versión publicada reciente.</string>
     <string name="auto_detail">Esta aplicación se ha encontrado mediante una búsqueda en GitHub. Su desarrollador no la ha publicado en ARK-Store.</string>
     <string name="origins_title">De dónde vienen las aplicaciones</string>
     <string name="origin_published">Publicadas en ARK-Store</string>
     <string name="origin_published_description">Aplicaciones que sus desarrolladores han añadido a ARK-Store por su cuenta, en GitHub, Codeberg o GitLab. Siempre se muestran.</string>
-    <string name="codeberg_switch">Encontradas en Codeberg</string>
+    <string name="codeberg_switch">De búsquedas en Codeberg</string>
     <string name="codeberg_description">Aplicaciones de código abierto encontradas mediante búsquedas en Codeberg, un servicio de alojamiento de código similar a GitHub. Sus desarrolladores no las han publicado en ARK-Store y nadie las ha revisado.</string>
     <string name="auto_detail_codeberg">Esta aplicación se ha encontrado mediante una búsqueda en Codeberg. Su desarrollador no la ha publicado en ARK-Store.</string>
-    <string name="gitlab_switch">Encontradas en GitLab</string>
+    <string name="gitlab_switch">De búsquedas en GitLab</string>
     <string name="gitlab_description">Aplicaciones de código abierto encontradas mediante búsquedas en GitLab, otro servicio de alojamiento de código. Allí pocos proyectos adjuntan sus aplicaciones a las versiones publicadas, así que la lista es corta. Nadie ha revisado estas aplicaciones.</string>
     <string name="auto_detail_gitlab">Esta aplicación se ha encontrado mediante una búsqueda en GitLab. Su desarrollador no la ha publicado en ARK-Store.</string>
     <string name="izzy_description">Un catálogo de aplicaciones de código abierto que se mantiene por separado. Distribuye los archivos de los propios desarrolladores después de analizarlos.</string>
@@ -202,7 +202,7 @@
     <string name="newer_android_note">La versión más reciente requiere %1$s. Este dispositivo no puede ejecutarla, así que no se ofrece.</string>
     <string name="newer_android_detail">La versión más reciente requiere %1$s. Este dispositivo no puede ejecutarla, así que ARK-Store no la ofrece. Se mantiene la versión instalada.</string>
     <string name="action_try_install">Intentar instalar</string>
-    <string name="other_app_detail">Con este nombre de paquete hay instalada otra aplicación, %1$s (instalada desde %2$s), firmada con otra clave. Esta aplicación no está instalada y no se puede instalar mientras la otra lo esté; si desinstalas la otra, se borrarán sus datos.</string>
+    <string name="other_app_detail">Con este nombre de paquete hay instalada otra aplicación, %1$s (método de instalación: %2$s), firmada con otra clave. Esta aplicación no está instalada y no se puede instalar mientras la otra lo esté; si desinstalas la otra, se borrarán sus datos.</string>
     <string name="other_build_detail">La aplicación instalada está firmada con la clave que usa otro origen que ofrece este paquete, y aún no se conoce la clave de esta versión, así que puede tratarse de la compilación de otro desarrollador con el mismo nombre de paquete. ARK-Store no la ofrece como actualización. Aun así, puedes intentarlo: las claves se comparan una vez descargado el archivo y la actualización solo se realiza si coinciden.</string>
     <string name="channel_installs">Listas para instalar</string>
     <string name="channel_installs_description">Te avisa cuando una aplicación descargada espera a que confirmes su instalación</string>
@@ -217,7 +217,7 @@
     <string name="auto_update_charging_description">Espera a que el dispositivo esté conectado a la corriente</string>
     <string name="error_token">GitHub ha rechazado el token indicado en los ajustes. Sustitúyelo o quítalo allí.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Solo hace falta si añades fuentes: la tienda lee directamente de GitHub las cuentas y los repositorios que has añadido, y sin token GitHub permite hacerlo 60 veces por hora desde una misma red. Si la lista deja de actualizarse con un aviso de que GitHub está limitando las solicitudes, un token elimina ese límite. Crea en github.com/settings/personal-access-tokens un token de acceso personal específico (fine-grained) sin ningún permiso; los repositorios públicos se pueden leer sin permisos. El token se queda en este dispositivo, fuera de las copias de seguridad y de las exportaciones, y solo se envía a GitHub.</string>
+    <string name="github_token_description">Solo hace falta si añades fuentes: la tienda lee directamente de GitHub las cuentas y los repositorios que has añadido, y sin token GitHub permite hacerlo 60 veces por hora desde una misma red. Si la lista deja de actualizarse con un aviso de que GitHub está limitando las solicitudes, un token aumenta ese límite de solicitudes. Crea en github.com/settings/personal-access-tokens un token de acceso personal específico (fine-grained) sin ningún permiso; los repositorios públicos se pueden leer sin permisos. El token se queda en este dispositivo, fuera de las copias de seguridad y de las exportaciones, y solo se envía a GitHub.</string>
     <string name="github_token_hint">Token de acceso personal</string>
     <string name="github_token_none">Sin token. La mayoría no lo necesita.</string>
     <string name="github_token_saved">Token en uso: %1$s solicitudes por hora.</string>

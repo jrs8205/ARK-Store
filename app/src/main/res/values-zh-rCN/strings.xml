@@ -119,7 +119,7 @@
     <string name="appearance_title">外观</string>
     <string name="hide_top_switch">滚动时隐藏顶部区域</string>
     <string name="hide_top_description">向下滚动列表时，标题栏、搜索框和筛选器会滑出屏幕；一向上滚动，它们就会立即重新出现。关闭此选项后，它们会一直显示在列表上方。</string>
-    <string name="material_switch">材质表面</string>
+    <string name="material_switch">金属质感</string>
     <string name="material_description">使用 GPU 将整个屏幕及其中的所有内容绘制成从上方打光的拉丝金属效果。在 Android 13 及更高版本上默认开启；如果您更喜欢纯色，或想节省电量，可以在此处关闭。</string>
     <string name="material_unavailable">此设备不支持：图形驱动程序无法绘制这些表面，因此仍使用纯色。</string>
     <string name="theme_title">主题</string>
@@ -168,7 +168,7 @@
     <string name="izzy_description">一个独立维护的开源应用目录。它会先扫描开发者自己的文件，再原样提供。</string>
     <string name="fdroid_description">最知名的开源应用目录。F-Droid 会自行从源代码构建应用，并用自己的签名密钥为其中大多数应用签名，因此从 F-Droid 安装的应用也会从 F-Droid 更新。</string>
     <string name="origins_note">如果多个渠道都提供同一个应用，该应用只会列出一次：优先采用开发者自己发布的版本，其次是 IzzyOnDroid，最后是 F-Droid。已安装的应用会继续使用文件签名与之相同的渠道。</string>
-    <string name="catalogue_detail">此应用由 %1$s 目录提供。其开发者并未将它发布到 ARK-Store。</string>
+    <string name="catalogue_detail">此应用由 %1$s 应用目录提供。其开发者并未将它发布到 ARK-Store。</string>
     <string name="detail_source">来源</string>
     <string name="detail_also_from">其他渠道</string>
     <string name="detail_warnings">警告</string>
@@ -193,15 +193,15 @@
     <string name="screenshot_description">第 %1$d 张屏幕截图，共 %2$d 张</string>
     <string name="auto_update_title">自动更新</string>
     <string name="auto_update_switch">在后台安装更新</string>
-    <string name="auto_update_description">后台检查发现新版本时，由 ARK-Store 安装的应用会自动更新，无需询问。对于其他应用以及需要 Android 确认的更新，仍会发送通知。</string>
+    <string name="auto_update_description">后台检查发现新版本时，由 ARK-Store 安装的应用会自动更新，无需询问。对于其他应用以及Android 要求您确认的更新，仍会发送通知。</string>
     <string name="auto_update_unsupported">需要 Android 12 或更高版本。在此设备上，后台检查只会发送通知。</string>
-    <string name="auto_update_unmetered_switch">仅限 WLAN</string>
+    <string name="auto_update_unmetered_switch">仅限 Wi-Fi</string>
     <string name="auto_update_unmetered_description">不使用移动数据或其他按流量计费的网络</string>
     <string name="auto_update_charging_switch">仅在充电时</string>
     <string name="auto_update_charging_description">等到设备接通电源后再更新</string>
     <string name="error_token">GitHub 拒绝了设置中提供的令牌。请在设置中替换或移除该令牌。</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">仅在您添加了来源时才需要：商店会直接从 GitHub 读取您添加的帐号和仓库，而在没有令牌的情况下，GitHub 只允许同一网络每小时读取 60 次。如果列表不再刷新，并提示 GitHub 正在限制请求，使用令牌即可解除此限制。请前往 github.com/settings/personal-access-tokens 创建一个不授予任何权限的细粒度个人访问令牌；读取公开仓库无需任何权限。令牌仅保存在此设备上，不会包含在备份和导出文件中，并且只会发送给 GitHub。</string>
+    <string name="github_token_description">仅在您添加了来源时才需要：商店会直接从 GitHub 读取您添加的帐号和仓库，而在没有令牌的情况下，GitHub 只允许同一网络每小时读取 60 次。如果列表不再刷新，并提示 GitHub 正在限制请求，使用令牌可以提高请求次数上限。请前往 github.com/settings/personal-access-tokens 创建一个不授予任何权限的细粒度个人访问令牌；读取公开仓库无需任何权限。令牌仅保存在此设备上，不会包含在备份和导出文件中，并且只会发送给 GitHub。</string>
     <string name="github_token_hint">个人访问令牌</string>
     <string name="github_token_none">未使用令牌。大多数人都不需要。</string>
     <string name="github_token_saved">正在使用令牌：每小时可发出 %1$s 次请求。</string>

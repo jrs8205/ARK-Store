@@ -1,4 +1,4 @@
-ARK-Store instaluje i aktualizuje aplikacje prosto z ich wydań na GitHubie. Deweloper publikuje aplikację, dodając temat „arkstore” do jej publicznego repozytorium open source. Sklep wyświetla każde takie repozytorium, którego najnowsze wydanie ma dołączony plik APK, pokazuje, które aplikacje są zainstalowane, a które mają nowszą wersję, i instaluje je lub aktualizuje jednym kliknięciem.
+ARK-Store instaluje i aktualizuje aplikacje prosto z ich wydań na GitHubie. Deweloper publikuje aplikację, dodając temat „arkstore” do jej publicznego repozytorium open source. Sklep wyświetla każde takie repozytorium, którego najnowsze wydanie ma dołączony plik APK, pokazuje, które aplikacje są zainstalowane, a które mają nowszą wersję, i instaluje je lub aktualizuje jednym dotknięciem.
 
 • Automatyczny katalog: nowa aplikacja pojawia się od razu po opublikowaniu wydania z plikiem APK
 • Możliwość ręcznego dodania konta lub repozytorium z GitHuba
@@ -6,7 +6,7 @@ ARK-Store instaluje i aktualizuje aplikacje prosto z ich wydań na GitHubie. Dew
 • Wyszukiwanie i kategorie
 • Na liście są tylko publiczne aplikacje open source
 • Dokładne numery wersji odczytywane bezpośrednio z pliku APK
-• Instalacja i aktualizacja jednym kliknięciem oraz opcja „Aktualizuj wszystko”
+• Instalacja i aktualizacja jednym dotknięciem oraz opcja „Aktualizuj wszystko”
 • Sprawdzanie aktualizacji w tle z powiadomieniem
 • Ostrzeżenie, gdy zainstalowana aplikacja jest podpisana innym kluczem
 • Bez kont, bez logowania i bez usług firm trzecich

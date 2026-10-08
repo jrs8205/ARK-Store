@@ -133,7 +133,7 @@
     <string name="appearance_title">Apparence</string>
     <string name="hide_top_switch">Masquer le haut de l\'écran lors du défilement</string>
     <string name="hide_top_description">La barre de titre, la recherche et les filtres glissent hors de l\'écran lorsque la liste défile vers le bas, et reviennent dès qu\'elle remonte. Lorsque cette option est désactivée, ils restent au-dessus de la liste.</string>
-    <string name="material_switch">Effet matière</string>
+    <string name="material_switch">Effet métallique</string>
     <string name="material_description">Dessine l\'écran et tout ce qu\'il contient comme du métal brossé éclairé par le haut, calculé par le processeur graphique. Activé par défaut à partir d\'Android 13 ; vous pouvez le désactiver ici si vous préférez des couleurs unies ou souhaitez économiser la batterie.</string>
     <string name="material_unavailable">Indisponible sur cet appareil : son pilote graphique n\'a pas pu dessiner les surfaces, les couleurs unies sont donc conservées.</string>
     <string name="theme_title">Thème</string>
@@ -168,20 +168,20 @@
         <item quantity="other">Téléchargement de %d applications</item>
     </plurals>
     <string name="download_notification_installing">Installation en cours</string>
-    <string name="badge_auto">Découverte sur GitHub</string>
-    <string name="auto_switch">Découverte sur GitHub</string>
+    <string name="badge_auto">Trouvée sur GitHub</string>
+    <string name="auto_switch">Trouvée sur GitHub</string>
     <string name="auto_description">Applications open source découvertes par une recherche sur GitHub. Leurs développeurs ne les ont pas publiées sur ARK-Store, et personne ne les a vérifiées. Seules les applications activement développées et ayant une publication récente sont incluses.</string>
     <string name="auto_detail">Cette application a été découverte par une recherche sur GitHub. Son développeur ne l\'a pas publiée sur ARK-Store.</string>
     <string name="origins_title">Provenance des applications</string>
     <string name="origin_published">Publiées sur ARK-Store</string>
     <string name="origin_published_description">Applications que leurs développeurs ont eux-mêmes publiées sur ARK-Store, depuis GitHub, Codeberg ou GitLab. Toujours affichées.</string>
-    <string name="codeberg_switch">Découverte sur Codeberg</string>
+    <string name="codeberg_switch">Trouvée sur Codeberg</string>
     <string name="codeberg_description">Applications open source découvertes par une recherche sur Codeberg, un service d\'hébergement de code semblable à GitHub. Leurs développeurs ne les ont pas publiées sur ARK-Store, et personne ne les a vérifiées.</string>
     <string name="auto_detail_codeberg">Cette application a été découverte par une recherche sur Codeberg. Son développeur ne l\'a pas publiée sur ARK-Store.</string>
-    <string name="gitlab_switch">Découverte sur GitLab</string>
+    <string name="gitlab_switch">Trouvée sur GitLab</string>
     <string name="gitlab_description">Applications open source découvertes par une recherche sur GitLab, un autre service d\'hébergement de code. Peu de projets y joignent leurs applications à leurs publications, cette liste est donc courte. Personne n\'a vérifié ces applications.</string>
     <string name="auto_detail_gitlab">Cette application a été découverte par une recherche sur GitLab. Son développeur ne l\'a pas publiée sur ARK-Store.</string>
-    <string name="izzy_description">Un catalogue d\'applications open source tenu séparément. Il distribue les fichiers fournis par les développeurs eux-mêmes, après les avoir analysés.</string>
+    <string name="izzy_description">Un catalogue indépendant d\'applications open source. Il distribue les fichiers fournis par les développeurs eux-mêmes, après les avoir analysés.</string>
     <string name="fdroid_description">Le catalogue d\'applications open source le plus connu. F-Droid compile lui-même les applications à partir de leur code source et signe la plupart d\'entre elles avec sa propre clé : une application installée depuis F-Droid est donc aussi mise à jour depuis F-Droid.</string>
     <string name="origins_note">Une application proposée par plusieurs de ces plateformes n\'apparaît qu\'une fois : de préférence depuis son développeur, sinon depuis IzzyOnDroid, et en dernier lieu depuis F-Droid. Une application installée reste rattachée à la plateforme dont les fichiers portent la même signature qu\'elle.</string>
     <string name="catalogue_detail">Cette application est proposée par le catalogue %1$s. Son développeur ne l\'a pas publiée sur ARK-Store.</string>
@@ -202,7 +202,7 @@
     <string name="newer_android_note">La dernière version nécessite %1$s. Cet appareil ne peut pas l\'exécuter ; elle n\'est donc pas proposée.</string>
     <string name="newer_android_detail">La dernière version nécessite %1$s. Cet appareil ne peut pas l\'exécuter, ARK-Store ne la propose donc pas. La version installée est conservée.</string>
     <string name="action_try_install">Essayer d\'installer</string>
-    <string name="other_app_detail">Ce nom de package est déjà utilisé par %1$s (installée depuis : %2$s), une autre application, signée avec une autre clé. Cette application-ci n\'est pas installée et ne peut pas l\'être tant que l\'autre est présente ; désinstaller l\'autre supprime ses données.</string>
+    <string name="other_app_detail">Ce nom de package est déjà utilisé par %1$s (mode d\'installation : %2$s), une autre application, signée avec une autre clé. Cette application-ci n\'est pas installée et ne peut pas l\'être tant que l\'autre est présente ; désinstaller l\'autre supprime ses données.</string>
     <string name="other_build_detail">L\'application installée est signée avec la clé qu\'utilise une autre plateforme proposant ce package, et la clé de cette version n\'est pas encore connue : il peut donc s\'agir d\'une compilation d\'un autre développeur, sous le même nom de package. ARK-Store ne la propose pas comme mise à jour. Vous pouvez quand même essayer : les clés sont comparées une fois le fichier téléchargé, et la mise à jour n\'a lieu que si elles correspondent.</string>
     <string name="channel_installs">Installations en attente</string>
     <string name="channel_installs_description">Vous avertit lorsqu\'une application téléchargée attend que vous confirmiez son installation</string>
@@ -217,7 +217,7 @@
     <string name="auto_update_charging_description">Attend que l\'appareil soit branché</string>
     <string name="error_token">GitHub a refusé le jeton indiqué dans les paramètres. Remplacez-le ou supprimez-le depuis les paramètres.</string>
     <string name="github_title">GitHub</string>
-    <string name="github_token_description">Utile uniquement si vous ajoutez des sources : la boutique lit directement sur GitHub les comptes et dépôts que vous avez ajoutés, et sans jeton, GitHub n\'autorise que 60 requêtes par heure depuis un même réseau. Si la liste ne s\'actualise plus et qu\'un message indique que GitHub limite les requêtes, un jeton lève cette limite. Créez sur github.com/settings/personal-access-tokens un jeton d\'accès personnel à granularité fine (fine-grained), sans aucune autorisation : les dépôts publics sont lisibles sans autorisation. Le jeton reste sur cet appareil, en dehors des sauvegardes et des exports, et n\'est envoyé qu\'à GitHub.</string>
+    <string name="github_token_description">Utile uniquement si vous ajoutez des sources : la boutique lit directement sur GitHub les comptes et dépôts que vous avez ajoutés, et sans jeton, GitHub n\'autorise que 60 requêtes par heure depuis un même réseau. Si la liste ne s\'actualise plus et qu\'un message indique que GitHub limite les requêtes, un jeton augmente cette limite de requêtes. Créez sur github.com/settings/personal-access-tokens un jeton d\'accès personnel à granularité fine (fine-grained), sans aucune autorisation : les dépôts publics sont lisibles sans autorisation. Le jeton reste sur cet appareil, en dehors des sauvegardes et des exports, et n\'est envoyé qu\'à GitHub.</string>
     <string name="github_token_hint">Jeton d\'accès personnel</string>
     <string name="github_token_none">Aucun jeton. La plupart des utilisateurs n\'en ont pas besoin.</string>
     <string name="github_token_saved">Jeton actif : %1$s requêtes par heure.</string>

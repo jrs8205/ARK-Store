@@ -1,6 +1,6 @@
 ARK-Store instala y actualiza aplicaciones directamente desde sus versiones publicadas en GitHub. Los desarrolladores publican una aplicación añadiendo el tema "arkstore" a su repositorio público de código abierto. La tienda muestra todos los repositorios de este tipo cuya última versión publicada lleve un APK adjunto, indica qué aplicaciones están instaladas y cuáles tienen una versión más reciente, y las instala o actualiza con un solo toque.
 
-• Catálogo automático: una aplicación nueva aparece en cuanto publica una versión con un APK
+• Catálogo automático: una aplicación nueva aparece en cuanto se publica una versión con un APK
 • También puedes añadir a mano una cuenta o un repositorio de GitHub
 • Estrellas y número de descargas de GitHub
 • Búsqueda y categorías
