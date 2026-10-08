@@ -1235,6 +1235,21 @@ class MetadataTest(unittest.TestCase):
             "owner/app", "main", read_text=texts.__getitem__)
         self.assertEqual(metadata["en"]["summary"], "US")
 
+    def test_empty_short_description_does_not_hide_the_next_folder_of_the_language(self):
+        texts = {RAW + "en-US/short_description.txt": "﻿ \n", RAW + "en/short_description.txt": "Said in en"}
+        paths = fastlane("en-US/short_description.txt", "en/full_description.txt", "en/images/phoneScreenshots/1.png")
+        metadata = build_index.metadata_from_paths(paths, "owner/app", "main", read_text=texts.__getitem__)
+        self.assertEqual(metadata, {"en": {"description": RAW + "en/full_description.txt",
+                                           "screenshots": [RAW + "en/images/phoneScreenshots/1.png"]}})
+        # A folder with something in it still stands alone, empty summary or not.
+        paths = fastlane("en-US/short_description.txt", "en-US/full_description.txt", "en/images/phoneScreenshots/1.png")
+        metadata = build_index.metadata_from_paths(paths, "owner/app", "main", read_text=texts.__getitem__)
+        self.assertEqual(metadata, {"en": {"description": RAW + "en-US/full_description.txt", "screenshots": []}})
+        # And when every folder of the language is empty, there is nothing.
+        paths = fastlane("en-US/short_description.txt", "en-GB/short_description.txt")
+        texts[RAW + "en-GB/short_description.txt"] = ""
+        self.assertEqual(build_index.metadata_from_paths(paths, "owner/app", "main", read_text=texts.__getitem__), {})
+
     def test_summary_is_not_read_without_a_reader(self):
         self.assertEqual(self.metadata("en-US/short_description.txt"), {})
 
