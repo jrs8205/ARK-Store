@@ -109,6 +109,14 @@ data class StoreApp(
     val displayVersion: String
         get() = versionName ?: tag.removePrefix("v")
 
+    /**
+     * The short text that tells what the app is, on a device whose [languages] are those:
+     * the summary the developer wrote for the store, as [AppMetadata.pick] chooses it, and
+     * failing that the [description] of the repository or catalogue.
+     */
+    fun summary(languages: List<String>): String =
+        AppMetadata.pick(metadata, languages)?.summary ?: description
+
     /** What the APK's manifest said of it, or null when the manifest could not be read. */
     val apkInfo: ApkInfo?
         get() = packageName?.let { ApkInfo(it, versionCode, versionName, minSdk, minSdkCodename) }
@@ -228,12 +236,14 @@ data class StoreApp(
 
 /**
  * What the developer publishes of the app in one language, as the index tells it: the
- * address of a [description] longer than the summary, or null when there is none, and
- * the addresses of [screenshots] taken on a phone.
+ * address of a [description] longer than the summary, or null when there is none, the
+ * addresses of [screenshots] taken on a phone, and the [summary] itself, written for the
+ * store, or null when the index carries none.
  */
-data class AppMetadata(val description: String?, val screenshots: List<String>) {
+data class AppMetadata(val description: String?, val screenshots: List<String>, val summary: String? = null) {
 
     fun toJson(): JSONObject = JSONObject()
+        .put("summary", summary ?: JSONObject.NULL)
         .put("description", description ?: JSONObject.NULL)
         .put("screenshots", JSONArray(screenshots))
 
@@ -248,14 +258,15 @@ data class AppMetadata(val description: String?, val screenshots: List<String>) 
             for (language in json.keys()) {
                 val entry = json.optJSONObject(language) ?: continue
                 // Asked for as what it is: Android's optString reads a null as the word "null".
+                val summary = (entry.opt("summary") as? String)?.takeIf { it.isNotBlank() }
                 val description = (entry.opt("description") as? String)?.takeIf { it.isNotBlank() }
                 val screenshots = entry.optJSONArray("screenshots")
                     ?.let { array -> List(array.length()) { array.opt(it) as? String } }
                     .orEmpty()
                     .filterNotNull()
                     .filter { it.isNotBlank() }
-                if (description != null || screenshots.isNotEmpty()) {
-                    metadata[language] = AppMetadata(description, screenshots)
+                if (summary != null || description != null || screenshots.isNotEmpty()) {
+                    metadata[language] = AppMetadata(description, screenshots, summary)
                 }
             }
             return metadata
@@ -263,16 +274,18 @@ data class AppMetadata(val description: String?, val screenshots: List<String>) 
 
         /**
          * The metadata to show of [metadata] on a device whose [languages] are those, in
-         * order of preference: the description of the first language that has one, else of
-         * English, else of whatever there is, and the screenshots likewise, as a developer
-         * often publishes the screenshots in one language only; null when there is none.
+         * order of preference: the summary and the description each of the first language
+         * that has one, else of English, else of whatever there is, and the screenshots
+         * likewise, as a developer often publishes the screenshots in one language only;
+         * null when there is none.
          */
         fun pick(metadata: Map<String, AppMetadata>, languages: List<String>): AppMetadata? {
             if (metadata.isEmpty()) return null
             val inOrder = (languages + "en" + metadata.keys).distinct().mapNotNull { metadata[it] }
             return AppMetadata(
                 inOrder.firstNotNullOfOrNull { it.description },
-                inOrder.firstOrNull { it.screenshots.isNotEmpty() }?.screenshots.orEmpty()
+                inOrder.firstOrNull { it.screenshots.isNotEmpty() }?.screenshots.orEmpty(),
+                inOrder.firstNotNullOfOrNull { it.summary }
             )
         }
     }

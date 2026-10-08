@@ -116,6 +116,25 @@ class StoreAppTest {
     }
 
     @Test
+    fun summaryShownIsTheDevelopersInTheLanguageOfTheDeviceElseTheDescription() {
+        val app = testApp().copy(
+            description = "Repository description",
+            metadata = mapOf(
+                "en" to AppMetadata(null, emptyList(), "Store summary"),
+                "fi" to AppMetadata(null, emptyList(), "Kaupan kuvaus")
+            )
+        )
+        assertEquals("Kaupan kuvaus", app.summary(listOf("fi", "en")))
+        assertEquals("Store summary", app.summary(listOf("en")))
+        // A summary written for the store wins over the repository's description in any language.
+        assertEquals("Store summary", app.summary(listOf("sv")))
+        val described = testApp().copy(description = "Repository description")
+        assertEquals("Repository description", described.summary(listOf("fi")))
+        val pictured = described.copy(metadata = mapOf("en" to AppMetadata(null, listOf("https://x/1.png"))))
+        assertEquals("Repository description", pictured.summary(listOf("en")))
+    }
+
+    @Test
     fun metadataSurvivesTheCatalogueCache() {
         val metadata = mapOf(
             "en" to AppMetadata("https://x/en/full_description.txt", listOf("https://x/en/1.png")),

@@ -63,6 +63,33 @@ class AppMetadataTest {
     }
 
     @Test
+    fun summaryIsReadTheWayTheIndexWritesIt() {
+        val written = JSONObject()
+            .put("en", JSONObject().put("summary", "Install apps from GitHub").put("screenshots", JSONArray()))
+            .put("fi", JSONObject().put("summary", "Asenna sovelluksia GitHubista"))
+            .put("sv", JSONObject().put("summary", JSONObject.NULL).put("screenshots", JSONArray()))
+            .put("de", JSONObject().put("summary", " "))
+        val expected = mapOf(
+            "en" to AppMetadata(null, emptyList(), "Install apps from GitHub"),
+            "fi" to AppMetadata(null, emptyList(), "Asenna sovelluksia GitHubista")
+        )
+        assertEquals(expected, AppMetadata.mapOf(written))
+        assertEquals(expected, AppMetadata.mapOf(JSONObject().also { json -> expected.forEach { (language, it) -> json.put(language, it.toJson()) } }))
+    }
+
+    @Test
+    fun summaryOfTheLanguageOfTheDeviceIsPickedFirstThenEnglishThenAny() {
+        val both = mapOf("en" to english.copy(summary = "English"), "fi" to finnish.copy(summary = "Suomi"))
+        assertEquals("Suomi", AppMetadata.pick(both, listOf("fi", "en"))!!.summary)
+        assertEquals("English", AppMetadata.pick(both, listOf("sv"))!!.summary)
+        assertEquals("Suomi", AppMetadata.pick(mapOf("fi" to finnish.copy(summary = "Suomi")), listOf("sv"))!!.summary)
+        // A language without a summary does not hide the summary of another.
+        val pictured = mapOf("fi" to finnish, "en" to english.copy(summary = "English"))
+        assertEquals("English", AppMetadata.pick(pictured, listOf("fi"))!!.summary)
+        assertNull(AppMetadata.pick(mapOf("en" to english), listOf("en"))!!.summary)
+    }
+
+    @Test
     fun englishStandsInForALanguageThatIsNotThere() {
         val both = mapOf("fi" to finnish, "en" to english)
         assertEquals(english, AppMetadata.pick(both, listOf("sv")))

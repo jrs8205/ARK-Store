@@ -284,11 +284,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // repository, developer or package does, and last those matched by their description
         // alone; within each the chosen order holds.
         val words = remember(query) { searchWords(query) }
+        val languages = deviceLanguages()
         val visible = state.rows.mapNotNull { row ->
             val shown = (activeCategory == null || row.app.category == activeCategory) &&
                 (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
                 (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
-            if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
+            if (shown) matchRank(row, words, languages)?.let { Pair(row, it) } else null
         }
             .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
             .map { it.first }
@@ -826,9 +827,10 @@ private fun AppCard(
                 }
             }
 
-            if (app.description.isNotBlank()) {
+            val summary = app.summary(deviceLanguages())
+            if (summary.isNotBlank()) {
                 Text(
-                    text = app.description,
+                    text = summary,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -1036,15 +1038,15 @@ private fun DetailsSheet(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
-        if (app.description.isNotBlank()) {
+        val languages = deviceLanguages()
+        val summary = app.summary(languages)
+        if (summary.isNotBlank()) {
             Text(
-                text = app.description,
+                text = summary,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp)
             )
         }
-        val locales = LocalConfiguration.current.locales
-        val languages = remember(locales) { List(locales.size()) { locales[it].language } }
         AppMetadata.pick(app.metadata, languages)?.let {
             Showcase(it, inset = DETAILS_INSET, modifier = Modifier.padding(top = 12.dp))
         }
@@ -2345,10 +2347,11 @@ private fun searchWords(query: String): List<String> =
 
 /**
  * How well [row] answers a search for [words]: 0 when its name carries them all, 1 when its
- * name together with its repository, developer and package does, 2 when its description is
- * needed as well; null when it does not answer. No words match every app by name.
+ * name together with its repository, developer and package does, 2 when its description, or
+ * the summary shown on a device of [languages], is needed as well; null when it does not
+ * answer. No words match every app by name.
  */
-private fun matchRank(row: AppRow, words: List<String>): Int? {
+private fun matchRank(row: AppRow, words: List<String>, languages: List<String>): Int? {
     if (words.isEmpty()) return 0
     val app = row.app
     fun String.carries() = words.all { contains(it, ignoreCase = true) }
@@ -2357,9 +2360,16 @@ private fun matchRank(row: AppRow, words: List<String>): Int? {
     return when {
         name.carries() -> 0
         identity.carries() -> 1
-        "$identity ${app.description}".carries() -> 2
+        "$identity ${app.description} ${app.summary(languages)}".carries() -> 2
         else -> null
     }
+}
+
+/** The languages of the device, in order of preference, as [AppMetadata.pick] takes them. */
+@Composable
+private fun deviceLanguages(): List<String> {
+    val locales = LocalConfiguration.current.locales
+    return remember(locales) { List(locales.size()) { locales[it].language } }
 }
 
 private fun categoryLabel(id: String): Int = when (id) {

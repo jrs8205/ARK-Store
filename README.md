@@ -75,9 +75,11 @@ following a developer who has not added it.
   `launcher`, `keyboard`, `dialer` and `weather` are recognised; the rest goes under Other.
 - **Description**: the repository's description is shown on the card, the release notes in
   the details.
-- **Screenshots and a longer description**: the `fastlane/metadata/android/<locale>/` folder
-  that F-Droid reads, with `full_description.txt` and `images/phoneScreenshots/`, is shown in
-  the details. English and Finnish are read; nothing more is needed.
+- **Screenshots and translated descriptions**: the `fastlane/metadata/android/<locale>/`
+  folder that F-Droid reads is used too. `short_description.txt` takes the place of the
+  repository's description on the card and in the details, `full_description.txt` and
+  `images/phoneScreenshots/` are shown in the details. English and Finnish are read; nothing
+  more is needed.
 - **Several APKs**: keep the architecture (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` or
   `universal`) in the file name and each device gets the right one.
 
