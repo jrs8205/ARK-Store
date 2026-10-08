@@ -1250,6 +1250,20 @@ class MetadataTest(unittest.TestCase):
         texts[RAW + "en-GB/short_description.txt"] = ""
         self.assertEqual(build_index.metadata_from_paths(paths, "owner/app", "main", read_text=texts.__getitem__), {})
 
+    def test_only_so_many_folders_of_a_language_are_tried(self):
+        # A repository with any number of empty folders must not cost a request for each.
+        regions = ["en-%s" % code for code in ("AA", "AB", "AC", "AD", "AE")]
+        read = []
+
+        def read_text(address):
+            read.append(address)
+            return "Said here" if "en-AE" in address else ""
+
+        paths = fastlane(*(region + "/short_description.txt" for region in regions))
+        metadata = build_index.metadata_from_paths(paths, "owner/app", "main", read_text=read_text)
+        self.assertEqual(len(read), build_index.MAX_FOLDERS_TRIED)
+        self.assertEqual(metadata, {})
+
     def test_summary_is_not_read_without_a_reader(self):
         self.assertEqual(self.metadata("en-US/short_description.txt"), {})
 
