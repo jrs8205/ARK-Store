@@ -267,6 +267,7 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual(app["metadata"], {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
                                                   "screenshots": []}})
         self.assertEqual(app["metadataAt"], REPO["pushed_at"])
+        self.assertEqual(app["metadataReader"], build_index.METADATA_READER)
 
     def test_entry_has_no_metadata_unless_asked_for_it(self):
         repo = dict(REPO, default_branch="main")
@@ -1202,6 +1203,41 @@ class MetadataTest(unittest.TestCase):
         self.assertEqual(metadata["en"]["screenshots"],
                          [RAW + "en-US/images/phoneScreenshots/1%20main%20screen.png"])
 
+    def test_short_description_is_read_into_the_summary(self):
+        texts = {RAW + "en-US/short_description.txt?at=20260101120000": "Install apps from GitHub\n",
+                 RAW + "fi-FI/short_description.txt?at=20260101120000": "Asenna sovelluksia GitHubista"}
+        metadata = build_index.metadata_from_paths(
+            fastlane("en-US/short_description.txt", "en-US/images/phoneScreenshots/1.png", "fi-FI/short_description.txt"),
+            "owner/app", "main", stamp="20260101120000", read_text=texts.__getitem__)
+        self.assertEqual(metadata, {
+            "en": {"summary": "Install apps from GitHub",
+                   "screenshots": [RAW + "en-US/images/phoneScreenshots/1.png?at=20260101120000"]},
+            "fi": {"summary": "Asenna sovelluksia GitHubista", "screenshots": []},
+        })
+
+    def test_summary_is_one_line_within_the_limit(self):
+        long = "word " * 100
+        for text, summary in (("\ufeff  Two\r\n lines  here \n", "Two lines here"),
+                              (long, long[:build_index.MAX_SUMMARY]),
+                              ("\n", None), ("", None)):
+            with self.subTest(text=text):
+                metadata = build_index.metadata_from_paths(
+                    fastlane("en-US/short_description.txt"), "owner/app", "main", read_text=lambda address: text)
+                if summary is None:
+                    self.assertEqual(metadata, {})
+                else:
+                    self.assertEqual(metadata, {"en": {"summary": summary, "screenshots": []}})
+
+    def test_summary_comes_from_the_folder_of_the_other_metadata(self):
+        texts = {RAW + "en-US/short_description.txt": "US", RAW + "en-GB/short_description.txt": "GB"}
+        metadata = build_index.metadata_from_paths(
+            fastlane("en-GB/short_description.txt", "en-US/short_description.txt", "en-US/images/phoneScreenshots/1.png"),
+            "owner/app", "main", read_text=texts.__getitem__)
+        self.assertEqual(metadata["en"]["summary"], "US")
+
+    def test_summary_is_not_read_without_a_reader(self):
+        self.assertEqual(self.metadata("en-US/short_description.txt"), {})
+
     def test_address_carries_the_push_as_a_stamp(self):
         metadata = build_index.metadata_from_paths(
             fastlane("en-US/full_description.txt", "en-US/images/phoneScreenshots/1.png"), "owner/app", "main",
@@ -1231,6 +1267,34 @@ class MetadataTest(unittest.TestCase):
         self.assertEqual(metadata, {"en": {"description": RAW + "en-US/full_description.txt",
                                            "screenshots": [RAW + "en-US/images/phoneScreenshots/2.png"]}})
 
+    def test_lookup_reads_the_short_description_from_the_branch(self):
+        tree = {"tree": self.TREE["tree"] + [
+            {"path": "fastlane/metadata/android/en-US/short_description.txt", "type": "blob"}]}
+        with mock.patch.object(build_index, "api", return_value=tree), \
+                mock.patch.object(build_index, "raw_text", return_value="Short\n") as raw_text:
+            metadata = build_index.fastlane_metadata("owner/app", "main", stamp="20260101120000")
+        raw_text.assert_called_once_with(RAW + "en-US/short_description.txt?at=20260101120000")
+        self.assertEqual(metadata["en"]["summary"], "Short")
+        self.assertEqual(metadata["en"]["description"], RAW + "en-US/full_description.txt?at=20260101120000")
+
+    def test_raw_text_is_read_as_utf8_within_a_limit(self):
+        response = mock.MagicMock()
+        read = response.__enter__.return_value.read
+        read.side_effect = lambda limit: ("Ääkköset ja ".encode("utf-8") + b"x" * limit)[:limit]
+        with mock.patch.object(urllib.request, "urlopen", return_value=response) as urlopen:
+            text = build_index.raw_text(RAW + "fi-FI/short_description.txt")
+        self.assertEqual(urlopen.call_args[0][0].full_url, RAW + "fi-FI/short_description.txt")
+        read.assert_called_once_with(build_index.MAX_TEXT_BYTES)
+        self.assertTrue(text.startswith("Ääkköset ja x"))
+
+    def test_short_description_that_cannot_be_read_fails_the_lookup(self):
+        tree = {"tree": [{"path": "fastlane/metadata/android/en-US/short_description.txt", "type": "blob"}]}
+        failing = urllib.error.HTTPError("https://raw.githubusercontent.com/", 502, "Bad Gateway", {}, None)
+        with mock.patch.object(build_index, "api", return_value=tree), \
+                mock.patch.object(build_index, "raw_text", side_effect=failing):
+            with self.assertRaises(urllib.error.HTTPError):
+                build_index.fastlane_metadata("owner/app", "main")
+
     def test_missing_tree_is_no_metadata_but_other_errors_propagate(self):
         missing = urllib.error.HTTPError("https://api.github.com/", 404, "Not Found", {}, None)
         with mock.patch.object(build_index, "api", side_effect=missing):
@@ -1240,18 +1304,21 @@ class MetadataTest(unittest.TestCase):
             with self.assertRaises(urllib.error.HTTPError):
                 build_index.fastlane_metadata("owner/app", "main")
 
+    READER = build_index.METADATA_READER
     KNOWN = {"fullName": "owner/app", "pushedAt": REPO["pushed_at"], "metadataAt": REPO["pushed_at"],
-             "metadata": {"en": {"screenshots": ["https://x/1.png"]}}}
+             "metadataReader": READER, "metadata": {"en": {"screenshots": ["https://x/1.png"]}}}
     STAMPED = RAW + "en-US/full_description.txt?at=20260101000000"
 
     def test_metadata_stands_while_the_repository_is_not_pushed_to(self):
         with mock.patch.object(build_index, "api") as api:
             fields = build_index.app_metadata(dict(REPO, default_branch="main"), self.KNOWN)
         api.assert_not_called()
-        self.assertEqual(fields, {"metadata": self.KNOWN["metadata"], "metadataAt": REPO["pushed_at"]})
+        self.assertEqual(fields, {"metadata": self.KNOWN["metadata"], "metadataAt": REPO["pushed_at"],
+                                  "metadataReader": self.READER})
 
     def test_metadata_is_looked_up_after_a_push_or_when_not_known(self):
-        unknown = {key: value for key, value in self.KNOWN.items() if key not in ("metadata", "metadataAt")}
+        unknown = {key: value for key, value in self.KNOWN.items()
+                   if key not in ("metadata", "metadataAt", "metadataReader")}
         old = "2025-12-01T00:00:00Z"
         for previous in (dict(self.KNOWN, pushedAt=old, metadataAt=old), dict(self.KNOWN, metadataAt=old), unknown, None):
             with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
@@ -1259,15 +1326,27 @@ class MetadataTest(unittest.TestCase):
             api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
             self.assertEqual(fields["metadata"]["en"]["description"], self.STAMPED)
             self.assertEqual(fields["metadataAt"], REPO["pushed_at"])
+            self.assertEqual(fields["metadataReader"], self.READER)
+
+    def test_metadata_read_by_an_older_reader_is_looked_up_again(self):
+        older = dict(self.KNOWN, metadataReader=self.READER - 1)
+        del older["metadataReader"]
+        for previous in (dict(self.KNOWN, metadataReader=self.READER - 1), older):
+            with mock.patch.object(build_index, "api", return_value=self.TREE) as api:
+                fields = build_index.app_metadata(dict(REPO, default_branch="main"), previous)
+            api.assert_called_once_with("/repos/owner/app/git/trees/main?recursive=1")
+            shots = [RAW + "en-US/images/phoneScreenshots/2.png?at=20260101000000"]
+            self.assertEqual(fields, {"metadata": {"en": {"description": self.STAMPED, "screenshots": shots}},
+                                      "metadataAt": REPO["pushed_at"], "metadataReader": self.READER})
 
     def test_lookup_that_fails_keeps_what_was_known_and_looks_again_next_time(self):
         failing = urllib.error.HTTPError("https://api.github.com/", 502, "Bad Gateway", {}, None)
         old = "2025-12-01T00:00:00Z"
-        pushed = dict(self.KNOWN, pushedAt=old, metadataAt=old)
+        pushed = dict(self.KNOWN, pushedAt=old, metadataAt=old, metadataReader=self.READER - 1)
         with mock.patch.object(build_index, "api", side_effect=failing):
-            # The old mark stays, so that the next run looks the tree up again.
+            # The old marks stay, so that the next run looks the tree up again.
             self.assertEqual(build_index.app_metadata(dict(REPO, default_branch="main"), pushed),
-                             {"metadata": self.KNOWN["metadata"], "metadataAt": old})
+                             {"metadata": self.KNOWN["metadata"], "metadataAt": old, "metadataReader": self.READER - 1})
             self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
         with mock.patch.object(build_index, "api", side_effect=OSError("timed out")):
             self.assertIsNone(build_index.app_metadata(dict(REPO, default_branch="main"), None))
@@ -1275,6 +1354,7 @@ class MetadataTest(unittest.TestCase):
             fields = build_index.app_metadata(dict(REPO, default_branch="main"), pushed)
         api.assert_called_once()
         self.assertEqual(fields["metadataAt"], REPO["pushed_at"])
+        self.assertEqual(fields["metadataReader"], self.READER)
 
     def test_repository_whose_branch_is_not_known_has_no_metadata_yet(self):
         with mock.patch.object(build_index, "api") as api:
@@ -1394,13 +1474,15 @@ class AutoAppsTest(unittest.TestCase):
 
     def test_metadata_of_an_examined_app_stands_while_it_is_not_pushed_to(self):
         metadata = {"en": {"screenshots": ["https://x/1.png"]}}
-        previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadataAt=self.PUSHED, metadata=metadata)}
+        previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadataAt=self.PUSHED,
+                                      metadataReader=build_index.METADATA_READER, metadata=metadata)}
         _, _, build_app = self.run_auto(
             [self.candidate()], [self.entry()], previous=previous, state={"other/app": self.examined(0)})
         metadata_of = build_app.call_args.kwargs["metadata_of"]
         with mock.patch.object(build_index, "api") as api:
             self.assertEqual(metadata_of(dict(self.candidate(), default_branch="main")),
-                             {"metadata": metadata, "metadataAt": self.PUSHED})
+                             {"metadata": metadata, "metadataAt": self.PUSHED,
+                              "metadataReader": build_index.METADATA_READER})
         api.assert_not_called()
 
     def test_prereleases_are_not_looked_at(self):
@@ -1537,7 +1619,7 @@ class MainTest(unittest.TestCase):
             return release(asset_id=8)
 
         known = dict(self.KNOWN, pushedAt=REPO["pushed_at"], metadataAt=REPO["pushed_at"],
-                     metadata={"en": {"screenshots": ["https://x/1.png"]}})
+                     metadataReader=build_index.METADATA_READER, metadata={"en": {"screenshots": ["https://x/1.png"]}})
         found = {"repo": dict(REPO, default_branch="main"), "api": api,
                  "manifest": ("org.example", 4, "1.4", "Example", None, 26)}
         index, _ = self.run_main({"apps": [known]}, **found)

@@ -73,6 +73,13 @@ METADATA_FOLDER = "fastlane/metadata/android/"
 LANGUAGES = ("en", "fi")
 DEFAULT_REGIONS = {"en": "US", "fi": "FI"}
 MAX_SCREENSHOTS = 8
+# The short description is carried in the index itself, which this keeps small.
+MAX_SUMMARY = 200
+# Raised when the metadata is read differently, so that what an earlier run read is read
+# again: 2 reads the short description.
+METADATA_READER = 2
+# How much of a text file is read for it.
+MAX_TEXT_BYTES = 16 * 1024
 RAW_ADDRESS = "https://raw.githubusercontent.com"
 
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
@@ -1531,40 +1538,63 @@ def raw_address(full_name, branch, path, stamp=None):
     return address + "?at=" + stamp if stamp else address
 
 
-def metadata_from_paths(paths, full_name, default_branch, stamp=None):
+def summary_text(text):
+    """A short description as the index carries it: one line, at most MAX_SUMMARY characters,
+    or "" when there is nothing to say."""
+    return " ".join(str(text or "").lstrip("\ufeff").split())[:MAX_SUMMARY]
+
+
+def raw_text(address):
+    """The text of a small file at address, read as UTF-8 as far as MAX_TEXT_BYTES."""
+    request = urllib.request.Request(address, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.read(MAX_TEXT_BYTES).decode("utf-8", "replace")
+
+
+def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=None):
     """The "metadata" of a repository's entry, given the paths of the files on its default
-    branch: for each of LANGUAGES there is something for, the address of the long description,
-    when there is one, and the addresses of the phone screenshots. Both come from one folder.
-    The addresses carry the stamp, see raw_address."""
+    branch: for each of LANGUAGES there is something for, the short description itself, when
+    there is one and read_text, given its address, gives its text, the address of the long
+    description, when there is one, and the addresses of the phone screenshots. All come from
+    one folder. The addresses carry the stamp, see raw_address."""
+    summaries = {}
     descriptions = {}
     screenshots = {}
     for path in paths:
         if not path.startswith(METADATA_FOLDER):
             continue
         parts = path[len(METADATA_FOLDER):].split("/")
-        if parts[1:] == ["full_description.txt"]:
+        if parts[1:] == ["short_description.txt"] and read_text is not None:
+            summaries[parts[0]] = path
+        elif parts[1:] == ["full_description.txt"]:
             descriptions[parts[0]] = path
         elif len(parts) == 4 and parts[1:3] == ["images", "phoneScreenshots"]:
             screenshots.setdefault(parts[0], []).append(path)
     shown = {locale: chosen_screenshots(found) for locale, found in screenshots.items()}
-    useful = set(descriptions) | {locale for locale, found in shown.items() if found}
+    useful = set(summaries) | set(descriptions) | {locale for locale, found in shown.items() if found}
     metadata = {}
     for language in LANGUAGES:
         locale = preferred_locale(language, useful)
         if locale is None:
             continue
         found = {}
+        if locale in summaries:
+            summary = summary_text(read_text(raw_address(full_name, default_branch, summaries[locale], stamp)))
+            if summary:
+                found["summary"] = summary
         if locale in descriptions:
             found["description"] = raw_address(full_name, default_branch, descriptions[locale], stamp)
         found["screenshots"] = [raw_address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
-        metadata[language] = found
+        if found["screenshots"] or len(found) > 1:
+            metadata[language] = found
     return metadata
 
 
 def fastlane_metadata(full_name, default_branch, stamp=None):
     """The "metadata" of a repository's entry (see metadata_from_paths), from the list of the
-    files on its default branch, which takes one request. A list too long for GitHub to give
-    whole is read as far as it goes."""
+    files on its default branch, which takes one request, and the short descriptions it
+    names, which take one each from the raw server, not the API. A list too long for GitHub
+    to give whole is read as far as it goes."""
     try:
         tree = api("/repos/%s/git/trees/%s?recursive=1" % (full_name, urllib.parse.quote(default_branch, safe="")))
     except urllib.error.HTTPError as error:
@@ -1572,20 +1602,22 @@ def fastlane_metadata(full_name, default_branch, stamp=None):
             raise
         return {}
     paths = [item.get("path") or "" for item in tree.get("tree") or [] if item.get("type") == "blob"]
-    return metadata_from_paths(paths, full_name, default_branch, stamp)
+    return metadata_from_paths(paths, full_name, default_branch, stamp, read_text=raw_text)
 
 
 def app_metadata(repo, previous=None):
-    """The fields that tell a repository's entry its "metadata": the metadata itself and
-    "metadataAt", the push it was read for. None when the default branch is not known, so
-    that the entry goes without and a later run looks it up. previous is the repository's
-    entry from an earlier run: its metadata stands while it was read for the current push,
-    and while a lookup fails, with its old mark, so that the next run looks again. The
-    metadata is an extra, and a passing error must not cost the entry its release."""
+    """The fields that tell a repository's entry its "metadata": the metadata itself,
+    "metadataAt", the push it was read for, and "metadataReader", the reader that read it.
+    None when the default branch is not known, so that the entry goes without and a later
+    run looks it up. previous is the repository's entry from an earlier run: its metadata
+    stands while it was read for the current push by the current reader, and while a lookup
+    fails, with its old marks, so that the next run looks again. The metadata is an extra,
+    and a passing error must not cost the entry its release."""
     known = previous.get("metadata") if previous and "metadata" in previous else None
     pushed_at = repo.get("pushed_at") or ""
-    if known is not None and previous.get("metadataAt") == pushed_at:
-        return {"metadata": known, "metadataAt": pushed_at}
+    if known is not None and previous.get("metadataAt") == pushed_at \
+            and previous.get("metadataReader") == METADATA_READER:
+        return {"metadata": known, "metadataAt": pushed_at, "metadataReader": METADATA_READER}
     if not repo.get("default_branch"):
         return None
     try:
@@ -1594,8 +1626,9 @@ def app_metadata(repo, previous=None):
         print("%s: metadata not read: %s" % (repo["full_name"], error), file=sys.stderr)
         if known is None:
             return None
-        return {"metadata": known, "metadataAt": previous.get("metadataAt")}
-    return {"metadata": metadata, "metadataAt": pushed_at}
+        return {"metadata": known, "metadataAt": previous.get("metadataAt"),
+                "metadataReader": previous.get("metadataReader")}
+    return {"metadata": metadata, "metadataAt": pushed_at, "metadataReader": METADATA_READER}
 
 
 def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_releases=None, icons=None,
