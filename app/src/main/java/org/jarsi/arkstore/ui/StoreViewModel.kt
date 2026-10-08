@@ -32,6 +32,7 @@ import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.work.AutoUpdate
 
@@ -112,12 +113,17 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     private var refreshAgain = false
     private var lastResumeRefresh = 0L
 
+    private val policy = MutableStateFlow(UpdatePolicy.read(application))
+    /** The updates the user has asked not to be offered. */
+    val updatePolicy: StateFlow<UpdatePolicy> = policy.asStateFlow()
+
     val state: StateFlow<StoreUiState> = combine(
         repository.catalog,
         InstallManager.installedChanged,
         refreshing,
-        error
-    ) { catalog, _, isRefreshing, loadError ->
+        error,
+        policy
+    ) { catalog, _, isRefreshing, loadError, skips ->
         val packages = InstalledApps.snapshot(application)
         val android = CatalogRules.Android.THIS
         StoreUiState(
@@ -125,7 +131,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                 val app = row.app
                 val runs = CatalogRules.runsOn(app, android)
                 val installed = InstalledApps.find(application, row, packages)
-                val status = InstalledApps.status(app, installed, runs)
+                val status = InstalledApps.status(app, installed, runs, skips.skips(app))
                 // An app this Android cannot run is listed only when it is installed, to say
                 // that its newest version needs a newer Android.
                 if (!CatalogRules.listed(status, runs)) return@mapNotNull null
@@ -347,7 +353,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                 hideTop = ui.getBoolean(PREF_HIDE_TOP, true),
                 sort = ui.getString(PREF_SORT, null) ?: SortOrder.NAME.name,
                 autoUpdate = AutoUpdate.read(context)
-            )
+            ),
+            updates = policy.value
         )
     }
 
@@ -372,6 +379,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             settings.sort?.let { putString(PREF_SORT, it) }
         }
         settings.autoUpdate?.let { AutoUpdate.write(context, it) }
+        setPolicy(policy.value + backup.updates)
         _sources.update { it.copy(sources = repository.sources.list()) }
         return newSources to newBookmarks
     }
@@ -412,7 +420,22 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun install(app: StoreApp) = InstallManager.install(getApplication(), app)
 
-    fun installAll(apps: List<StoreApp>) = apps.forEach(::install)
+    fun installAll(apps: List<StoreApp>) = InstallManager.installAll(getApplication(), apps)
+
+    fun cancelInstall(fullName: String) = InstallManager.cancel(fullName)
+
+    /** Does not offer [app]'s version again; the next one is offered. */
+    fun skipVersion(app: StoreApp) = setPolicy(policy.value.skip(app))
+
+    /** Does not offer any update of [packageName] until [offerUpdates]. */
+    fun holdUpdates(packageName: String) = setPolicy(policy.value.hold(packageName, true))
+
+    fun offerUpdates(packageName: String) = setPolicy(policy.value.offer(packageName))
+
+    private fun setPolicy(next: UpdatePolicy) {
+        next.write(getApplication())
+        policy.value = next
+    }
 
     fun dismissFailure(fullName: String) = InstallManager.dismissFailure(fullName)
 

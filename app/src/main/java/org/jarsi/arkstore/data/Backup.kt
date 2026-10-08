@@ -10,7 +10,13 @@ import org.json.JSONObject
  * sources, the bookmarks and the settings. The GitHub token stays behind, and so does what
  * belongs to the device alone, such as the betas installed and the keys seen to differ.
  */
-data class Backup(val sources: List<String>, val bookmarks: Set<String>, val settings: Settings) {
+data class Backup(
+    val sources: List<String>,
+    val bookmarks: Set<String>,
+    val settings: Settings,
+    /** The updates not to offer; [UpdatePolicy.NONE] when the file does not say. */
+    val updates: UpdatePolicy = UpdatePolicy.NONE
+) {
 
     /** Each setting as the file tells it, or null when the file does not say. */
     data class Settings(
@@ -83,6 +89,12 @@ data class Backup(val sources: List<String>, val bookmarks: Set<String>, val set
         .put("sources", JSONArray(sources))
         .put("bookmarks", JSONArray(bookmarks.toList()))
         .put("settings", settings.toJson())
+        .put(
+            "updates",
+            JSONObject()
+                .put("skipped", JSONObject(updates.skipped))
+                .put("held", JSONArray(updates.held.toList()))
+        )
 
     companion object {
         const val APP = "org.jarsi.arkstore"
@@ -117,7 +129,28 @@ data class Backup(val sources: List<String>, val bookmarks: Set<String>, val set
                 .filter { it.isNotBlank() && it.length <= MAX_KEY_LENGTH }
                 .take(MAX_BOOKMARKS)
                 .toSet()
-            return Backup(sources, bookmarks, Settings.fromJson(json.optJSONObject("settings")))
+            return Backup(
+                sources,
+                bookmarks,
+                Settings.fromJson(json.optJSONObject("settings")),
+                updatePolicy(json.optJSONObject("updates"))
+            )
+        }
+
+        private fun updatePolicy(json: JSONObject?): UpdatePolicy {
+            if (json == null) return UpdatePolicy.NONE
+            val skipped = json.optJSONObject("skipped")?.let { entry ->
+                entry.keys().asSequence()
+                    .filter { it.isNotBlank() && it.length <= MAX_KEY_LENGTH }
+                    .mapNotNull { key -> (entry.opt(key) as? Number)?.toLong()?.let { key to it } }
+                    .take(MAX_BOOKMARKS)
+                    .toMap()
+            }.orEmpty()
+            val held = strings(json.optJSONArray("held"))
+                .filter { it.isNotBlank() && it.length <= MAX_KEY_LENGTH }
+                .take(MAX_BOOKMARKS)
+                .toSet()
+            return UpdatePolicy(skipped, held)
         }
 
         /** [current] with those of [imported] not yet among them, under whatever case, after them. */

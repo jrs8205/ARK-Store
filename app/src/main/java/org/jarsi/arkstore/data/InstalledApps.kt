@@ -47,6 +47,8 @@ data class InstalledVersion(
 enum class AppStatus {
     NOT_INSTALLED,
     UPDATE_AVAILABLE,
+    /** A newer version is offered, but the user has asked not to have it, see [UpdatePolicy]. */
+    UPDATE_SKIPPED,
     UP_TO_DATE,
 
     /** A newer version is offered, but the installed app is signed with a different key. */
@@ -244,26 +246,38 @@ object InstalledApps {
     /**
      * How [app] stands against what is [installed] of it. [runs] says whether the file offered
      * runs on this Android ([CatalogRules.runsOn]); one that does not is no update, whatever
-     * its key, since nothing could be installed.
+     * its key, since nothing could be installed. An update the user has [skipped] (see
+     * [UpdatePolicy]) is told apart from one on offer.
      */
-    fun status(app: StoreApp, installed: InstalledVersion?, runs: Boolean = true): AppStatus = when {
+    fun status(
+        app: StoreApp,
+        installed: InstalledVersion?,
+        runs: Boolean = true,
+        skipped: Boolean = false
+    ): AppStatus = when {
         installed == null -> AppStatus.NOT_INSTALLED
         installed.otherApp -> AppStatus.OTHER_APP
         app.versionCode <= installed.versionCode -> AppStatus.UP_TO_DATE
         !runs -> AppStatus.NEEDS_NEWER_ANDROID
         installed.otherSigner -> AppStatus.OTHER_SIGNER
         installed.otherBuild -> AppStatus.OTHER_BUILD
+        skipped -> AppStatus.UPDATE_SKIPPED
         else -> AppStatus.UPDATE_AVAILABLE
     }
 
-    /** The apps among [apps] that have an update to offer, each with what is installed of it. */
+    /**
+     * The apps among [apps] that have an update to offer, each with what is installed of it;
+     * not those the user has asked not to have, see [UpdatePolicy].
+     */
     fun updates(context: Context, apps: List<StoreApp>): List<Pair<StoreApp, InstalledVersion>> {
         val installed = snapshot(context)
         val android = CatalogRules.Android.THIS
+        val policy = UpdatePolicy.read(context)
         return merged(context, apps, installed).mapNotNull {
             val version = find(context, it, installed)
             val runs = CatalogRules.runsOn(it.app, android)
-            if (version != null && status(it.app, version, runs) == AppStatus.UPDATE_AVAILABLE) it.app to version else null
+            val status = status(it.app, version, runs, policy.skips(it.app))
+            if (version != null && status == AppStatus.UPDATE_AVAILABLE) it.app to version else null
         }
     }
 

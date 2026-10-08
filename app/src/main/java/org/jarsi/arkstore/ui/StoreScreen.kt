@@ -41,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -161,6 +162,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
+    val updatePolicy by viewModel.updatePolicy.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -403,8 +405,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
             ) {
                 val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
                 val installed = visible.filter {
-                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
-                        it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.UPDATE_SKIPPED ||
+                        it.status == AppStatus.OTHER_SIGNER || it.status == AppStatus.OTHER_BUILD ||
+                        it.status == AppStatus.NEEDS_NEWER_ANDROID
                 }
                 val available = visible.filter {
                     it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
@@ -553,7 +556,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 selected,
                 onInstall = { viewModel.install(selected.app) },
                 bookmarked = Bookmarks.marked(selected.app, bookmarked),
-                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) }
+                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) },
+                onSkipVersion = { viewModel.skipVersion(selected.app) },
+                onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
+                onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
+                held = selected.app.packageName?.let { it in updatePolicy.held } == true
             )
         }
     }
@@ -669,6 +676,7 @@ private fun LazyListScope.section(
             install = installs[row.app.fullName],
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
+            onCancel = { viewModel.cancelInstall(row.app.fullName) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
         )
@@ -730,6 +738,7 @@ private fun AppCard(
     install: InstallState?,
     bookmarked: Boolean,
     onInstall: () -> Unit,
+    onCancel: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -793,7 +802,8 @@ private fun AppCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 when (install) {
-                    is InstallState.Downloading -> Progress(install.progress)
+                    InstallState.Queued -> Progress(0f, onCancel)
+                    is InstallState.Downloading -> Progress(install.progress, onCancel)
                     InstallState.Installing -> Progress(null)
                     else -> when (row.status) {
                         AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
@@ -805,8 +815,8 @@ private fun AppCard(
                         // Another app under this name: nothing to open and nothing to install
                         // over it; the note below says so.
                         AppStatus.OTHER_APP -> Unit
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD,
-                        AppStatus.NEEDS_NEWER_ANDROID -> {
+                        AppStatus.UP_TO_DATE, AppStatus.UPDATE_SKIPPED, AppStatus.OTHER_SIGNER,
+                        AppStatus.OTHER_BUILD, AppStatus.NEEDS_NEWER_ANDROID -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -957,21 +967,52 @@ private fun Stat(icon: Int, value: String, description: String) {
     }
 }
 
+/**
+ * The ring of an install on its way: spinning while the system installs, filling while the
+ * file downloads, and empty while the download waits its turn. A download, waiting or not,
+ * is cancelled by tapping it, with [onCancel].
+ */
 @Composable
-private fun Progress(progress: Float?) {
+private fun Progress(progress: Float?, onCancel: (() -> Unit)? = null) {
     val description = stringResource(
-        if (progress == null) R.string.state_installing else R.string.state_downloading
+        when {
+            progress == null -> R.string.state_installing
+            progress == 0f && onCancel != null -> R.string.state_queued
+            else -> R.string.state_downloading
+        }
     )
-    Box(
-        modifier = Modifier
+    val haptics = LocalHapticFeedback.current
+    val modifier = if (onCancel != null) {
+        val cancel = stringResource(R.string.action_cancel_download)
+        Modifier
             .size(48.dp)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center
-    ) {
+            .clip(CircleShape)
+            .clickable(
+                onClickLabel = cancel,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onCancel()
+                }
+            )
+            .semantics { contentDescription = "$description. $cancel" }
+    } else {
+        Modifier
+            .size(48.dp)
+            .semantics { contentDescription = description }
+    }
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         if (progress == null) {
             CircularProgressIndicator(modifier = Modifier.size(32.dp))
         } else {
             CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(32.dp))
+            if (onCancel != null) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_close),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
         }
     }
 }
@@ -1020,7 +1061,12 @@ private fun DetailsSheet(
     row: AppRow,
     onInstall: () -> Unit,
     bookmarked: Boolean,
-    onBookmarkToggle: () -> Unit
+    onBookmarkToggle: () -> Unit,
+    onSkipVersion: () -> Unit = {},
+    onHoldUpdates: () -> Unit = {},
+    onOfferUpdates: () -> Unit = {},
+    /** Whether the app is held back from every update, as opposed to one version skipped. */
+    held: Boolean = false
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -1221,6 +1267,32 @@ private fun DetailsSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 16.dp)
             )
+            if (app.packageName != null) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    StoreOutlinedButton(onClick = onSkipVersion) {
+                        Text(stringResource(R.string.action_skip_version))
+                    }
+                    StoreOutlinedButton(onClick = onHoldUpdates) {
+                        Text(stringResource(R.string.action_hold_updates))
+                    }
+                }
+            }
+        } else if (row.installed != null && row.status == AppStatus.UPDATE_SKIPPED) {
+            Text(
+                text = if (held) {
+                    stringResource(R.string.held_detail)
+                } else {
+                    stringResource(R.string.skipped_detail, app.displayVersion)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            StoreOutlinedButton(onClick = onOfferUpdates, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_offer_updates))
+            }
         }
         // Not for another app under this name: its version says nothing about a beta.
         if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
@@ -1324,6 +1396,10 @@ private fun versionLine(row: AppRow): String {
             R.string.version_update,
             installed.versionName ?: installed.versionCode.toString(),
             row.app.displayVersion
+        )
+        row.status == AppStatus.UPDATE_SKIPPED && installed != null -> stringResource(
+            R.string.version_skipped,
+            installed.versionName ?: installed.versionCode.toString()
         )
         row.status == AppStatus.OTHER_APP -> row.app.displayVersion
         installed != null -> installed.versionName ?: row.app.displayVersion

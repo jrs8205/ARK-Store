@@ -22,8 +22,16 @@ class BackupTest {
             hideTop = true,
             sort = "NAME",
             autoUpdate = AutoUpdate(enabled = true, unmeteredOnly = false, chargingOnly = true)
-        )
+        ),
+        updates = UpdatePolicy.NONE.skip(testApp(packageName = "org.example", versionCode = 12)).hold("org.held", true)
     )
+
+    @Test
+    fun aFileWithoutUpdatePoliciesLeavesThemAlone() {
+        val json = backup.toJson()
+        json.remove("updates")
+        assertEquals(UpdatePolicy.NONE, Backup.fromJson(json.toString())?.updates)
+    }
 
     @Test
     fun aBackupSurvivesItsFile() {
