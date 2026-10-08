@@ -1561,12 +1561,15 @@ def raw_text(address):
         return response.read(MAX_TEXT_BYTES).decode("utf-8", "replace")
 
 
-def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=None):
+def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=None, address=None):
     """The "metadata" of a repository's entry, given the paths of the files on its default
     branch: for each of LANGUAGES there is something for, the short description itself, when
     there is one and read_text, given its address, gives its text, the address of the long
     description, when there is one, and the addresses of the phone screenshots. All come from
-    one folder. The addresses carry the stamp, see raw_address."""
+    one folder. The addresses are given by address, raw_address unless told otherwise, and
+    carry the stamp."""
+    if address is None:
+        address = raw_address
     summaries = {}
     descriptions = {}
     screenshots = {}
@@ -1590,12 +1593,12 @@ def metadata_from_paths(paths, full_name, default_branch, stamp=None, read_text=
         for locale in locale_candidates(language, useful)[:MAX_FOLDERS_TRIED]:
             found = {}
             if locale in summaries:
-                summary = summary_text(read_text(raw_address(full_name, default_branch, summaries[locale], stamp)))
+                summary = summary_text(read_text(address(full_name, default_branch, summaries[locale], stamp)))
                 if summary:
                     found["summary"] = summary
             if locale in descriptions:
-                found["description"] = raw_address(full_name, default_branch, descriptions[locale], stamp)
-            found["screenshots"] = [raw_address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
+                found["description"] = address(full_name, default_branch, descriptions[locale], stamp)
+            found["screenshots"] = [address(full_name, default_branch, path, stamp) for path in shown.get(locale, [])]
             if found["screenshots"] or len(found) > 1:
                 metadata[language] = found
                 break
@@ -1617,14 +1620,22 @@ def fastlane_metadata(full_name, default_branch, stamp=None):
     return metadata_from_paths(paths, full_name, default_branch, stamp, read_text=raw_text)
 
 
-def app_metadata(repo, previous=None):
+def github_metadata(repo, stamp):
+    """The metadata of a repository on GitHub, see fastlane_metadata."""
+    return fastlane_metadata(repo["full_name"], repo["default_branch"], stamp)
+
+
+def app_metadata(repo, previous=None, read=None):
     """The fields that tell a repository's entry its "metadata": the metadata itself,
     "metadataAt", the push it was read for, and "metadataReader", the reader that read it.
     None when the default branch is not known, so that the entry goes without and a later
     run looks it up. previous is the repository's entry from an earlier run: its metadata
     stands while it was read for the current push by the current reader, and while a lookup
-    fails, with its old marks, so that the next run looks again. The metadata is an extra,
-    and a passing error must not cost the entry its release."""
+    fails, with its old marks, so that the next run looks again. read, given the repository
+    and the stamp of its push, reads the metadata; from GitHub unless told otherwise. The
+    metadata is an extra, and a passing error must not cost the entry its release."""
+    if read is None:
+        read = github_metadata
     known = previous.get("metadata") if previous and "metadata" in previous else None
     pushed_at = repo.get("pushed_at") or ""
     if known is not None and previous.get("metadataAt") == pushed_at \
@@ -1633,7 +1644,7 @@ def app_metadata(repo, previous=None):
     if not repo.get("default_branch"):
         return None
     try:
-        metadata = fastlane_metadata(repo["full_name"], repo["default_branch"], stamp_of(pushed_at))
+        metadata = read(repo, stamp_of(pushed_at))
     except (urllib.error.URLError, OSError, ValueError) as error:
         print("%s: metadata not read: %s" % (repo["full_name"], error), file=sys.stderr)
         if known is None:
