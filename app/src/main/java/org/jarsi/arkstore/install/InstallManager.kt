@@ -18,9 +18,11 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +30,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.coroutineContext
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
@@ -37,6 +42,8 @@ import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.StoreApp
 
 sealed interface InstallState {
+    /** Waiting for a turn to download, or for the other installs to finish first. */
+    data object Queued : InstallState
     /** [progress] is 0..1, or null while the size is unknown. */
     data class Downloading(val progress: Float?) : InstallState
     data object Installing : InstallState
@@ -46,7 +53,11 @@ sealed interface InstallState {
 enum class FailReason { DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL }
 
 /** How an install that was waited for came out. */
-enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED }
+enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED, CANCELLED }
+
+/** Whether [state] is one of an install on its way, as opposed to none or a failed one. */
+internal fun InstallState?.isOnItsWay(): Boolean =
+    this is InstallState.Queued || this is InstallState.Downloading || this is InstallState.Installing
 
 /**
  * [states] with [repo] reserved for a download, or null when an install of it is already
@@ -54,10 +65,31 @@ enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED }
  * check may ask for the same install at the same moment.
  */
 internal fun reserved(states: Map<String, InstallState>, repo: String): Map<String, InstallState>? {
-    val state = states[repo]
-    if (state is InstallState.Downloading || state is InstallState.Installing) return null
-    return states + (repo to InstallState.Downloading(0f))
+    if (states[repo].isOnItsWay()) return null
+    return states + (repo to InstallState.Queued)
 }
+
+/**
+ * [apps] in the order to install them: as given, except that the store itself, the app
+ * whose package is [self], comes last. Installing it ends the process and everything that
+ * is still on its way with it.
+ */
+internal fun installOrder(apps: List<StoreApp>, self: String): List<StoreApp> =
+    apps.filter { it.packageName != self } + apps.filter { it.packageName == self }
+
+/** Whether no install other than [repo]'s is on its way in [states]. */
+internal fun othersSettled(states: Map<String, InstallState>, repo: String): Boolean =
+    states.none { (name, state) -> name != repo && state.isOnItsWay() }
+
+/**
+ * The installs among [states] that are stuck: those installing whose session, by its id in
+ * [sessions], the system no longer has among those [alive], and so will never report on.
+ * One not yet in [sessions] is still being committed and is left alone.
+ */
+internal fun stale(states: Map<String, InstallState>, sessions: Map<String, Int>, alive: Set<Int>): List<String> =
+    states.filter { (name, state) ->
+        state is InstallState.Installing && sessions[name]?.let { it !in alive } == true
+    }.keys.toList()
 
 /**
  * [states] without [repo]'s failure; [states] as they are when it has none, so that an
@@ -69,6 +101,9 @@ internal fun dismissed(states: Map<String, InstallState>, repo: String): Map<Str
 /** Downloads release APKs and hands them to the system package installer. */
 object InstallManager {
     private const val TAG = "InstallManager"
+    private const val MAX_DOWNLOADS = 3
+    private const val SELF_WAIT_MS = 10 * 60 * 1000L
+    private const val PROMPT_GRACE_MS = 3 * 60 * 1000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -85,7 +120,15 @@ object InstallManager {
     private val screens = AtomicInteger(0)
 
     /** What was committed for each repository, kept until the system reports the outcome. */
-    private val committed = ConcurrentHashMap<String, Pair<StoreApp, String>>()
+    private data class Committed(val app: StoreApp, val packageName: String, val sessionId: Int)
+
+    private val committed = ConcurrentHashMap<String, Committed>()
+
+    /** The job of each install on its way, for [cancel]. */
+    private val jobs = ConcurrentHashMap<String, Job>()
+
+    /** Only so many files are fetched at once; the rest of a long list wait their turn. */
+    private val downloads = Semaphore(MAX_DOWNLOADS)
 
     private val _activeJobs = MutableStateFlow(0)
     /** How many downloads and installs are being worked on right now. */
@@ -98,9 +141,7 @@ object InstallManager {
     /** The outcome of each install as it is settled, for [installAndAwait]. */
     private val outcomes = MutableSharedFlow<Pair<String, Outcome>>(extraBufferCapacity = 64)
 
-    fun isBusy(repo: String): Boolean = _states.value[repo].let {
-        it is InstallState.Downloading || it is InstallState.Installing
-    }
+    fun isBusy(repo: String): Boolean = _states.value[repo].isOnItsWay()
 
     /**
      * Downloads and installs [app], unless an install of it is already on its way; returns
@@ -114,11 +155,14 @@ object InstallManager {
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 
-        scope.launch {
+        val job = scope.launch(start = CoroutineStart.LAZY) {
             val target = File(File(appContext.cacheDir, "apk"), CatalogRules.downloadName(app.fullName))
             try {
                 downloadAndInstall(appContext, app, target)
             } catch (e: CancellationException) {
+                // Only a download is cancelled, and only on purpose: nothing to show for it.
+                setState(app.fullName, null)
+                outcomes.tryEmit(app.fullName to Outcome.CANCELLED)
                 throw e
             } catch (e: Exception) {
                 // Nothing here may take the process down or leave the app stuck as "installing".
@@ -127,10 +171,29 @@ object InstallManager {
             } finally {
                 // Once committed, the session holds its own copy of the file.
                 target.delete()
+                jobs.remove(app.fullName)
                 _activeJobs.update { it - 1 }
             }
         }
+        // Stored before it runs, so that a cancel cannot miss it.
+        jobs[app.fullName] = job
+        job.start()
         return true
+    }
+
+    /** Installs [apps] in the order of [installOrder]. */
+    fun installAll(context: Context, apps: List<StoreApp>) {
+        installOrder(apps, context.packageName).forEach { install(context, it) }
+    }
+
+    /**
+     * Stops the download of [repo], when it is one: an install that is already with the
+     * system goes on. The file fetched so far is dropped and nothing is shown for it.
+     */
+    fun cancel(repo: String) {
+        val state = _states.value[repo]
+        if (state !is InstallState.Queued && state !is InstallState.Downloading) return
+        jobs[repo]?.cancel(CancellationException("cancelled"))
     }
 
     /**
@@ -186,17 +249,23 @@ object InstallManager {
     }
 
     private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File) {
+        val job = coroutineContext[Job]
         try {
-            var lastStep = -1
-            Http.download(app.apkUrl, target) { read, total ->
-                val size = if (total > 0) total else app.apkSize
-                val step = if (size > 0) (read * 100 / size).toInt() else -1
-                if (step != lastStep) {
-                    lastStep = step
-                    setState(
-                        app.fullName,
-                        InstallState.Downloading(if (step < 0) null else step / 100f)
-                    )
+            downloads.withPermit {
+                setState(app.fullName, InstallState.Downloading(0f))
+                var lastStep = -1
+                Http.download(app.apkUrl, target) { read, total ->
+                    // The stream is not interrupted by a cancel; this is where one is noticed.
+                    if (job?.isActive == false) throw CancellationException("cancelled")
+                    val size = if (total > 0) total else app.apkSize
+                    val step = if (size > 0) (read * 100 / size).toInt() else -1
+                    if (step != lastStep) {
+                        lastStep = step
+                        setState(
+                            app.fullName,
+                            InstallState.Downloading(if (step < 0) null else step / 100f)
+                        )
+                    }
                 }
             }
         } catch (e: IOException) {
@@ -252,11 +321,16 @@ object InstallManager {
         }
         InstalledApps.forgetConflict(appContext, app, archive.packageName)
 
+        // Installing the store itself ends this process, so it waits for every other
+        // install to be done with; but not forever for one the user never confirms.
+        if (archive.packageName == appContext.packageName) {
+            setState(app.fullName, InstallState.Queued)
+            withTimeoutOrNull(SELF_WAIT_MS) { _states.first { othersSettled(it, app.fullName) } }
+        }
         setState(app.fullName, InstallState.Installing)
-        committed[app.fullName] = app to archive.packageName
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         try {
-            commit(appContext, app.fullName, archive.packageName, target)
+            commit(appContext, app, archive.packageName, target)
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for ${app.fullName}", e)
             committed.remove(app.fullName)
@@ -264,9 +338,36 @@ object InstallManager {
         }
     }
 
-    /** Called by each of the store's screens as it comes into view. */
-    internal fun onScreenStarted() {
+    /**
+     * Called by each of the store's screens as it comes into view. An install whose session
+     * the system has dropped without a word is failed here, so that it can be tried again
+     * rather than shown as installing for good.
+     */
+    internal fun onScreenStarted(context: Context) {
         screens.incrementAndGet()
+        val alive = try {
+            context.packageManager.packageInstaller.mySessions.map { it.sessionId }.toSet()
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not list install sessions", e)
+            return
+        }
+        val sessions = committed.mapValues { it.value.sessionId }
+        for (repo in stale(_states.value, sessions, alive)) {
+            Log.w(TAG, "Install session of $repo is gone without a result")
+            onSessionResult(context, repo, PackageInstaller.STATUS_FAILURE, null)
+        }
+    }
+
+    /**
+     * The prompt of [repo]'s install has closed. Its outcome arrives from the system, in
+     * time; a prompt left without an answer settles nothing, so after a while the next
+     * confirmation is let through regardless.
+     */
+    internal fun onPromptClosed(repo: String) {
+        scope.launch {
+            delay(PROMPT_GRACE_MS)
+            confirmations.abandon(repo)
+        }
     }
 
     /**
@@ -319,7 +420,7 @@ object InstallManager {
                 val reason = conflictReason(message)
                 // The system can see a conflict that comparing the certificates here did not.
                 if (reason == FailReason.SIGNATURE_MISMATCH && attempted != null) {
-                    InstalledApps.rememberConflict(context, attempted.first, attempted.second)
+                    InstalledApps.rememberConflict(context, attempted.app, attempted.packageName)
                 }
                 setState(repo, InstallState.Failed(reason, message))
             }
@@ -344,7 +445,7 @@ object InstallManager {
         if (state is InstallState.Failed) outcomes.tryEmit(repo to Outcome.FAILED)
     }
 
-    private fun commit(context: Context, repo: String, packageName: String, apk: File) {
+    private fun commit(context: Context, app: StoreApp, packageName: String, apk: File) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(packageName)
@@ -357,8 +458,9 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
+        committed[app.fullName] = Committed(app, packageName, sessionId)
         try {
-            write(context, installer, sessionId, repo, apk)
+            write(context, installer, sessionId, app.fullName, apk)
         } catch (e: Exception) {
             // Closing a session keeps what was copied into it; only abandoning frees the space.
             runCatching { installer.abandonSession(sessionId) }

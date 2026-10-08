@@ -21,6 +21,9 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.HttpStatusException
@@ -30,6 +33,7 @@ import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
+import org.jarsi.arkstore.install.installOrder
 import org.jarsi.arkstore.ui.MainActivity
 
 /** A request that timed out, or too many of them. */
@@ -72,6 +76,32 @@ internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp>
 /** Those of [failed] that are still among the [updates] offered; the rest are forgotten. */
 internal fun stillFailed(failed: Set<String>, updates: List<StoreApp>): Set<String> =
     updates.map(::announcement).filter { it in failed }.toSet()
+
+/**
+ * Runs [block] and, every [intervalMillis] meanwhile, asks whether it is still [allowed];
+ * the first time it is not, [onDisallowed] is called, once. What [block] returns is returned.
+ */
+internal suspend fun <T> watching(
+    allowed: () -> Boolean,
+    intervalMillis: Long,
+    onDisallowed: () -> Unit,
+    block: suspend () -> T
+): T = coroutineScope {
+    val watcher = launch {
+        while (true) {
+            delay(intervalMillis)
+            if (!allowed()) {
+                onDisallowed()
+                break
+            }
+        }
+    }
+    try {
+        block()
+    } finally {
+        watcher.cancel()
+    }
+}
 
 /**
  * Periodically refreshes the catalogue, installs the updates it may unasked (see
@@ -130,17 +160,24 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
-        for (app in toTry(owned, failed)) {
+        fun allowed() = AutoUpdate.read(context).allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))
+        for (app in installOrder(toTry(owned, failed), context.packageName)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
             // The user may have turned the switch off, or left the Wi-Fi, during the last one.
-            if (!AutoUpdate.read(context).allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) break
-            when (InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))) {
+            if (!allowed()) break
+            // And they may do so during this one: a download that goes on regardless is what
+            // the settings were there to prevent. An install already with the system goes on.
+            val outcome = watching(::allowed, CONDITIONS_INTERVAL_MS, { InstallManager.cancel(app.fullName) }) {
+                InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))
+            }
+            when (outcome) {
                 Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
                 Outcome.FAILED -> {
                     failed += announcement(app)
                     InstallManager.dismissFailure(app.fullName)
                 }
+                Outcome.CANCELLED -> break
                 null -> {}
             }
         }
@@ -166,6 +203,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         // waits for the next.
         private const val INSTALL_BUDGET_MS = 7 * 60 * 1000L
         private const val INSTALL_TIMEOUT_MS = 3 * 60 * 1000L
+        private const val CONDITIONS_INTERVAL_MS = 1000L
 
         fun schedule(context: Context) {
             val request = PeriodicWorkRequestBuilder<UpdateCheckWorker>(

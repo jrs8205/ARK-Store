@@ -5,7 +5,12 @@ import kotlinx.coroutines.flow.asStateFlow
 
 internal data class InstallConfirmation<T>(val repo: String, val value: T)
 
-/** Keeps confirmations until a foreground activity can present them, one at a time. */
+/**
+ * Keeps confirmations until a foreground activity can present them, one at a time. The one
+ * presented stays active until its session settles, whether the prompt has closed or not:
+ * the system installs after the prompt closes, and a prompt opened over that install shows
+ * as a dark screen that takes no touch until the install is done.
+ */
 internal class InstallConfirmationQueue<T> {
     private val waiting = linkedMapOf<String, T>()
     private var activeRepo: String? = null
@@ -35,16 +40,25 @@ internal class InstallConfirmationQueue<T> {
     fun waiting(): List<InstallConfirmation<T>> =
         waiting.map { InstallConfirmation(it.key, it.value) }
 
-    @Synchronized
-    fun finishActive() {
-        activeRepo = null
-        publishNext()
-    }
-
+    /**
+     * The session of [repo] has settled, one way or the other: its confirmation is no longer
+     * needed, and the next may be presented if it was the active one.
+     */
     @Synchronized
     fun remove(repo: String) {
         waiting.remove(repo)
-        // A session result can arrive before its confirmation activity has closed.
+        if (activeRepo == repo) activeRepo = null
+        publishNext()
+    }
+
+    /**
+     * Gives up waiting for the session of [repo], when it is still the active one: a prompt
+     * the user left without answering settles nothing, and the rest must not wait forever.
+     */
+    @Synchronized
+    fun abandon(repo: String) {
+        if (activeRepo != repo) return
+        activeRepo = null
         publishNext()
     }
 

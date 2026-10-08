@@ -6,7 +6,7 @@ import org.junit.Test
 
 class InstallConfirmationQueueTest {
     @Test
-    fun retainsConfirmationUntilTheActivityReturns() {
+    fun retainsConfirmationUntilItsSessionSettles() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/app", "confirmation")
 
@@ -29,17 +29,35 @@ class InstallConfirmationQueueTest {
     }
 
     @Test
-    fun waitsForTheOpenActivityEvenAfterItsSessionCompletes() {
+    fun theNextPromptWaitsForTheSessionOfTheOpenOneToSettle() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/first", "first")
         queue.take()
         queue.enqueue("owner/second", "second")
-        queue.remove("owner/first")
 
+        // The prompt closing says nothing: the system may still be installing the first.
         assertNull(queue.next.value)
         assertNull(queue.take())
-        queue.finishActive()
+        queue.remove("owner/first")
         assertEquals(InstallConfirmation("owner/second", "second"), queue.take())
+    }
+
+    @Test
+    fun anAbandonedPromptIsReleasedOnlyWhileItIsStillTheActiveOne() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.enqueue("owner/second", "second")
+        queue.take()
+        queue.abandon("owner/second")
+        assertNull(queue.next.value)
+
+        queue.abandon("owner/first")
+        assertEquals(InstallConfirmation("owner/second", "second"), queue.take())
+        // A late release of the first must not drop the second, which is active now.
+        queue.abandon("owner/first")
+        assertNull(queue.next.value)
+        queue.enqueue("owner/third", "third")
+        assertNull(queue.take())
     }
 
     @Test
@@ -50,7 +68,7 @@ class InstallConfirmationQueueTest {
         assertEquals("latest", queue.take()?.value)
 
         queue.enqueue("owner/app", "duplicate")
-        queue.finishActive()
+        queue.remove("owner/app")
         assertNull(queue.next.value)
         assertNull(queue.take())
     }
@@ -66,16 +84,16 @@ class InstallConfirmationQueueTest {
     }
 
     @Test
-    fun closingOrFailingOnePromptAllowsTheNextPrompt() {
+    fun eachSettledSessionLetsTheNextPromptThrough() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/first", "first")
         queue.enqueue("owner/second", "second")
         queue.take()
 
-        queue.finishActive()
+        queue.remove("owner/first")
         assertEquals("owner/second", queue.next.value?.repo)
         queue.take()
-        queue.finishActive()
+        queue.remove("owner/second")
         assertNull(queue.next.value)
     }
 }

@@ -29,10 +29,14 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
+    /** Whose prompt is open, so that its closing can be told to the confirmations. */
+    private var prompted: String? = null
+
     private val installConfirmation =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             // PackageInstaller reports the installation outcome through InstallReceiver.
-            InstallManager.confirmations.finishActive()
+            prompted?.let { InstallManager.onPromptClosed(it) }
+            prompted = null
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,16 +55,18 @@ class MainActivity : ComponentActivity() {
                     val confirmation = InstallManager.confirmations.take() ?: return@collect
                     InstallService.cancelReady(this@MainActivity, confirmation.repo)
                     try {
+                        prompted = confirmation.repo
                         installConfirmation.launch(confirmation.value.prompt)
                     } catch (e: Exception) {
                         Log.w("MainActivity", "Could not show the install prompt", e)
+                        prompted = null
+                        // A failed session releases its confirmation.
                         InstallManager.onSessionResult(
                             applicationContext,
                             confirmation.repo,
                             PackageInstaller.STATUS_FAILURE,
                             e.message
                         )
-                        InstallManager.confirmations.finishActive()
                     }
                 }
             }
@@ -76,7 +82,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        InstallManager.onScreenStarted()
+        InstallManager.onScreenStarted(applicationContext)
     }
 
     override fun onResume() {
