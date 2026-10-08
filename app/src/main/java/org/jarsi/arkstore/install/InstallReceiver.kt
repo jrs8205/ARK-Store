@@ -41,7 +41,6 @@ class InstallReceiver : BroadcastReceiver() {
             return
         }
 
-        InstallService.cancelReady(appContext, repo)
         InstallManager.onSessionResult(
             appContext,
             repo,

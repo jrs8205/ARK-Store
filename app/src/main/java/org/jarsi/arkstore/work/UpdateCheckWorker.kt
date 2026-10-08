@@ -180,12 +180,16 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             // goes on. A download not done within its time is given up too, as nothing would
             // watch over it any longer; and so is one this run is stopped in the middle of.
             fun stillWanted() = allowed() && !UpdatePolicy.read(context).skips(app)
+            // Only the attempt this run began is its to give up: one the user began, which
+            // installAndAwait finds on its way and leaves alone, is not.
+            var attempt: Int? = null
+            fun giveUp() = attempt?.let { InstallManager.cancel(app.fullName, it) }
             val outcome = try {
-                watching(::stillWanted, CONDITIONS_INTERVAL_MS, { InstallManager.cancel(app.fullName) }) {
-                    InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))
+                watching(::stillWanted, CONDITIONS_INTERVAL_MS, { giveUp() }) {
+                    InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS)) { attempt = it }
                 }
             } catch (e: CancellationException) {
-                InstallManager.cancel(app.fullName)
+                giveUp()
                 throw e
             }
             when (outcome) {
@@ -195,7 +199,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                     InstallManager.dismissFailure(app.fullName)
                 }
                 Outcome.CANCELLED -> break
-                null -> InstallManager.cancel(app.fullName)
+                null -> giveUp()
             }
         }
         preferences.edit { putStringSet(PREF_FAILED, failed) }

@@ -83,12 +83,29 @@ internal fun othersSettled(states: Map<String, InstallState>, repo: String): Boo
     states.none { (name, state) -> name != repo && state.isOnItsWay() }
 
 /**
- * Whether a result the system [reported] for a session is for the attempt [committed] now:
- * one for an earlier attempt of the same app, arriving late, is not. A result that names no
- * session, or one with no attempt to compare with, is taken as it is.
+ * Whether a result the system [reported] for a session is for the attempt on its way now:
+ * the one [committed], or one still [downloading], which has no session yet, so that a named
+ * one is an earlier attempt's, arriving late. A result that names no session, or one that
+ * comes when nothing is on its way, as after the process was restarted, is taken as it is.
  */
-internal fun belongsToCurrent(committed: Int?, reported: Int?): Boolean =
-    committed == null || reported == null || committed == reported
+internal fun belongsToCurrent(committed: Int?, reported: Int?, downloading: Boolean): Boolean = when {
+    reported == null -> true
+    committed != null -> committed == reported
+    else -> !downloading
+}
+
+/** Whether [job] is the attempt numbered [attempt], or any attempt when none is named. */
+internal fun isAttempt(job: InstallJob?, attempt: Int?): Boolean =
+    job != null && (attempt == null || job.id == attempt)
+
+/** The step of a download that has [read] bytes of [total], or of [fallback] when the response did not say. */
+internal const val UNKNOWN_STEP = -1
+/** The step before any was reported; no download reports it, so the first is always a change. */
+internal const val NO_STEP_YET = -2
+internal fun downloadStep(read: Long, total: Long, fallback: Long): Int {
+    val size = if (total > 0) total else fallback
+    return if (size > 0) (read * 100 / size).toInt() else UNKNOWN_STEP
+}
 
 /**
  * The installs among [states] that are stuck: those installing whose session, by its id in
@@ -214,10 +231,12 @@ object InstallManager {
 
     /**
      * Stops the download of [repo], when it is one: an install that is already with the
-     * system goes on. The file fetched so far is dropped and nothing is shown for it.
+     * system goes on. The file fetched so far is dropped and nothing is shown for it. With
+     * [attempt], only that attempt is stopped, not a later one of the same app.
      */
-    fun cancel(repo: String) {
-        jobs[repo]?.cancel()
+    fun cancel(repo: String, attempt: Int? = null) {
+        val job = jobs[repo]
+        if (isAttempt(job, attempt)) job?.cancel()
     }
 
     /**
@@ -238,9 +257,16 @@ object InstallManager {
      * [install]s [app] from the background and waits for the outcome: installed, waiting for
      * the user to confirm (a notification asks them), or failed. Null when nothing was
      * settled within [timeoutMillis]; the install itself goes on, and its outcome is handled
-     * as any other's.
+     * as any other's. [onBegun] is told the number of the attempt this call began, before
+     * the wait: a caller that wants to give it up may then cancel that attempt and no other,
+     * as one already on its way, which this call does not begin, is somebody else's.
      */
-    suspend fun installAndAwait(context: Context, app: StoreApp, timeoutMillis: Long): Outcome? = coroutineScope {
+    suspend fun installAndAwait(
+        context: Context,
+        app: StoreApp,
+        timeoutMillis: Long,
+        onBegun: (attempt: Int) -> Unit = {}
+    ): Outcome? = coroutineScope {
         // One already on its way settles on its own: a waiting confirmation is the user's to
         // give, and anything else is not worth waiting for twice.
         if (isBusy(app.fullName)) {
@@ -252,7 +278,11 @@ object InstallManager {
         val outcome = async(start = CoroutineStart.UNDISPATCHED) {
             outcomes.first { it.first == app.fullName }.second
         }
-        install(context, app, foreground = false)
+        if (!install(context, app, foreground = false)) {
+            outcome.cancel()
+            return@coroutineScope null
+        }
+        jobs[app.fullName]?.let { onBegun(it.id) }
         withTimeoutOrNull(timeoutMillis) { outcome.await() } ?: run {
             outcome.cancel()
             null
@@ -277,17 +307,16 @@ object InstallManager {
         try {
             downloads.withPermit {
                 setState(app.fullName, InstallState.Downloading(0f))
-                var lastStep = -1
+                var lastStep = NO_STEP_YET
                 Http.download(app.apkUrl, target) { read, total ->
                     // The stream is not interrupted by a cancel; this is where one is noticed.
                     if (job?.isActive == false) throw CancellationException("cancelled")
-                    val size = if (total > 0) total else app.apkSize
-                    val step = if (size > 0) (read * 100 / size).toInt() else -1
+                    val step = downloadStep(read, total, app.apkSize)
                     if (step != lastStep) {
                         lastStep = step
                         setState(
                             app.fullName,
-                            InstallState.Downloading(if (step < 0) null else step / 100f)
+                            InstallState.Downloading(if (step == UNKNOWN_STEP) null else step / 100f)
                         )
                     }
                 }
@@ -441,10 +470,20 @@ object InstallManager {
         sessionId: Int,
         intent: Intent
     ) {
+        if (!isCurrent(repo, sessionId)) {
+            Log.i(TAG, "Confirmation of an earlier attempt of $repo ignored")
+            return
+        }
         setState(repo, InstallState.Installing)
         confirmations.enqueue(repo, Confirmation(sessionId, intent))
         if (screens.get() == 0) InstallService.showReady(context, repo, sessionId, intent)
         outcomes.tryEmit(repo to Outcome.CONFIRMATION_NEEDED)
+    }
+
+    /** Whether the session [sessionId] the system speaks of is the attempt of [repo] on its way now. */
+    private fun isCurrent(repo: String, sessionId: Int?): Boolean {
+        val current = committed[repo]
+        return belongsToCurrent(current?.sessionId, sessionId, downloading = current == null && jobs.containsKey(repo))
     }
 
     /**
@@ -458,10 +497,11 @@ object InstallManager {
         message: String?,
         sessionId: Int? = null
     ) {
-        if (!belongsToCurrent(committed[repo]?.sessionId, sessionId)) {
+        if (!isCurrent(repo, sessionId)) {
             Log.i(TAG, "Result of an earlier attempt of $repo ignored")
             return
         }
+        InstallService.cancelReady(context, repo)
         confirmations.remove(repo)
         val attempted = committed.remove(repo)
         when (status) {

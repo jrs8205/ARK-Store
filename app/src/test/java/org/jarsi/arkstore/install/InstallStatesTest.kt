@@ -1,8 +1,10 @@
 package org.jarsi.arkstore.install
 
+import kotlinx.coroutines.Job
 import org.jarsi.arkstore.data.testApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -60,11 +62,36 @@ class InstallStatesTest {
     @Test
     fun aResultIsTakenForTheAttemptItBelongsTo() {
         // The system names the session; one of an earlier attempt is not this attempt's.
-        assertTrue(belongsToCurrent(committed = 12, reported = 12))
-        assertFalse(belongsToCurrent(committed = 13, reported = 12))
-        // Without a name, or without an attempt to compare with, the result is taken.
-        assertTrue(belongsToCurrent(committed = 13, reported = null))
-        assertTrue(belongsToCurrent(committed = null, reported = 12))
+        assertTrue(belongsToCurrent(committed = 12, reported = 12, downloading = false))
+        assertFalse(belongsToCurrent(committed = 13, reported = 12, downloading = false))
+        // Without a name, the result is taken.
+        assertTrue(belongsToCurrent(committed = 13, reported = null, downloading = false))
+        // An attempt still downloading has no session yet: a named one is an earlier attempt's.
+        assertFalse(belongsToCurrent(committed = null, reported = 12, downloading = true))
+        // Nothing on its way, as after the process was restarted: the result is taken.
+        assertTrue(belongsToCurrent(committed = null, reported = 12, downloading = false))
+    }
+
+    @Test
+    fun aCancelNamingAnAttemptTouchesThatAttemptAlone() {
+        val first = InstallJob(Job())
+        val second = InstallJob(Job())
+        assertTrue(isAttempt(first, first.id))
+        assertFalse(isAttempt(first, second.id))
+        assertTrue(isAttempt(second, null))
+        assertFalse(isAttempt(null, first.id))
+        assertNotEquals(first.id, second.id)
+    }
+
+    @Test
+    fun theFirstProgressOfADownloadIsAlwaysPublished() {
+        // A size known from the response or the catalogue gives a step; neither gives none.
+        assertEquals(50, downloadStep(read = 50, total = 100, fallback = 0))
+        assertEquals(25, downloadStep(read = 50, total = -1, fallback = 200))
+        assertEquals(UNKNOWN_STEP, downloadStep(read = 50, total = -1, fallback = 0))
+        // The step before any is one that no download reports, so the first is a change.
+        assertNotEquals(UNKNOWN_STEP, NO_STEP_YET)
+        assertNotEquals(0, NO_STEP_YET)
     }
 
     @Test

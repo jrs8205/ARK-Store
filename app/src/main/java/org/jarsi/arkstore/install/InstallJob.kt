@@ -1,15 +1,18 @@
 package org.jarsi.arkstore.install
 
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 
 /**
- * One attempt to download and install an app, around its [job]. A cancel and the hand-over
- * to the system exclude each other: once handed over, the attempt is the system's and a
- * cancel is refused; once cancelled, the hand-over is refused, so that a download cancelled
- * at its last moment is not committed after all.
+ * One attempt to download and install an app, around its [job], numbered by [id] so that
+ * whoever began it can tell it from a later attempt of the same app. A cancel and the
+ * hand-over to the system exclude each other: once handed over, the attempt is the system's
+ * and a cancel is refused; once cancelled, the hand-over is refused, so that a download
+ * cancelled at its last moment is not committed after all.
  */
 internal class InstallJob(val job: Job) {
+    val id: Int = ids.incrementAndGet()
     private val lock = Any()
     private var handedOver = false
 
@@ -38,5 +41,9 @@ internal class InstallJob(val job: Job) {
         job.invokeOnCompletion { cause ->
             handler(cause is CancellationException && !synchronized(lock) { handedOver })
         }
+    }
+
+    private companion object {
+        val ids = AtomicInteger(0)
     }
 }
