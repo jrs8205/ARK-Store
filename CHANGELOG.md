@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.0-beta.3
+
+- The short description a developer writes for the store, `short_description.txt` in the
+  repository's `fastlane/metadata/android/<locale>/` folder, takes the place of the
+  repository's description on the card and in the details, in the device's language when
+  the developer provides it. The F-Droid and IzzyOnDroid catalogues contribute their
+  translated summaries the same way
+
 ## 1.8.0-beta.2
 
 - No source to begin with: the store's own apps come from the index like everyone else's, so
