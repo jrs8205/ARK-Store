@@ -3,6 +3,8 @@ package org.jarsi.arkstore.work
 import java.io.IOException
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.RateLimitedException
+import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.data.testApp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -69,6 +71,16 @@ class UpdateCheckWorkerTest {
         val settled = setOf(installed.fullName, waiting.fullName)
         assertEquals(listOf(failed, other), toAnnounce(updates, settled))
         assertEquals(updates, toAnnounce(updates, emptySet()))
+    }
+
+    @Test
+    fun anUpdateTheUserHasSinceSkippedOrHeldIsNeitherTriedNorAnnounced() {
+        val first = testApp("alice/app", packageName = "org.alice", versionCode = 2)
+        val second = testApp("bob/app", packageName = "org.bob", versionCode = 5)
+        val policy = UpdatePolicy.NONE.skip(first).hold("org.bob", true)
+        assertEquals(emptyList<StoreApp>(), wanted(listOf(first, second), policy))
+        assertEquals(listOf(first), wanted(listOf(first, second), UpdatePolicy.NONE.hold("org.bob", true)))
+        assertEquals(listOf(second), wanted(listOf(first, second), UpdatePolicy.NONE.skip(first)))
     }
 
     @Test

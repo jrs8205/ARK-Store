@@ -58,6 +58,16 @@ class InstallStatesTest {
     }
 
     @Test
+    fun aResultIsTakenForTheAttemptItBelongsTo() {
+        // The system names the session; one of an earlier attempt is not this attempt's.
+        assertTrue(belongsToCurrent(committed = 12, reported = 12))
+        assertFalse(belongsToCurrent(committed = 13, reported = 12))
+        // Without a name, or without an attempt to compare with, the result is taken.
+        assertTrue(belongsToCurrent(committed = 13, reported = null))
+        assertTrue(belongsToCurrent(committed = null, reported = 12))
+    }
+
+    @Test
     fun anInstallWhoseSessionIsGoneWithoutAWordIsStale() {
         val states = mapOf(
             "alice/app" to InstallState.Installing,

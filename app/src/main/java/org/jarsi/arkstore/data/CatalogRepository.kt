@@ -83,8 +83,10 @@ class CatalogRepository private constructor(context: Context) {
 
     private val packages = context.packageManager
 
+    private val resources = context.resources
+
     /** The languages the device reads, most preferred first; what metadata is read for. */
-    private val deviceLanguages: List<String> = context.resources.configuration.locales.let { locales ->
+    private fun deviceLanguages(): List<String> = resources.configuration.locales.let { locales ->
         List(locales.size()) { locales[it].language }
     }
 
@@ -847,7 +849,6 @@ class CatalogRepository private constructor(context: Context) {
         val page = JSONArray(Http.getApi("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
         val releases = page.filter { !it.optBoolean("draft") }
-        val metadata = repoMetadata(repo, previous)
 
         fun apkAssets(release: JSONObject): List<JSONObject> {
             val assets = release.optJSONArray("assets") ?: return emptyList()
@@ -911,9 +912,7 @@ class CatalogRepository private constructor(context: Context) {
                 // taken to be called what the one before it was.
                 label = knownApp?.label
                     ?: CatalogRules.inheritedLabel(previous, info?.packageName, prerelease),
-                allDownloads = downloads,
-                metadata = metadata.first,
-                metadataAt = metadata.second
+                allDownloads = downloads
             )
         }
 
@@ -932,39 +931,56 @@ class CatalogRepository private constructor(context: Context) {
         // A prerelease at the top of the list is usually newer than the full release, but the
         // list is ordered by commit date; CatalogRules.offered compares the versions.
         val newest = releases.firstOrNull()?.takeIf { it.optBoolean("prerelease") }
-        return stable?.let { build(it, prerelease = false) } to
-            newest?.let { build(it, prerelease = true) }
+        val app = stable?.let { build(it, prerelease = false) }
+        val beta = newest?.let { build(it, prerelease = true) }
+        // Read only for a repository with something to list: a tree costs a request.
+        if (app == null && beta == null) return null to null
+        val (metadata, metadataAt) = repoMetadata(repo, previous)
+        return app?.copy(metadata = metadata, metadataAt = metadataAt) to
+            beta?.copy(metadata = metadata, metadataAt = metadataAt)
     }
 
     /**
-     * What the repository [repo] publishes of its app (see [FastlaneMetadata]), with the push
-     * it was read for: as one of the [previous] apps knows it, when that was read for the
-     * current push, so that a lookup costs a request only once per push; else read now, from
-     * the list of the files on the default branch, which is one request to the API, and the
-     * short descriptions, which are not. Nothing, unmarked, when it cannot be read, so that
-     * the next lookup tries again: it is an extra, not worth failing the release for.
+     * What the repository [repo] publishes of its app (see [FastlaneMetadata]), with the mark
+     * of the read: as one of the [previous] apps knows it, when that was read for the current
+     * push and the device's languages ([FastlaneMetadata.covers]), so that a lookup costs a
+     * request only once per push; else read now, from the list of the files in the metadata
+     * folder of the default branch, which is one request to the API, and the short
+     * descriptions, which are not. What could be read, unmarked, when any of it could not be,
+     * so that the next lookup tries again: it is an extra, not worth failing the release for.
      */
     private fun repoMetadata(repo: JSONObject, previous: List<StoreApp>): Pair<Map<String, AppMetadata>, String?> {
-        val stamp = repo.optString("pushed_at").takeIf { it.isNotEmpty() } ?: return emptyMap<String, AppMetadata>() to null
-        previous.firstOrNull { it.metadataAt == stamp }?.let { return it.metadata to it.metadataAt }
+        val none = emptyMap<String, AppMetadata>() to null
+        val stamp = repo.optString("pushed_at").takeIf { it.isNotEmpty() } ?: return none
+        val languages = deviceLanguages()
+        previous.firstOrNull { FastlaneMetadata.covers(it, stamp, languages) }?.let { return it.metadata to it.metadataAt }
         val fullName = repo.getString("full_name")
-        val branch = repo.optString("default_branch").takeIf { it.isNotEmpty() } ?: return emptyMap<String, AppMetadata>() to null
+        val branch = repo.optString("default_branch").takeIf { it.isNotEmpty() } ?: return none
         val encodedBranch = Uri.encode(branch, "/")
         val marked = stamp.filter { it.isDigit() }
+        val mark = FastlaneMetadata.mark(stamp, languages)
         return try {
+            // The folder's own tree: small, whereas the whole repository's can run past what
+            // GitHub gives at once. A repository without the folder has no metadata, for good
+            // until its next push.
+            val folder = Uri.encode("$branch:${FastlaneMetadata.FOLDER.trimEnd('/')}", "/:")
             val tree = try {
-                JSONObject(Http.getApi("$API/repos/$fullName/git/trees/${Uri.encode(branch)}?recursive=1"))
+                JSONObject(Http.getApi("$API/repos/$fullName/git/trees/$folder?recursive=1"))
             } catch (e: HttpStatusException) {
-                if (e.code == 404) return emptyMap<String, AppMetadata>() to stamp else throw e
+                if (e.code == 404) return emptyMap<String, AppMetadata>() to mark else throw e
+            }
+            if (tree.optBoolean("truncated")) {
+                Log.w(TAG, "Metadata folder of $fullName is too large to list")
+                return none
             }
             val paths = tree.optJSONArray("tree")?.let { array ->
                 (0 until array.length()).mapNotNull { array.optJSONObject(it) }
                     .filter { it.optString("type") == "blob" }
-                    .map { it.optString("path") }
+                    .map { FastlaneMetadata.FOLDER + it.optString("path") }
             }.orEmpty()
-            FastlaneMetadata.read(
+            val read = FastlaneMetadata.read(
                 paths,
-                deviceLanguages,
+                languages,
                 address = { path -> "$RAW/$fullName/$encodedBranch/${Uri.encode(path, "/")}?at=$marked" }
             ) { address ->
                 try {
@@ -973,10 +989,11 @@ class CatalogRepository private constructor(context: Context) {
                     Log.w(TAG, "Could not read $address", e)
                     null
                 }
-            } to stamp
+            }
+            read.metadata to if (read.complete) mark else null
         } catch (e: IOException) {
             Log.w(TAG, "Could not read metadata of $fullName", e)
-            emptyMap<String, AppMetadata>() to null
+            none
         }
     }
 

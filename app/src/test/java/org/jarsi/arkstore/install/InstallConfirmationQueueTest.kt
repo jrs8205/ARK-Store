@@ -48,15 +48,35 @@ class InstallConfirmationQueueTest {
         queue.enqueue("owner/first", "first")
         queue.enqueue("owner/second", "second")
         queue.take()
-        queue.abandon("owner/second")
+        queue.abandon("owner/second") { it == "second" }
+        assertNull(queue.next.value)
+        // The prompt of an earlier attempt of the same app is not the one open now.
+        queue.abandon("owner/first") { it == "earlier" }
         assertNull(queue.next.value)
 
-        queue.abandon("owner/first")
+        queue.abandon("owner/first") { it == "first" }
         assertEquals(InstallConfirmation("owner/second", "second"), queue.take())
         // A late release of the first must not drop the second, which is active now.
-        queue.abandon("owner/first")
+        queue.abandon("owner/first") { it == "first" }
         assertNull(queue.next.value)
         queue.enqueue("owner/third", "third")
+        assertNull(queue.take())
+    }
+
+    @Test
+    fun anAbandonedPromptIsAskedAgainAfterTheOthers() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.enqueue("owner/second", "second")
+        queue.take()
+        queue.abandon("owner/first") { it == "first" }
+
+        assertEquals("owner/second", queue.take()?.repo)
+        queue.remove("owner/second")
+        assertEquals(InstallConfirmation("owner/first", "first"), queue.take())
+        // Its session settling in the meantime takes it out for good.
+        queue.abandon("owner/first") { it == "first" }
+        queue.remove("owner/first")
         assertNull(queue.take())
     }
 

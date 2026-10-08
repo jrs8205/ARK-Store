@@ -142,7 +142,7 @@ data class Backup(
             val skipped = json.optJSONObject("skipped")?.let { entry ->
                 entry.keys().asSequence()
                     .filter { it.isNotBlank() && it.length <= MAX_KEY_LENGTH }
-                    .mapNotNull { key -> (entry.opt(key) as? Number)?.toLong()?.let { key to it } }
+                    .mapNotNull { key -> (entry.opt(key) as? Number)?.takeIf { it is Int || it is Long }?.let { key to it.toLong() } }
                     .take(MAX_BOOKMARKS)
                     .toMap()
             }.orEmpty()

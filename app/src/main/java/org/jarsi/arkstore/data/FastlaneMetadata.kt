@@ -19,13 +19,57 @@ object FastlaneMetadata {
         "ko" to "KR", "ar" to "SA", "hi" to "IN"
     )
 
+    /** What a read gave, and whether every text it went for was read; see [read]. */
+    data class Read(val metadata: Map<String, AppMetadata>, val complete: Boolean)
+
     /**
      * The metadata, by language, that the files at [paths] hold for [languages] and English:
      * the short description read with [readText] from its [address] (null when it cannot be
-     * read, which costs the folder only its summary), the address of the long description
-     * and the addresses of the phone screenshots, all from one folder of the language.
+     * read, which costs the folder only its summary, and the read its completeness), the
+     * address of the long description and the addresses of the phone screenshots, all from
+     * one folder of the language.
      */
     fun read(
+        paths: List<String>,
+        languages: List<String>,
+        address: (String) -> String,
+        readText: (String) -> String?
+    ): Read {
+        var complete = true
+        val reading = { text: String ->
+            readText(text).also { if (it == null) complete = false }
+        }
+        return Read(readAll(paths, languages, address, reading), complete)
+    }
+
+    /**
+     * The mark of a read for the push [stamp] of a repository, for [languages]: a read done
+     * here covers the device's languages and English only, so the mark says which, and a
+     * device that reads other languages reads again.
+     */
+    fun mark(stamp: String, languages: List<String>): String =
+        stamp + MARK_SEPARATOR + read(languages).joinToString(",")
+
+    /**
+     * Whether [app]'s metadata, by its mark, covers the push [stamp] for [languages]: read
+     * for that push, either for every language, as the index reads and marks with the push
+     * alone, or for these languages here.
+     */
+    fun covers(app: StoreApp, stamp: String, languages: List<String>): Boolean {
+        val mark = app.metadataAt ?: return false
+        if (mark == stamp) return true
+        val at = mark.indexOf(MARK_SEPARATOR)
+        if (at < 0 || mark.substring(0, at) != stamp) return false
+        val done = mark.substring(at + 1).split(',').toSet()
+        return read(languages).all { it in done }
+    }
+
+    private const val MARK_SEPARATOR = '#'
+
+    /** The languages a read for [languages] goes for: those and English, once each. */
+    private fun read(languages: List<String>): List<String> = (languages + "en").distinct()
+
+    private fun readAll(
         paths: List<String>,
         languages: List<String>,
         address: (String) -> String,
@@ -47,7 +91,7 @@ object FastlaneMetadata {
         }
         val locales = summaries.keys + descriptions.keys + screenshots.keys
         val metadata = LinkedHashMap<String, AppMetadata>()
-        for (language in (languages + "en").distinct()) {
+        for (language in read(languages)) {
             for (locale in candidates(language, locales).take(MAX_FOLDERS_TRIED)) {
                 val summary = summaries[locale]?.let { readText(address(it)) }?.let(::summaryText)?.takeIf { it.isNotEmpty() }
                 val description = descriptions[locale]?.let(address)

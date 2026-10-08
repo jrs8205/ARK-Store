@@ -1,7 +1,9 @@
 package org.jarsi.arkstore.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class FastlaneMetadataTest {
@@ -30,7 +32,7 @@ class FastlaneMetadataTest {
         FastlaneMetadata.read(paths, languages, address = { "raw:$it" }) { address ->
             read += address
             texts[address]
-        }
+        }.metadata
 
     @Test
     fun readsTheFoldersOfTheDeviceLanguagesAndEnglishOnly() {
@@ -66,10 +68,28 @@ class FastlaneMetadataTest {
     }
 
     @Test
-    fun aSummaryThatCannotBeReadLeavesTheRestOfItsFolder() {
-        val metadata = metadata(paths, listOf("en"), emptyMap())
-        assertNull(metadata["en"]?.summary)
-        assertEquals("raw:${folder}en-US/full_description.txt", metadata["en"]?.description)
+    fun aSummaryThatCannotBeReadLeavesTheRestOfItsFolderButMarksTheReadIncomplete() {
+        val read = FastlaneMetadata.read(paths, listOf("en"), address = { "raw:$it" }) { null }
+        assertNull(read.metadata["en"]?.summary)
+        assertEquals("raw:${folder}en-US/full_description.txt", read.metadata["en"]?.description)
+        assertFalse(read.complete)
+        assertTrue(FastlaneMetadata.read(paths, listOf("en"), address = { "raw:$it" }) { texts[it] }.complete)
+        // Nothing to read is a complete read.
+        assertTrue(FastlaneMetadata.read(listOf("README.md"), listOf("en"), address = { "raw:$it" }) { null }.complete)
+    }
+
+    @Test
+    fun theMarkOfAReadNamesThePushAndTheLanguagesItWasFor() {
+        val stamp = "2026-10-08T10:00:00Z"
+        val mark = FastlaneMetadata.mark(stamp, listOf("fi", "en"))
+        assertTrue(FastlaneMetadata.covers(testApp().copy(metadataAt = mark), stamp, listOf("fi", "en")))
+        // English is read along with any language, so its order or presence makes no difference.
+        assertTrue(FastlaneMetadata.covers(testApp().copy(metadataAt = mark), stamp, listOf("fi")))
+        assertFalse(FastlaneMetadata.covers(testApp().copy(metadataAt = mark), stamp, listOf("de")))
+        assertFalse(FastlaneMetadata.covers(testApp().copy(metadataAt = mark), "2026-10-09T10:00:00Z", listOf("fi")))
+        // The index reads every language, and marks its read with the push alone.
+        assertTrue(FastlaneMetadata.covers(testApp().copy(metadataAt = stamp), stamp, listOf("de")))
+        assertFalse(FastlaneMetadata.covers(testApp(), stamp, listOf("en")))
     }
 
     @Test

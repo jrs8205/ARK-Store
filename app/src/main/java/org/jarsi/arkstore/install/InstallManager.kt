@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -82,6 +83,14 @@ internal fun othersSettled(states: Map<String, InstallState>, repo: String): Boo
     states.none { (name, state) -> name != repo && state.isOnItsWay() }
 
 /**
+ * Whether a result the system [reported] for a session is for the attempt [committed] now:
+ * one for an earlier attempt of the same app, arriving late, is not. A result that names no
+ * session, or one with no attempt to compare with, is taken as it is.
+ */
+internal fun belongsToCurrent(committed: Int?, reported: Int?): Boolean =
+    committed == null || reported == null || committed == reported
+
+/**
  * The installs among [states] that are stuck: those installing whose session, by its id in
  * [sessions], the system no longer has among those [alive], and so will never report on.
  * One not yet in [sessions] is still being committed and is left alone.
@@ -102,8 +111,8 @@ internal fun dismissed(states: Map<String, InstallState>, repo: String): Map<Str
 object InstallManager {
     private const val TAG = "InstallManager"
     private const val MAX_DOWNLOADS = 3
-    private const val SELF_WAIT_MS = 10 * 60 * 1000L
     private const val PROMPT_GRACE_MS = 3 * 60 * 1000L
+    private const val STALE_GRACE_MS = 3 * 1000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -124,8 +133,11 @@ object InstallManager {
 
     private val committed = ConcurrentHashMap<String, Committed>()
 
-    /** The job of each install on its way, for [cancel]. */
-    private val jobs = ConcurrentHashMap<String, Job>()
+    /** The attempt on its way for each repository, for [cancel]. */
+    private val jobs = ConcurrentHashMap<String, InstallJob>()
+
+    /** Numbers the attempts, so that each downloads to a file of its own. */
+    private val attempts = AtomicInteger(0)
 
     /** Only so many files are fetched at once; the rest of a long list wait their turn. */
     private val downloads = Semaphore(MAX_DOWNLOADS)
@@ -155,29 +167,43 @@ object InstallManager {
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 
-        val job = scope.launch(start = CoroutineStart.LAZY) {
-            val target = File(File(appContext.cacheDir, "apk"), CatalogRules.downloadName(app.fullName))
-            try {
-                downloadAndInstall(appContext, app, target)
-            } catch (e: CancellationException) {
+        // A file of this attempt's own: the cleanup of an earlier attempt of the same app,
+        // cancelled a moment ago, must not take the file of this one.
+        val target = File(
+            File(appContext.cacheDir, "apk"),
+            "${attempts.incrementAndGet()}-${CatalogRules.downloadName(app.fullName)}"
+        )
+        lateinit var install: InstallJob
+        install = InstallJob(
+            scope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    downloadAndInstall(appContext, app, target, install)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // Nothing here may take the process down or leave the app stuck as "installing".
+                    Log.w(TAG, "Install failed for ${app.fullName}", e)
+                    setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+                }
+            }
+        )
+        // The cleanup is tied to the job rather than written in it, so that it is done even
+        // when a cancel comes before the job's first turn and the body never runs. The
+        // reservation is given up last: only then may a new attempt begin.
+        install.onSettled { cancelled ->
+            // Once committed, the session holds its own copy of the file.
+            target.delete()
+            jobs.remove(app.fullName, install)
+            _activeJobs.update { it - 1 }
+            if (cancelled) {
                 // Only a download is cancelled, and only on purpose: nothing to show for it.
                 setState(app.fullName, null)
                 outcomes.tryEmit(app.fullName to Outcome.CANCELLED)
-                throw e
-            } catch (e: Exception) {
-                // Nothing here may take the process down or leave the app stuck as "installing".
-                Log.w(TAG, "Install failed for ${app.fullName}", e)
-                setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
-            } finally {
-                // Once committed, the session holds its own copy of the file.
-                target.delete()
-                jobs.remove(app.fullName)
-                _activeJobs.update { it - 1 }
             }
         }
         // Stored before it runs, so that a cancel cannot miss it.
-        jobs[app.fullName] = job
-        job.start()
+        jobs[app.fullName] = install
+        install.start()
         return true
     }
 
@@ -191,9 +217,7 @@ object InstallManager {
      * system goes on. The file fetched so far is dropped and nothing is shown for it.
      */
     fun cancel(repo: String) {
-        val state = _states.value[repo]
-        if (state !is InstallState.Queued && state !is InstallState.Downloading) return
-        jobs[repo]?.cancel(CancellationException("cancelled"))
+        jobs[repo]?.cancel()
     }
 
     /**
@@ -248,7 +272,7 @@ object InstallManager {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File) {
+    private suspend fun downloadAndInstall(appContext: Context, app: StoreApp, target: File, install: InstallJob) {
         val job = coroutineContext[Job]
         try {
             downloads.withPermit {
@@ -273,6 +297,8 @@ object InstallManager {
             setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
             return
         }
+        // A cancel that came after the last of the file was read is noticed here.
+        job?.ensureActive()
 
         // A catalogue says what the file must be. Its files come from mirrors too, so one that
         // is anything else is not installed.
@@ -321,12 +347,16 @@ object InstallManager {
         }
         InstalledApps.forgetConflict(appContext, app, archive.packageName)
 
-        // Installing the store itself ends this process, so it waits for every other
-        // install to be done with; but not forever for one the user never confirms.
+        // Installing the store itself ends this process, so it waits for every other install
+        // to be done with, however long that takes: the wait shows as queued, and can be
+        // cancelled like any download.
         if (archive.packageName == appContext.packageName) {
             setState(app.fullName, InstallState.Queued)
-            withTimeoutOrNull(SELF_WAIT_MS) { _states.first { othersSettled(it, app.fullName) } }
+            _states.first { othersSettled(it, app.fullName) }
         }
+        // From here on the attempt is the system's: a cancel is refused, and one that came
+        // first refuses this.
+        install.handOver()
         setState(app.fullName, InstallState.Installing)
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         try {
@@ -345,28 +375,44 @@ object InstallManager {
      */
     internal fun onScreenStarted(context: Context) {
         screens.incrementAndGet()
-        val alive = try {
-            context.packageManager.packageInstaller.mySessions.map { it.sessionId }.toSet()
+        scope.launch { failStale(context) }
+    }
+
+    /**
+     * The sessions known here are taken down before the system is asked, so that one made
+     * in between is not taken for gone; and one found gone is looked at again after a
+     * moment, as a session that has just finished is gone too, its result on its way.
+     */
+    private suspend fun failStale(context: Context) {
+        val installer = context.packageManager.packageInstaller
+        fun alive(): Set<Int>? = try {
+            installer.mySessions.map { it.sessionId }.toSet()
         } catch (e: Exception) {
             Log.w(TAG, "Could not list install sessions", e)
-            return
+            null
         }
         val sessions = committed.mapValues { it.value.sessionId }
-        for (repo in stale(_states.value, sessions, alive)) {
-            Log.w(TAG, "Install session of $repo is gone without a result")
-            onSessionResult(context, repo, PackageInstaller.STATUS_FAILURE, null)
+        val candidates = stale(_states.value, sessions, alive() ?: return)
+        if (candidates.isEmpty()) return
+        delay(STALE_GRACE_MS)
+        val again = alive() ?: return
+        for (repo in candidates) {
+            val sessionId = sessions.getValue(repo)
+            if (committed[repo]?.sessionId != sessionId || sessionId in again) continue
+            Log.w(TAG, "Install session $sessionId of $repo is gone without a result")
+            onSessionResult(context, repo, PackageInstaller.STATUS_FAILURE, null, sessionId)
         }
     }
 
     /**
-     * The prompt of [repo]'s install has closed. Its outcome arrives from the system, in
-     * time; a prompt left without an answer settles nothing, so after a while the next
-     * confirmation is let through regardless.
+     * The prompt of [repo]'s install, of the session [sessionId], has closed. Its outcome
+     * arrives from the system, in time; a prompt left without an answer settles nothing, so
+     * after a while the confirmation is put behind the others, to be asked again later.
      */
-    internal fun onPromptClosed(repo: String) {
+    internal fun onPromptClosed(repo: String, sessionId: Int) {
         scope.launch {
             delay(PROMPT_GRACE_MS)
-            confirmations.abandon(repo)
+            confirmations.abandon(repo) { it.sessionId == sessionId }
         }
     }
 
@@ -401,8 +447,21 @@ object InstallManager {
         outcomes.tryEmit(repo to Outcome.CONFIRMATION_NEEDED)
     }
 
-    /** Called by [InstallReceiver] once the system has decided on a session. */
-    internal fun onSessionResult(context: Context, repo: String, status: Int, message: String?) {
+    /**
+     * Called by [InstallReceiver] once the system has decided on a session, [sessionId] when
+     * it says which: the result of an earlier attempt of the same app is left alone.
+     */
+    internal fun onSessionResult(
+        context: Context,
+        repo: String,
+        status: Int,
+        message: String?,
+        sessionId: Int? = null
+    ) {
+        if (!belongsToCurrent(committed[repo]?.sessionId, sessionId)) {
+            Log.i(TAG, "Result of an earlier attempt of $repo ignored")
+            return
+        }
         confirmations.remove(repo)
         val attempted = committed.remove(repo)
         when (status) {

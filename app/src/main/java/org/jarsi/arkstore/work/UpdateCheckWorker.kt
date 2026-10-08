@@ -21,6 +21,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -31,6 +32,7 @@ import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
 import org.jarsi.arkstore.install.installOrder
@@ -72,6 +74,10 @@ internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<Sto
 /** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
     updates.filter { announcement(it) !in failed }
+
+/** The [updates] the user still wants, as the [policy] stands now: not skipped, not held. */
+internal fun wanted(updates: List<StoreApp>, policy: UpdatePolicy): List<StoreApp> =
+    updates.filter { !policy.skips(it) }
 
 /** Those of [failed] that are still among the [updates] offered; the rest are forgotten. */
 internal fun stillFailed(failed: Set<String>, updates: List<StoreApp>): Set<String> =
@@ -124,7 +130,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         val found = InstalledApps.updates(applicationContext, repository.catalog.value.apps)
         val preferences = applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val settled = installUnasked(found, started, preferences)
-        val updates = toAnnounce(found.map { it.first }, settled)
+        // The user may have skipped or held one back while the installs ran.
+        val updates = wanted(toAnnounce(found.map { it.first }, settled), UpdatePolicy.read(applicationContext))
         val waiting = updates.map(::announcement).toSet()
         val announced = preferences.getStringSet(PREF_ANNOUNCED, null).orEmpty()
         // Each update is announced once. A check that fails is retried, and every later check
@@ -166,10 +173,20 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             if (left <= 0) break
             // The user may have turned the switch off, or left the Wi-Fi, during the last one.
             if (!allowed()) break
-            // And they may do so during this one: a download that goes on regardless is what
-            // the settings were there to prevent. An install already with the system goes on.
-            val outcome = watching(::allowed, CONDITIONS_INTERVAL_MS, { InstallManager.cancel(app.fullName) }) {
-                InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))
+            // Or skipped this very update, or held its app back, since the list was made.
+            if (UpdatePolicy.read(context).skips(app)) continue
+            // And they may do any of these during this one: a download that goes on regardless
+            // is what the settings were there to prevent. An install already with the system
+            // goes on. A download not done within its time is given up too, as nothing would
+            // watch over it any longer; and so is one this run is stopped in the middle of.
+            fun stillWanted() = allowed() && !UpdatePolicy.read(context).skips(app)
+            val outcome = try {
+                watching(::stillWanted, CONDITIONS_INTERVAL_MS, { InstallManager.cancel(app.fullName) }) {
+                    InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS))
+                }
+            } catch (e: CancellationException) {
+                InstallManager.cancel(app.fullName)
+                throw e
             }
             when (outcome) {
                 Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
@@ -178,7 +195,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                     InstallManager.dismissFailure(app.fullName)
                 }
                 Outcome.CANCELLED -> break
-                null -> {}
+                null -> InstallManager.cancel(app.fullName)
             }
         }
         preferences.edit { putStringSet(PREF_FAILED, failed) }

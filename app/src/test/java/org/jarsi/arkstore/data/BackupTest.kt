@@ -27,6 +27,13 @@ class BackupTest {
     )
 
     @Test
+    fun aSkippedVersionThatIsNoWholeNumberIsDropped() {
+        val json = backup.toJson()
+        json.getJSONObject("updates").getJSONObject("skipped").put("org.broken", 12.5).put("org.text", "12")
+        assertEquals(backup.updates, Backup.fromJson(json.toString())?.updates)
+    }
+
+    @Test
     fun aFileWithoutUpdatePoliciesLeavesThemAlone() {
         val json = backup.toJson()
         json.remove("updates")

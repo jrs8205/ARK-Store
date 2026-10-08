@@ -802,9 +802,8 @@ private fun AppCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 when (install) {
-                    InstallState.Queued -> Progress(0f, onCancel)
-                    is InstallState.Downloading -> Progress(install.progress, onCancel)
-                    InstallState.Installing -> Progress(null)
+                    InstallState.Queued, is InstallState.Downloading, InstallState.Installing ->
+                        Progress(ringOf(install), onCancel)
                     else -> when (row.status) {
                         AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_update))
@@ -968,21 +967,16 @@ private fun Stat(icon: Int, value: String, description: String) {
 }
 
 /**
- * The ring of an install on its way: spinning while the system installs, filling while the
- * file downloads, and empty while the download waits its turn. A download, waiting or not,
- * is cancelled by tapping it, with [onCancel].
+ * The [ring] of an install on its way: spinning while the system installs, filling while
+ * the file downloads, and empty while the download waits its turn. A download, waiting or
+ * not, is cancelled by tapping it, with [onCancel].
  */
 @Composable
-private fun Progress(progress: Float?, onCancel: (() -> Unit)? = null) {
-    val description = stringResource(
-        when {
-            progress == null -> R.string.state_installing
-            progress == 0f && onCancel != null -> R.string.state_queued
-            else -> R.string.state_downloading
-        }
-    )
+private fun Progress(ring: InstallRing, onCancel: () -> Unit) {
+    val description = stringResource(ring.label)
+    val progress = ring.progress
     val haptics = LocalHapticFeedback.current
-    val modifier = if (onCancel != null) {
+    val modifier = if (ring.cancellable) {
         val cancel = stringResource(R.string.action_cancel_download)
         Modifier
             .size(48.dp)
@@ -1005,14 +999,14 @@ private fun Progress(progress: Float?, onCancel: (() -> Unit)? = null) {
             CircularProgressIndicator(modifier = Modifier.size(32.dp))
         } else {
             CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(32.dp))
-            if (onCancel != null) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_close),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
+        }
+        if (ring.cancellable) {
+            Icon(
+                painter = painterResource(R.drawable.ic_close),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
