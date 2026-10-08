@@ -262,27 +262,22 @@ class UpdateTest(unittest.TestCase):
                  "index": {"name": "/index-v2.json", "sha256": checksum or hashlib.sha256(data).hexdigest()}}
         return {"/entry.json": json.dumps(entry).encode(), "/index-v2.json": data}
 
-    PREVIOUS = {"version": 1, "source": "fdroid", "timestamp": 5,
+    PREVIOUS = {"version": 1, "builder": build_repos.BUILDER, "source": "fdroid", "timestamp": 5,
                 "apps": [{"fullName": "fdroid:old", "icon": None, "metadata": {}}]}
+
+    def test_list_written_by_an_older_builder_is_rebuilt_once(self):
+        older = dict(self.PREVIOUS, builder=build_repos.BUILDER - 1)
+        for previous in (older, {key: value for key, value in self.PREVIOUS.items() if key != "builder"}):
+            written, _ = self.run_update(self.responses(timestamp=5), previous)
+            self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
+            self.assertEqual(written["builder"], build_repos.BUILDER)
+        _, asked = self.run_update(self.responses(timestamp=5), written)
+        self.assertEqual(len(asked), 1)
 
     def test_changed_catalogue_is_rebuilt(self):
         written, _ = self.run_update(self.responses(timestamp=6), self.PREVIOUS)
         self.assertEqual(written["timestamp"], 6)
         self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
-
-    def test_list_written_before_icons_is_rebuilt_once(self):
-        before_icons = dict(self.PREVIOUS, apps=[{"fullName": "fdroid:old"}])
-        written, _ = self.run_update(self.responses(timestamp=5), before_icons)
-        self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
-        self.assertIn("icon", written["apps"][0])
-
-    def test_list_written_before_screenshots_is_rebuilt_once(self):
-        before_screenshots = dict(self.PREVIOUS, apps=[{"fullName": "fdroid:old", "icon": None}])
-        written, _ = self.run_update(self.responses(timestamp=5), before_screenshots)
-        self.assertEqual([app["fullName"] for app in written["apps"]], ["fdroid:org.example"])
-        self.assertIn("metadata", written["apps"][0])
-        _, asked = self.run_update(self.responses(timestamp=5), written)
-        self.assertEqual(len(asked), 1)
 
     def test_unchanged_catalogue_is_not_downloaded_again(self):
         written, asked = self.run_update(self.responses(timestamp=5), self.PREVIOUS)

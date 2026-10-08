@@ -30,6 +30,9 @@ USER_AGENT = "ARK-Store-index"
 MAX_ENTRY = 1024 * 1024
 MAX_INDEX = 256 * 1024 * 1024
 MAX_NOTES = 500
+# Raised when the lists are built differently, so that a list an earlier run wrote is built
+# again whether the catalogue has changed or not: 2 carries the translated summaries.
+BUILDER = 2
 # Apps built for one CPU architecture at a time have a version for each; this many of an
 # app's newest versions are looked at to find them all.
 MAX_VERSIONS = 12
@@ -305,20 +308,19 @@ def build_catalogue(source, index, timestamp, now):
         if app:
             apps.append(app)
     apps.sort(key=lambda app: app["fullName"].lower())
-    return {"version": 1, "source": source, "generatedAt": int(now * 1000), "timestamp": timestamp, "apps": apps}
+    return {"version": 1, "builder": BUILDER, "source": source, "generatedAt": int(now * 1000),
+            "timestamp": timestamp, "apps": apps}
 
 
 def read_timestamp(path):
     """The catalogue timestamp a file written by an earlier run was built from, or None when
-    the file is not one to carry on from: among other things, one written before the lists
-    told the apps' icons or screenshots, which is built again whether the catalogue has
-    changed or not."""
+    the file is not one to carry on from: one written by an older builder, which is built
+    again whether the catalogue has changed or not."""
     try:
         with open(path, encoding="utf-8") as file:
             loaded = json.load(file)
         apps = loaded.get("apps")
-        if loaded.get("version") != 1 or not apps \
-                or not all("icon" in app and "metadata" in app for app in apps):
+        if loaded.get("version") != 1 or loaded.get("builder") != BUILDER or not apps:
             return None
         return loaded["timestamp"]
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
