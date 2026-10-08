@@ -106,7 +106,7 @@ class BuildAppTest(unittest.TestCase):
         for source, address in (("fdroid", "https://f-droid.org/repo"),
                                 ("izzy", "https://apt.izzysoft.de/fdroid/repo")):
             with self.subTest(source=source):
-                app = build(package([version(1)], screenshots=screenshots), source)
+                app = build(package([version(1)], summary={"en-US": "An example app"}, screenshots=screenshots), source)
                 shots = address + "/org.example/%s/phoneScreenshots/"
                 # The file's digest marks the address, so that a replaced file is fetched anew.
                 stamp = "?v=" + SHA[:12]
@@ -122,12 +122,41 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual([address.rsplit("/", 1)[1] for address in app["metadata"]["en"]["screenshots"]],
                          ["%d.png" % number for number in range(1, build_index.MAX_SCREENSHOTS + 1)])
 
-    def test_app_without_screenshots_has_empty_metadata(self):
-        self.assertEqual(build(package([version(1)]))["metadata"], {})
+    def test_app_without_screenshots_or_translated_summary_has_empty_metadata(self):
+        english = {"en-US": "An example app"}
+        self.assertEqual(build(package([version(1)], summary=english))["metadata"], {})
         for odd in ("odd", {"phone": []}, {"phone": {"en-US": "odd"}}, {"phone": {"en-US": [{"name": "1.png"}]}},
                     {"phone": {"en-US": ["odd", {"name": 5}]}}):
             with self.subTest(screenshots=odd):
-                self.assertEqual(build(package([version(1)], screenshots=odd))["metadata"], {})
+                self.assertEqual(build(package([version(1)], summary=english, screenshots=odd))["metadata"], {})
+
+    def test_summary_is_given_in_each_language_it_differs_from_the_description_in(self):
+        app = build(package([version(1)]))
+        self.assertEqual(app["description"], "An example app")
+        # The English summary is the description already, so it is not repeated.
+        self.assertEqual(app["metadata"], {"fi": {"summary": "Esimerkki"}})
+
+    def test_summary_is_one_line_within_the_limit_and_comes_from_the_usual_region_first(self):
+        summary = {"fi-FI": " Suomen\n\n alue ", "fi": "Kieli", "en-US": "English", "en-GB": "British"}
+        app = build(package([version(1)], summary=summary))
+        self.assertEqual(app["metadata"], {"fi": {"summary": "Suomen alue"}})
+        long = {"en-US": "x", "fi": "y" * 300}
+        self.assertEqual(build(package([version(1)], summary=long))["metadata"]["fi"]["summary"],
+                         "y" * build_repos.MAX_SUMMARY)
+
+    def test_summary_and_screenshots_are_chosen_from_their_own_locales(self):
+        shots = [{"name": "/org.example/fi-FI/phoneScreenshots/1.png", "sha256": SHA, "size": 1}]
+        app = build(package([version(1)], summary={"fi": "Esimerkki", "en-US": "English"},
+                            screenshots={"phone": {"fi-FI": shots}}))
+        self.assertEqual(app["metadata"], {"fi": {
+            "summary": "Esimerkki",
+            "screenshots": ["https://f-droid.org/repo/org.example/fi-FI/phoneScreenshots/1.png?v=" + SHA[:12]],
+        }})
+
+    def test_odd_summaries_are_left_out(self):
+        for odd in ({"en-US": "English", "fi": 5}, {"en-US": "English", "fi": ""}, {"en-US": "English", "fi": None}):
+            with self.subTest(summary=odd):
+                self.assertEqual(build(package([version(1)], summary=odd))["metadata"], {})
 
     def test_narrow_category_is_preferred_to_a_broad_one(self):
         self.assertEqual(build(package([version(1)]))["topics"], ["arkstore-communication"])

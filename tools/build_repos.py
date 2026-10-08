@@ -24,12 +24,11 @@ import time
 import urllib.parse
 import urllib.request
 
-from build_index import LANGUAGES, chosen_screenshots, guess_category, preferred_locale, write_json
+from build_index import LANGUAGES, MAX_SUMMARY, chosen_screenshots, guess_category, preferred_locale, write_json
 
 USER_AGENT = "ARK-Store-index"
 MAX_ENTRY = 1024 * 1024
 MAX_INDEX = 256 * 1024 * 1024
-MAX_SUMMARY = 200
 MAX_NOTES = 500
 # Apps built for one CPU architecture at a time have a version for each; this many of an
 # app's newest versions are looked at to find them all.
@@ -189,7 +188,7 @@ def build_app(source, address, page, package, entry, anti_feature_names):
         "releaseUrl": page % package,
         "publishedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(newest.get("added", 0) / 1000)),
         "icon": icon_address(address, metadata.get("icon")),
-        "metadata": screenshot_metadata(address, metadata.get("screenshots")),
+        "metadata": catalogue_metadata(address, metadata.get("summary"), summary, metadata.get("screenshots")),
         # What the newest version is warned about, for versions of the store that do not look
         # at the file they picked.
         "antiFeatures": apks[0]["antiFeatures"],
@@ -205,17 +204,21 @@ def icon_address(address, icon):
     return address + name if isinstance(name, str) and name.startswith("/") else None
 
 
-def screenshot_metadata(address, screenshots):
+def catalogue_metadata(address, summaries, description, screenshots):
     """The "metadata" of a package's entry, as build_index writes it for a repository on
-    GitHub, but with the phone screenshots alone: the catalogue keeps no long description in
-    a file of its own. It gives the screenshots by kind and locale, each file as {"name",
-    "sha256", "size"}."""
+    GitHub, but without a long description, which the catalogue keeps in no file of its own:
+    the summary in each language it is given in and differs from description in, which is
+    the English one, and the phone screenshots. summaries gives the summary by locale, and
+    screenshots the files by kind and locale, each as {"name", "sha256", "size"}."""
+    said = {}
+    for locale, text in summaries.items() if isinstance(summaries, dict) else []:
+        summary = tidy(text, MAX_SUMMARY) if isinstance(text, str) else ""
+        if summary:
+            said[locale] = summary
     phone = screenshots.get("phone") if isinstance(screenshots, dict) else None
-    if not isinstance(phone, dict):
-        return {}
     found = {}
     digests = {}
-    for locale, files in phone.items():
+    for locale, files in phone.items() if isinstance(phone, dict) else []:
         names = []
         for file in files if isinstance(files, list) else []:
             name = file.get("name") if isinstance(file, dict) else None
@@ -228,12 +231,19 @@ def screenshot_metadata(address, screenshots):
             found[locale] = chosen
     metadata = {}
     for language in LANGUAGES:
-        locale = preferred_locale(language, found)
-        if locale is not None:
+        entry = {}
+        said_in = preferred_locale(language, said)
+        if said_in is not None and said[said_in] != description:
+            entry["summary"] = said[said_in]
+        shown_in = preferred_locale(language, found)
+        if shown_in is not None:
             # The digest marks the address, so that a replaced file is fetched anew.
-            shown = [address + urllib.parse.quote(name, safe="/") + ("?v=" + digests[name][:12] if name in digests else "")
-                     for name in found[locale]]
-            metadata[language] = {"screenshots": shown}
+            entry["screenshots"] = [
+                address + urllib.parse.quote(name, safe="/") + ("?v=" + digests[name][:12] if name in digests else "")
+                for name in found[shown_in]
+            ]
+        if entry:
+            metadata[language] = entry
     return metadata
 
 
