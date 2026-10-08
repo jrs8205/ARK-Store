@@ -10,4 +10,4 @@ ARK-Store installs and updates apps straight from their GitHub releases. Develop
 • Background update check with a notification
 • Warns when an installed app is signed with a different key
 • No accounts, no sign-in, no third-party services
-• English and Finnish
+• Available in 17 languages

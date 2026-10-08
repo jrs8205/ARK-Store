@@ -10,4 +10,4 @@ ARK-Store asentaa ja päivittää sovellukset suoraan niiden GitHub-julkaisuista
 • Taustalla tehtävä päivitystarkistus ja ilmoitus
 • Varoittaa, jos asennettu sovellus on allekirjoitettu eri avaimella
 • Ei tilejä, ei kirjautumista, ei kolmannen osapuolen palveluita
-• Englanti ja suomi
+• Saatavilla 17 kielellä

@@ -78,8 +78,10 @@ following a developer who has not added it.
 - **Screenshots and translated descriptions**: the `fastlane/metadata/android/<locale>/`
   folder that F-Droid reads is used too. `short_description.txt` takes the place of the
   repository's description on the card and in the details, `full_description.txt` and
-  `images/phoneScreenshots/` are shown in the details. English and Finnish are read; nothing
-  more is needed.
+  `images/phoneScreenshots/` are shown in the details, in the language of the device when
+  the folder has it. English, Finnish, German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi are read;
+  nothing more is needed.
 - **Several APKs**: keep the architecture (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` or
   `universal`) in the file name and each device gets the right one.
 
@@ -126,7 +128,8 @@ following a developer who has not added it.
   device.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),
   haptics that follow the system setting.
-- English and Finnish.
+- In 17 languages: English, Finnish, German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi.
 
 ## Automatically found apps
 

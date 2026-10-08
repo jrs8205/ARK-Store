@@ -73,7 +73,9 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "fi")
+        localeFilters += listOf(
+            "en", "fi", "de", "es", "fr", "it", "pt", "ru", "uk", "pl", "nl", "tr", "zh-rCN", "ja", "ko", "ar", "hi"
+        )
     }
 
     signingConfigs {

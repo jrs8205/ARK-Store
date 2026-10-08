@@ -1,0 +1,1 @@
+直接从 GitHub 发行版安装和更新 Android 应用
