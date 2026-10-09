@@ -192,6 +192,7 @@
     <string name="install_ready_text">Zum Fortfahren tippen</string>
     <string name="newer_version_note">Installiert ist eine neuere Version als die hier angebotene.</string>
     <string name="detail_installed_from">Installiert über</string>
+    <string name="detail_updated_at">Zuletzt aktualisiert</string>
     <string name="installer_other">eine andere App oder manuell</string>
     <string name="same_signer_detail">Die installierte App ist mit demselben Schlüssel signiert wie die hier angebotene Version, daher kann ARK-Store sie aktualisieren.</string>
     <string name="unknown_signer_detail">Ob die installierte App mit demselben Schlüssel signiert ist wie die hier angebotene Version, ist noch nicht bekannt. Das wird geprüft, sobald die Datei heruntergeladen ist.</string>

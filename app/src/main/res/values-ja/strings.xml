@@ -184,6 +184,7 @@
     <string name="install_ready_text">タップして続行</string>
     <string name="newer_version_note">ここで提供されているものより新しいバージョンがインストールされています。</string>
     <string name="detail_installed_from">インストール元</string>
+    <string name="detail_updated_at">最終更新</string>
     <string name="installer_other">別のアプリまたは手動</string>
     <string name="same_signer_detail">インストール済みのアプリは、ここで提供されているバージョンと同じ署名鍵で署名されているため、ARK-Store で更新できます。</string>
     <string name="unknown_signer_detail">インストール済みのアプリが、ここで提供されているバージョンと同じ署名鍵で署名されているかどうかは、まだわかりません。ファイルのダウンロード後に確認されます。</string>

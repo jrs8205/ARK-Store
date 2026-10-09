@@ -41,7 +41,13 @@ data class InstalledVersion(
      * another key and going by another name, like Google's own app whose package name an
      * app offered here has taken for itself. The app offered here is not installed at all.
      */
-    val otherApp: Boolean = false
+    val otherApp: Boolean = false,
+    /**
+     * When the installed app was last installed or updated, as the system tells it, in
+     * milliseconds since the epoch; 0 when not known. With [installer], it tells whether
+     * and when the store updated the app, asked or not.
+     */
+    val updatedAt: Long = 0
 )
 
 enum class AppStatus {
@@ -123,7 +129,8 @@ object InstalledApps {
                 otherSigner = hasConflict(context, app, packageName),
                 beta = betas(context).getLong(packageName, -1) == versionCode,
                 installer = installerOf(context, packageName, info.lastUpdateTime),
-                label = names?.shown
+                label = names?.shown,
+                updatedAt = info.lastUpdateTime
             ),
             signers,
             names?.own

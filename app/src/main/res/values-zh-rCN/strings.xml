@@ -184,6 +184,7 @@
     <string name="install_ready_text">点按即可继续</string>
     <string name="newer_version_note">已安装的版本比此处提供的版本还要新。</string>
     <string name="detail_installed_from">安装来源</string>
+    <string name="detail_updated_at">最后更新</string>
     <string name="installer_other">其他应用或手动安装</string>
     <string name="same_signer_detail">已安装的应用与此处提供的版本使用相同的签名密钥，因此 ARK-Store 可以更新它。</string>
     <string name="unknown_signer_detail">目前还不知道已安装的应用是否与此处提供的版本使用相同的签名密钥。下载文件后会进行检查。</string>

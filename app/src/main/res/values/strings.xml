@@ -198,6 +198,7 @@
     <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>
     <string name="detail_installed_from">Installed from</string>
+    <string name="detail_updated_at">Last updated</string>
     <string name="installer_play" translatable="false">Google Play</string>
     <string name="installer_fdroid" translatable="false">F-Droid</string>
     <string name="installer_aurora" translatable="false">Aurora Store</string>

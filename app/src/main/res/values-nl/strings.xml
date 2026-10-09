@@ -192,6 +192,7 @@
     <string name="install_ready_text">Tik om door te gaan</string>
     <string name="newer_version_note">Er is een nieuwere versie geïnstalleerd dan de versie die hier wordt aangeboden.</string>
     <string name="detail_installed_from">Geïnstalleerd via</string>
+    <string name="detail_updated_at">Laatst bijgewerkt</string>
     <string name="installer_other">een andere app of handmatig</string>
     <string name="same_signer_detail">De geïnstalleerde app is ondertekend met dezelfde sleutel als de versie die hier wordt aangeboden, dus ARK-Store kan de app updaten.</string>
     <string name="unknown_signer_detail">Het is nog niet bekend of de geïnstalleerde app is ondertekend met dezelfde sleutel als de versie die hier wordt aangeboden. Dat wordt gecontroleerd zodra het bestand is gedownload.</string>

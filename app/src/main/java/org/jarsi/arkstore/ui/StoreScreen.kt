@@ -1152,6 +1152,8 @@ private fun DetailsSheet(
                 stringResource(R.string.detail_installed_from),
                 stringResource(installerName(it.installer, context.packageName))
             )
+            // With the installer, this tells whether an update the store made unasked went through.
+            formatDateTime(it.updatedAt)?.let { time -> DetailLine(stringResource(R.string.detail_updated_at), time) }
         }
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
@@ -2469,6 +2471,13 @@ private fun formatDate(iso: String): String? = runCatching {
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
         .withZone(ZoneId.systemDefault())
         .format(Instant.parse(iso))
+}.getOrNull()
+
+/** A moment in [millis] since the epoch as a date and a time of day, or null for none (0). */
+private fun formatDateTime(millis: Long): String? = if (millis <= 0) null else runCatching {
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochMilli(millis))
 }.getOrNull()
 
 private fun openUrl(context: Context, url: String) {

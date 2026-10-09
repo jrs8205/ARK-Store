@@ -208,6 +208,7 @@
     <string name="install_ready_text">Нажмите, чтобы продолжить</string>
     <string name="newer_version_note">Установлена более новая версия, чем предлагаемая здесь.</string>
     <string name="detail_installed_from">Источник установки</string>
+    <string name="detail_updated_at">Последнее обновление</string>
     <string name="installer_other">другое приложение или вручную</string>
     <string name="same_signer_detail">Установленное приложение подписано тем же ключом, что и предлагаемая здесь версия, поэтому ARK-Store может его обновить.</string>
     <string name="unknown_signer_detail">Пока неизвестно, подписано ли установленное приложение тем же ключом, что и предлагаемая здесь версия. Это будет проверено после скачивания файла.</string>

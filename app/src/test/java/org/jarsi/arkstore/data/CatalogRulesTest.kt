@@ -511,4 +511,34 @@ class CatalogRulesTest {
         assertFalse(CatalogRules.belongsTo("owner/app", "owner/other"))
         assertFalse(CatalogRules.belongsTo("owner2/app", "owner"))
     }
+
+    @Test
+    fun accountsOfInstalledAppsAreAskedApartFromWhatASourceCovers() {
+        val asked = CatalogRules.accountsToAsk(
+            installed = listOf("Owner/App", "owner/Other", "Dev/tool", "Covered/app", "Also/one"),
+            sources = listOf("covered", "also/one")
+        )
+        // An account is spelled as its first repository spells it, and asked once.
+        assertEquals(
+            mapOf("Owner" to listOf("Owner/App", "owner/Other"), "Dev" to listOf("Dev/tool")),
+            asked
+        )
+    }
+
+    @Test
+    fun noInstalledAppMeansNoAccountToAsk() {
+        assertTrue(CatalogRules.accountsToAsk(emptyList(), listOf("owner")).isEmpty())
+        assertTrue(CatalogRules.accountsToAsk(listOf("owner/app"), listOf("Owner")).isEmpty())
+    }
+
+    @Test
+    fun repositoryPushedToSinceTheIndexSawItIsAskedAbout() {
+        assertTrue(CatalogRules.pushedSince("2026-10-08T16:00:00Z", "2026-10-08T18:14:46Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T18:14:46Z", "2026-10-08T18:14:46Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T18:14:46Z", "2026-10-08T16:00:00Z"))
+        // An index that does not tell when it saw the repository is not trusted over GitHub;
+        // GitHub not telling when the repository was pushed to leaves the index to speak.
+        assertTrue(CatalogRules.pushedSince("", "2026-10-08T16:00:00Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T16:00:00Z", ""))
+    }
 }

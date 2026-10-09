@@ -192,6 +192,7 @@
     <string name="install_ready_text">जारी रखने के लिए टैप करें</string>
     <string name="newer_version_note">यहां उपलब्ध वर्शन से नया वर्शन इंस्टॉल है।</string>
     <string name="detail_installed_from">इंस्टॉलर</string>
+    <string name="detail_updated_at">अंतिम अपडेट</string>
     <string name="installer_other">कोई दूसरा ऐप या मैन्युअल इंस्टॉलेशन</string>
     <string name="same_signer_detail">इंस्टॉल किए गए ऐप और यहां उपलब्ध वर्शन को एक ही कुंजी से साइन किया गया है, इसलिए ARK-Store ऐप को अपडेट कर सकता है।</string>
     <string name="unknown_signer_detail">अभी यह पता नहीं है कि इंस्टॉल किए गए ऐप और यहां उपलब्ध वर्शन को एक ही कुंजी से साइन किया गया है या नहीं। फ़ाइल डाउनलोड होने के बाद इसकी जांच की जाएगी।</string>

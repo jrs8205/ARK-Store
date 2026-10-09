@@ -224,6 +224,7 @@
     <string name="install_ready_text">انقر للمتابعة</string>
     <string name="newer_version_note">الإصدار المثبّت أحدث من الإصدار المعروض هنا.</string>
     <string name="detail_installed_from">مصدر التثبيت</string>
+    <string name="detail_updated_at">آخر تحديث</string>
     <string name="installer_other">تطبيق آخر أو تثبيت يدوي</string>
     <string name="same_signer_detail">التطبيق المثبّت موقَّع بالمفتاح نفسه الذي يحمله الإصدار المعروض هنا، لذا يستطيع ARK-Store تحديثه.</string>
     <string name="unknown_signer_detail">لا يُعرف بعد ما إذا كان التطبيق المثبّت موقَّعًا بالمفتاح نفسه الذي يحمله الإصدار المعروض هنا. سيتم التحقّق من ذلك بعد تنزيل الملف.</string>

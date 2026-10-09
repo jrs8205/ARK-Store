@@ -192,6 +192,7 @@
     <string name="install_ready_text">Devam etmek için dokunun</string>
     <string name="newer_version_note">Burada sunulandan daha yeni bir sürüm yüklü.</string>
     <string name="detail_installed_from">Yükleme kaynağı</string>
+    <string name="detail_updated_at">Son güncelleme</string>
     <string name="installer_other">başka bir uygulama veya elle yükleme</string>
     <string name="same_signer_detail">Yüklü uygulama, burada sunulan sürümle aynı anahtarla imzalanmış. Bu nedenle ARK-Store uygulamayı güncelleyebilir.</string>
     <string name="unknown_signer_detail">Yüklü uygulamanın burada sunulan sürümle aynı anahtarla imzalanıp imzalanmadığı henüz bilinmiyor. Dosya indirildiğinde bu kontrol edilir.</string>

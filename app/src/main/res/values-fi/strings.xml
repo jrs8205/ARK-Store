@@ -187,6 +187,7 @@
     <string name="install_ready_text">Jatka napauttamalla</string>
     <string name="newer_version_note">Asennettuna on uudempi versio kuin täällä tarjottu.</string>
     <string name="detail_installed_from">Asennuslähde</string>
+    <string name="detail_updated_at">Päivitetty viimeksi</string>
     <string name="installer_other">toinen sovellus tai käsin</string>
     <string name="same_signer_detail">Asennettu sovellus on allekirjoitettu samalla avaimella kuin täällä tarjottu versio, joten ARK-Store voi päivittää sen.</string>
     <string name="unknown_signer_detail">Vielä ei tiedetä, onko asennettu sovellus allekirjoitettu samalla avaimella kuin täällä tarjottu versio. Se tarkistetaan, kun tiedosto on ladattu.</string>

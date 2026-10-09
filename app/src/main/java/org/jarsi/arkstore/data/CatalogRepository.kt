@@ -84,6 +84,7 @@ class CatalogRepository private constructor(context: Context) {
     private val packages = context.packageManager
 
     private val resources = context.resources
+    private val appContext = context.applicationContext
 
     /** The languages the device reads, most preferred first; what metadata is read for. */
     private fun deviceLanguages(): List<String> = resources.configuration.locales.let { locales ->
@@ -241,13 +242,41 @@ class CatalogRepository private constructor(context: Context) {
                         // The index is rebuilt about hourly. A repository pushed to since then
                         // is asked about directly, so a release just made shows up at once.
                         val known = indexed?.get(fullName)
-                        if (known != null && known.stamp >= repo.optString("pushed_at")) continue
+                        if (known != null && !CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
                         repos.putIfAbsent(fullName, repo)
                     }
                 } catch (e: IOException) {
                     Log.w(TAG, "Source $source unavailable", e)
                     record(e)
                     updated += entries.filterKeys { CatalogRules.belongsTo(it, source) }
+                }
+            }
+
+            // The index is rebuilt on a schedule that GitHub keeps loosely, hours apart at
+            // times. An app installed on this device is one whose new release the user waits
+            // for, so the account of each is asked directly, as a source is, about the
+            // repositories pushed to since the index was built; only those of the installed
+            // apps are looked up. A device with none installed asks nothing, as before.
+            if (indexed != null) {
+                val packages = InstalledApps.snapshot(appContext)
+                val installed = indexed.filter { (_, entry) ->
+                    (entry.app ?: entry.beta)?.packageName in packages
+                }.keys
+                for ((owner, names) in CatalogRules.accountsToAsk(installed, sources.list())) {
+                    val wanted = names.mapTo(HashSet()) { it.lowercase() }
+                    val since = names.minOf { indexed.getValue(it).stamp }
+                    try {
+                        for (repo in listPushedSince(owner, since)) {
+                            val fullName = repo.getString("full_name")
+                            if (fullName.lowercase() !in wanted) continue
+                            val known = indexed[fullName] ?: continue
+                            if (!CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
+                            repos.putIfAbsent(fullName, repo)
+                        }
+                    } catch (e: IOException) {
+                        Log.w(TAG, "Account $owner of installed apps unavailable", e)
+                        record(e)
+                    }
                 }
             }
 
@@ -813,6 +842,33 @@ class CatalogRepository private constructor(context: Context) {
             )
             for (i in 0 until batch.length()) repos += batch.getJSONObject(i)
             if (batch.length() < PAGE_SIZE) break
+        }
+        return repos.filter { !it.optBoolean("fork") && !it.optBoolean("archived") }
+            .filter(::isListable)
+    }
+
+    /**
+     * The repositories of the account [source] pushed to since [since], a GitHub timestamp,
+     * newest first: only as many pages as hold them are read, which is one as a rule.
+     */
+    private fun listPushedSince(source: String, since: String): List<JSONObject> {
+        val repos = ArrayList<JSONObject>()
+        for (page in 1..MAX_REPO_PAGES) {
+            val batch = JSONArray(
+                Http.getApi(
+                    "$API/users/$source/repos?per_page=$PAGE_SIZE&type=owner&sort=pushed&direction=desc&page=$page"
+                )
+            )
+            var last = batch.length() < PAGE_SIZE
+            for (i in 0 until batch.length()) {
+                val repo = batch.getJSONObject(i)
+                if (!CatalogRules.pushedSince(since, repo.optString("pushed_at"))) {
+                    last = true
+                    break
+                }
+                repos += repo
+            }
+            if (last) break
         }
         return repos.filter { !it.optBoolean("fork") && !it.optBoolean("archived") }
             .filter(::isListable)

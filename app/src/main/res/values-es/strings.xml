@@ -200,6 +200,7 @@
     <string name="install_ready_text">Toca para continuar</string>
     <string name="newer_version_note">Hay instalada una versión más reciente que la que se ofrece aquí.</string>
     <string name="detail_installed_from">Instalada desde</string>
+    <string name="detail_updated_at">Última actualización</string>
     <string name="installer_other">otra aplicación o manualmente</string>
     <string name="same_signer_detail">La aplicación instalada está firmada con la misma clave que la versión que se ofrece aquí, así que ARK-Store puede actualizarla.</string>
     <string name="unknown_signer_detail">Aún no se sabe si la aplicación instalada está firmada con la misma clave que la versión que se ofrece aquí. Se comprobará una vez descargado el archivo.</string>

@@ -391,4 +391,24 @@ internal object CatalogRules {
         } else {
             fullName.substringBefore('/').equals(source, ignoreCase = true)
         }
+
+    /**
+     * The accounts to ask GitHub about directly although the index lists their apps, each
+     * with the repositories of the apps [installed] from it, by full name. An installed app
+     * is one whose new release the user waits for, and the index is rebuilt only now and
+     * then; what a [sources] entry covers is asked about with it already. An account is
+     * spelled as its first repository spells it, whatever the case of the others.
+     */
+    fun accountsToAsk(installed: Collection<String>, sources: Collection<String>): Map<String, List<String>> =
+        installed.filter { name -> sources.none { belongsTo(name, it) } }
+            .groupBy { it.substringBefore('/').lowercase() }
+            .values
+            .associateBy { it.first().substringBefore('/') }
+
+    /**
+     * Whether a repository has been pushed to, at [pushedAt], since the index saw it at
+     * [stamp]; both are GitHub's timestamps, which order as text. An index that does not
+     * say is not trusted over GitHub, and GitHub not saying leaves the index to speak.
+     */
+    fun pushedSince(stamp: String, pushedAt: String): Boolean = pushedAt > stamp
 }
