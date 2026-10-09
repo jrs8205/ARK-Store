@@ -73,6 +73,44 @@ class InstallStatesTest {
     }
 
     @Test
+    fun anAttemptIsOnItsWayWithoutASessionFromItsReservationOn() {
+        // The reservation comes before the job is stored; a result the system names while an
+        // attempt is anywhere on its way without a session is an earlier attempt's.
+        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Queued))
+        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Downloading(0.1f)))
+        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Installing))
+        assertFalse(attemptWithoutSession(committed = null, state = null))
+        assertFalse(attemptWithoutSession(committed = null, state = InstallState.Failed(FailReason.INSTALL)))
+        assertFalse(attemptWithoutSession(committed = 12, state = InstallState.Installing))
+    }
+
+    @Test
+    fun aResultSettlesTheStateOfItsOwnAttemptAlone() {
+        val installing = mapOf(repo to InstallState.Installing)
+        val queued = mapOf(repo to InstallState.Queued)
+        // The result of the attempt committed takes down the state that attempt left installing.
+        assertEquals(emptyMap<String, InstallState>(), afterResult(installing, repo, null, owned = true))
+        assertEquals(failed, afterResult(installing, repo, InstallState.Failed(FailReason.DOWNLOAD), owned = true))
+        // A new attempt has begun since the result passed its check: it is left alone.
+        assertSame(queued, afterResult(queued, repo, InstallState.Failed(FailReason.INSTALL), owned = true))
+        assertSame(downloading, afterResult(downloading, repo, null, owned = true))
+        // A result with nothing committed, as after the process was restarted, settles when
+        // nothing is on its way, and leaves an attempt begun since alone.
+        assertEquals(failed, afterResult(emptyMap(), repo, InstallState.Failed(FailReason.DOWNLOAD), owned = false))
+        assertEquals(emptyMap<String, InstallState>(), afterResult(failed, repo, null, owned = false))
+        assertSame(queued, afterResult(queued, repo, null, owned = false))
+        assertSame(installing, afterResult(installing, repo, null, owned = false))
+    }
+
+    @Test
+    fun anOutcomeIsTakenByTheAttemptItSettles() {
+        val mine = Settled(repo, attempt = 6, Outcome.CANCELLED)
+        assertTrue(mine.isOf(repo, 6))
+        assertFalse(mine.isOf(repo, 7))
+        assertFalse(mine.isOf("bob/app", 6))
+    }
+
+    @Test
     fun aCancelNamingAnAttemptTouchesThatAttemptAlone() {
         val first = InstallJob(Job())
         val second = InstallJob(Job())

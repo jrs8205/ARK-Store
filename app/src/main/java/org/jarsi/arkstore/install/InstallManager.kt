@@ -94,6 +94,42 @@ internal fun belongsToCurrent(committed: Int?, reported: Int?, downloading: Bool
     else -> !downloading
 }
 
+/**
+ * Whether an attempt of a repository is on its way with no session yet: nothing [committed]
+ * for it, while its [state] is one of an install on its way, from the reservation, which
+ * comes before anything else of the attempt, to the hand-over. A result the system names
+ * meanwhile is an earlier attempt's.
+ */
+internal fun attemptWithoutSession(committed: Int?, state: InstallState?): Boolean =
+    committed == null && state.isOnItsWay()
+
+/**
+ * [states] with [repo]'s install settled as [state], none for one that went through, by a
+ * result that passed its check a moment ago. A result of the attempt committed ([owned])
+ * finds the state that attempt left installing; one with nothing committed, as after the
+ * process was restarted, finds nothing on its way. Anything else is an attempt begun
+ * since, which is left alone.
+ */
+internal fun afterResult(
+    states: Map<String, InstallState>,
+    repo: String,
+    state: InstallState?,
+    owned: Boolean
+): Map<String, InstallState> {
+    val current = states[repo]
+    val settles = if (owned) current == InstallState.Installing else !current.isOnItsWay()
+    return when {
+        !settles -> states
+        state == null -> states - repo
+        else -> states + (repo to state)
+    }
+}
+
+/** The outcome of one [attempt] of [repo], as it is settled, for whoever waits for that attempt. */
+internal data class Settled(val repo: String, val attempt: Int, val outcome: Outcome) {
+    fun isOf(repo: String, attempt: Int): Boolean = this.repo == repo && this.attempt == attempt
+}
+
 /** Whether [job] is the attempt numbered [attempt], or any attempt when none is named. */
 internal fun isAttempt(job: InstallJob?, attempt: Int?): Boolean =
     job != null && (attempt == null || job.id == attempt)
@@ -145,8 +181,11 @@ object InstallManager {
     /** How many of the store's screens are showing; there can be one per window. */
     private val screens = AtomicInteger(0)
 
-    /** What was committed for each repository, kept until the system reports the outcome. */
-    private data class Committed(val app: StoreApp, val packageName: String, val sessionId: Int)
+    /**
+     * What was committed for each repository, kept until the system reports the outcome,
+     * with the number of the [attempt] it was, see [InstallJob.id].
+     */
+    private data class Committed(val app: StoreApp, val packageName: String, val sessionId: Int, val attempt: Int)
 
     private val committed = ConcurrentHashMap<String, Committed>()
 
@@ -167,8 +206,8 @@ object InstallManager {
     /** Ticks whenever an install finishes, so observers re-read the installed versions. */
     val installedChanged: StateFlow<Int> = _installedChanged.asStateFlow()
 
-    /** The outcome of each install as it is settled, for [installAndAwait]. */
-    private val outcomes = MutableSharedFlow<Pair<String, Outcome>>(extraBufferCapacity = 64)
+    /** The outcome of each attempt as it is settled, for [installAndAwait]. */
+    private val outcomes = MutableSharedFlow<Settled>(extraBufferCapacity = 64)
 
     fun isBusy(repo: String): Boolean = _states.value[repo].isOnItsWay()
 
@@ -178,9 +217,22 @@ object InstallManager {
      * service if the user leaves the app; from the background, where no service may start,
      * the caller keeps the process alive instead.
      */
-    fun install(context: Context, app: StoreApp, foreground: Boolean = true): Boolean {
+    fun install(context: Context, app: StoreApp, foreground: Boolean = true): Boolean =
+        begin(context, app, foreground) != null
+
+    /**
+     * [install], returning the attempt begun, or null when none was. [onBegun] is told its
+     * number before it runs: what the caller is told is this attempt's, whatever becomes
+     * of it, and not read afterwards from a map that may by then hold a later attempt.
+     */
+    private fun begin(
+        context: Context,
+        app: StoreApp,
+        foreground: Boolean,
+        onBegun: (attempt: Int) -> Unit = {}
+    ): InstallJob? {
         val appContext = context.applicationContext
-        if (!reserve(app.fullName)) return false
+        if (!reserve(app.fullName)) return null
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 
@@ -200,7 +252,7 @@ object InstallManager {
                 } catch (e: Exception) {
                     // Nothing here may take the process down or leave the app stuck as "installing".
                     Log.w(TAG, "Install failed for ${app.fullName}", e)
-                    setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+                    fail(app.fullName, install.id, InstallState.Failed(FailReason.INSTALL, e.message))
                 }
             }
         )
@@ -215,13 +267,14 @@ object InstallManager {
             if (cancelled) {
                 // Only a download is cancelled, and only on purpose: nothing to show for it.
                 setState(app.fullName, null)
-                outcomes.tryEmit(app.fullName to Outcome.CANCELLED)
+                outcomes.tryEmit(Settled(app.fullName, install.id, Outcome.CANCELLED))
             }
         }
+        onBegun(install.id)
         // Stored before it runs, so that a cancel cannot miss it.
         jobs[app.fullName] = install
         install.start()
-        return true
+        return install
     }
 
     /** Installs [apps] in the order of [installOrder]. */
@@ -274,15 +327,21 @@ object InstallManager {
                 confirmations.next.value?.repo == app.fullName
             return@coroutineScope if (asked) Outcome.CONFIRMATION_NEEDED else null
         }
-        // Listening before starting, so that an outcome settled at once is not missed.
+        // Listening before starting, so that an outcome settled at once is not missed; the
+        // attempt's number, known before anything of it can be settled, tells its outcome
+        // from a late one of an earlier attempt.
+        val attempt = AtomicInteger(0)
         val outcome = async(start = CoroutineStart.UNDISPATCHED) {
-            outcomes.first { it.first == app.fullName }.second
+            outcomes.first { it.isOf(app.fullName, attempt.get()) }.outcome
         }
-        if (!install(context, app, foreground = false)) {
+        val begun = begin(context, app, foreground = false) {
+            attempt.set(it)
+            onBegun(it)
+        }
+        if (begun == null) {
             outcome.cancel()
             return@coroutineScope null
         }
-        jobs[app.fullName]?.let { onBegun(it.id) }
         withTimeoutOrNull(timeoutMillis) { outcome.await() } ?: run {
             outcome.cancel()
             null
@@ -323,7 +382,7 @@ object InstallManager {
             }
         } catch (e: IOException) {
             Log.w(TAG, "Download failed for ${app.fullName}", e)
-            setState(app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
+            fail(app.fullName, install.id, InstallState.Failed(FailReason.DOWNLOAD))
             return
         }
         // A cancel that came after the last of the file was read is noticed here.
@@ -333,7 +392,7 @@ object InstallManager {
         // is anything else is not installed.
         if (app.sha256 != null && !app.sha256.equals(sha256(target), ignoreCase = true)) {
             Log.w(TAG, "Downloaded file of ${app.fullName} does not match its checksum")
-            setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
+            fail(app.fullName, install.id, InstallState.Failed(FailReason.INVALID_APK))
             return
         }
 
@@ -341,7 +400,7 @@ object InstallManager {
         if (archive == null ||
             (app.packageName != null && archive.packageName != app.packageName)
         ) {
-            setState(app.fullName, InstallState.Failed(FailReason.INVALID_APK))
+            fail(app.fullName, install.id, InstallState.Failed(FailReason.INVALID_APK))
             return
         }
         val versionCode = PackageInfoCompat.getLongVersionCode(archive)
@@ -369,7 +428,7 @@ object InstallManager {
         }
         if (!signaturesMatch(appContext, archive)) {
             InstalledApps.rememberConflict(appContext, app, archive.packageName)
-            setState(app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
+            fail(app.fullName, install.id, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
             // The app now counts as installed from elsewhere rather than as an update.
             notifyInstalledChanged()
             return
@@ -389,11 +448,11 @@ object InstallManager {
         setState(app.fullName, InstallState.Installing)
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         try {
-            commit(appContext, app, archive.packageName, target)
+            commit(appContext, app, archive.packageName, target, install.id)
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for ${app.fullName}", e)
             committed.remove(app.fullName)
-            setState(app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+            fail(app.fullName, install.id, InstallState.Failed(FailReason.INSTALL, e.message))
         }
     }
 
@@ -477,14 +536,19 @@ object InstallManager {
         setState(repo, InstallState.Installing)
         confirmations.enqueue(repo, Confirmation(sessionId, intent))
         if (screens.get() == 0) InstallService.showReady(context, repo, sessionId, intent)
-        outcomes.tryEmit(repo to Outcome.CONFIRMATION_NEEDED)
+        committed[repo]?.let { outcomes.tryEmit(Settled(repo, it.attempt, Outcome.CONFIRMATION_NEEDED)) }
     }
 
-    /** Whether the session [sessionId] the system speaks of is the attempt of [repo] on its way now. */
-    private fun isCurrent(repo: String, sessionId: Int?): Boolean {
-        val current = committed[repo]
-        return belongsToCurrent(current?.sessionId, sessionId, downloading = current == null && jobs.containsKey(repo))
-    }
+    /**
+     * Whether the session [sessionId] the system speaks of is the attempt of [repo] on its
+     * way now, as far as what is [committed] of it says; see [belongsToCurrent].
+     */
+    private fun isCurrent(repo: String, sessionId: Int?, committed: Committed? = this.committed[repo]): Boolean =
+        belongsToCurrent(
+            committed?.sessionId,
+            sessionId,
+            downloading = attemptWithoutSession(committed?.sessionId, _states.value[repo])
+        )
 
     /**
      * Called by [InstallReceiver] once the system has decided on a session, [sessionId] when
@@ -497,23 +561,23 @@ object InstallManager {
         message: String?,
         sessionId: Int? = null
     ) {
-        if (!isCurrent(repo, sessionId)) {
+        val attempted = committed[repo]
+        if (!isCurrent(repo, sessionId, attempted)) {
             Log.i(TAG, "Result of an earlier attempt of $repo ignored")
+            return
+        }
+        // The attempt is taken in one step: the system and the check for stale sessions can
+        // report on the same session at the same moment, and only one of them may settle it.
+        if (attempted != null && !committed.remove(repo, attempted)) {
+            Log.i(TAG, "Result of $repo settled already")
             return
         }
         InstallService.cancelReady(context, repo)
         confirmations.remove(repo)
-        val attempted = committed.remove(repo)
-        when (status) {
-            PackageInstaller.STATUS_SUCCESS -> {
-                setState(repo, null)
-                outcomes.tryEmit(repo to Outcome.INSTALLED)
-            }
+        val (state, outcome) = when (status) {
+            PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
             // The user backed out of the system prompt; that is not an error worth showing.
-            PackageInstaller.STATUS_FAILURE_ABORTED -> {
-                setState(repo, null)
-                outcomes.tryEmit(repo to Outcome.FAILED)
-            }
+            PackageInstaller.STATUS_FAILURE_ABORTED -> null to Outcome.FAILED
             PackageInstaller.STATUS_FAILURE_CONFLICT,
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
                 val reason = conflictReason(message)
@@ -521,10 +585,14 @@ object InstallManager {
                 if (reason == FailReason.SIGNATURE_MISMATCH && attempted != null) {
                     InstalledApps.rememberConflict(context, attempted.app, attempted.packageName)
                 }
-                setState(repo, InstallState.Failed(reason, message))
+                InstallState.Failed(reason, message) to Outcome.FAILED
             }
-            else -> setState(repo, InstallState.Failed(FailReason.INSTALL, message))
+            else -> InstallState.Failed(FailReason.INSTALL, message) to Outcome.FAILED
         }
+        // Only the state of the attempt taken is settled: an attempt begun since the check,
+        // which a result that was not taken may have let through, is left as it is.
+        _states.update { afterResult(it, repo, state, owned = attempted != null) }
+        attempted?.let { outcomes.tryEmit(Settled(repo, it.attempt, outcome)) }
         _installedChanged.update { it + 1 }
     }
 
@@ -541,10 +609,15 @@ object InstallManager {
 
     private fun setState(repo: String, state: InstallState?) {
         _states.update { if (state == null) it - repo else it + (repo to state) }
-        if (state is InstallState.Failed) outcomes.tryEmit(repo to Outcome.FAILED)
     }
 
-    private fun commit(context: Context, app: StoreApp, packageName: String, apk: File) {
+    /** Fails the attempt numbered [attempt] of [repo] with [state], for the screen and for whoever waits for it. */
+    private fun fail(repo: String, attempt: Int, state: InstallState.Failed) {
+        setState(repo, state)
+        outcomes.tryEmit(Settled(repo, attempt, Outcome.FAILED))
+    }
+
+    private fun commit(context: Context, app: StoreApp, packageName: String, apk: File, attempt: Int) {
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(packageName)
@@ -557,7 +630,7 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
-        committed[app.fullName] = Committed(app, packageName, sessionId)
+        committed[app.fullName] = Committed(app, packageName, sessionId, attempt)
         try {
             write(context, installer, sessionId, app.fullName, apk)
         } catch (e: Exception) {
