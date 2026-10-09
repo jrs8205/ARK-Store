@@ -411,4 +411,17 @@ internal object CatalogRules {
      * say is not trusted over GitHub, and GitHub not saying leaves the index to speak.
      */
     fun pushedSince(stamp: String, pushedAt: String): Boolean = pushedAt > stamp
+
+    /**
+     * The newer of two readings, [a] and [b], of the same release line of an app, by the
+     * version each offers; either may be missing. Two readings of a repository pushed to
+     * at the same moment can still differ: one may have been read before the release had
+     * its file. Of the same version the first is kept.
+     */
+    fun newerRelease(a: StoreApp?, b: StoreApp?): StoreApp? = when {
+        a == null -> b
+        b == null -> a
+        b.versionCode > a.versionCode -> b
+        else -> a
+    }
 }

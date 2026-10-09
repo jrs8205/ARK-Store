@@ -66,6 +66,24 @@ class CatalogRepository private constructor(context: Context) {
         fun mapApps(transform: (StoreApp) -> StoreApp) =
             Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered, stored)
 
+        /**
+         * The newer of this entry and [other] as readings of the same repository: the one
+         * of the later push, or, of the same push, the newer release of each kind from
+         * either, see [CatalogRules.newerRelease]; this entry on a tie.
+         */
+        fun newerWith(other: Entry): Entry = when {
+            stamp > other.stamp -> this
+            other.stamp > stamp -> other
+            else -> Entry(
+                stamp,
+                maxOf(fetchedAt, other.fetchedAt),
+                CatalogRules.newerRelease(app, other.app),
+                CatalogRules.newerRelease(beta, other.beta),
+                discovered || other.discovered,
+                stored
+            )
+        }
+
         /** This entry marked the way the store index lists its repository. */
         fun listedAs(auto: Boolean) = Entry(
             stamp,
@@ -355,7 +373,8 @@ class CatalogRepository private constructor(context: Context) {
                             // that an app is neither dropped for a lookup that failed, when
                             // the index has it, nor put back to a release older than one
                             // already found.
-                            listOfNotNull(old, indexed?.get(fullName)).maxByOrNull { it.stamp }
+                            val listed = indexed?.get(fullName)
+                            (if (old != null && listed != null) old.newerWith(listed) else old ?: listed)
                                 ?.let { fullName to it }
                         }
                     }

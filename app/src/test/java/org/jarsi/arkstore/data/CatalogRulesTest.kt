@@ -541,4 +541,17 @@ class CatalogRulesTest {
         assertTrue(CatalogRules.pushedSince("", "2026-10-08T16:00:00Z"))
         assertFalse(CatalogRules.pushedSince("2026-10-08T16:00:00Z", ""))
     }
+
+    @Test
+    fun theNewerOfTwoReadingsOfAReleaseIsKept() {
+        val older = app(versionCode = 1)
+        val newer = app(versionCode = 2)
+        assertSame(newer, CatalogRules.newerRelease(older, newer))
+        assertSame(newer, CatalogRules.newerRelease(newer, older))
+        assertSame(older, CatalogRules.newerRelease(older, null))
+        assertSame(newer, CatalogRules.newerRelease(null, newer))
+        assertNull(CatalogRules.newerRelease(null, null))
+        // Of two readings of the same version, the first given is kept.
+        assertSame(newer, CatalogRules.newerRelease(newer, app(versionCode = 2)))
+    }
 }
