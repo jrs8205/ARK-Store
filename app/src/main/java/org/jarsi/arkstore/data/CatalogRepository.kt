@@ -263,19 +263,23 @@ class CatalogRepository private constructor(context: Context) {
                     (entry.app ?: entry.beta)?.packageName in packages
                 }.keys
                 for ((owner, names) in CatalogRules.accountsToAsk(installed, sources.list())) {
-                    val wanted = names.mapTo(HashSet()) { it.lowercase() }
+                    // The index's spelling of each name is kept, whatever case GitHub gives
+                    // it, so that the app has one entry.
+                    val wanted = names.associateBy { it.lowercase() }
                     val since = names.minOf { indexed.getValue(it).stamp }
                     try {
                         for (repo in listPushedSince(owner, since)) {
-                            val fullName = repo.getString("full_name")
-                            if (fullName.lowercase() !in wanted) continue
-                            val known = indexed[fullName] ?: continue
+                            val fullName = wanted[repo.getString("full_name").lowercase()] ?: continue
+                            val known = indexed.getValue(fullName)
                             if (!CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
                             repos.putIfAbsent(fullName, repo)
                         }
                     } catch (e: IOException) {
+                        // What was read of these apps before stays, as for a source: a release
+                        // found since the index was built would otherwise give way to the index.
                         Log.w(TAG, "Account $owner of installed apps unavailable", e)
                         record(e)
+                        names.forEach { name -> entries[name]?.let { updated[name] = it } }
                     }
                 }
             }

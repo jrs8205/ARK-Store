@@ -252,7 +252,7 @@ object InstallManager {
                 } catch (e: Exception) {
                     // Nothing here may take the process down or leave the app stuck as "installing".
                     Log.w(TAG, "Install failed for ${app.fullName}", e)
-                    fail(app.fullName, install.id, InstallState.Failed(FailReason.INSTALL, e.message))
+                    fail(install, app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
                 }
             }
         )
@@ -381,8 +381,11 @@ object InstallManager {
                 }
             }
         } catch (e: IOException) {
+            // A cancel does not interrupt the stream; a download that fails after one is a
+            // cancelled download, not a failed one: its state is taken down, not shown.
+            job?.ensureActive()
             Log.w(TAG, "Download failed for ${app.fullName}", e)
-            fail(app.fullName, install.id, InstallState.Failed(FailReason.DOWNLOAD))
+            fail(install, app.fullName, InstallState.Failed(FailReason.DOWNLOAD))
             return
         }
         // A cancel that came after the last of the file was read is noticed here.
@@ -392,7 +395,7 @@ object InstallManager {
         // is anything else is not installed.
         if (app.sha256 != null && !app.sha256.equals(sha256(target), ignoreCase = true)) {
             Log.w(TAG, "Downloaded file of ${app.fullName} does not match its checksum")
-            fail(app.fullName, install.id, InstallState.Failed(FailReason.INVALID_APK))
+            fail(install, app.fullName, InstallState.Failed(FailReason.INVALID_APK))
             return
         }
 
@@ -400,7 +403,7 @@ object InstallManager {
         if (archive == null ||
             (app.packageName != null && archive.packageName != app.packageName)
         ) {
-            fail(app.fullName, install.id, InstallState.Failed(FailReason.INVALID_APK))
+            fail(install, app.fullName, InstallState.Failed(FailReason.INVALID_APK))
             return
         }
         val versionCode = PackageInfoCompat.getLongVersionCode(archive)
@@ -428,7 +431,7 @@ object InstallManager {
         }
         if (!signaturesMatch(appContext, archive)) {
             InstalledApps.rememberConflict(appContext, app, archive.packageName)
-            fail(app.fullName, install.id, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
+            fail(install, app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
             // The app now counts as installed from elsewhere rather than as an update.
             notifyInstalledChanged()
             return
@@ -452,7 +455,7 @@ object InstallManager {
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for ${app.fullName}", e)
             committed.remove(app.fullName)
-            fail(app.fullName, install.id, InstallState.Failed(FailReason.INSTALL, e.message))
+            fail(install, app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
         }
     }
 
@@ -611,10 +614,16 @@ object InstallManager {
         _states.update { if (state == null) it - repo else it + (repo to state) }
     }
 
-    /** Fails the attempt numbered [attempt] of [repo] with [state], for the screen and for whoever waits for it. */
-    private fun fail(repo: String, attempt: Int, state: InstallState.Failed) {
+    /**
+     * Fails the attempt [install] of [repo] with [state], for the screen and for whoever
+     * waits for it. The attempt is over first, so that a cancel landing now is refused and
+     * the cleanup of a cancelled attempt cannot take down the state of the next one, begun
+     * once the failure showed; one cancelled before is left as cancelled.
+     */
+    private fun fail(install: InstallJob, repo: String, state: InstallState.Failed) {
+        if (!install.end()) return
         setState(repo, state)
-        outcomes.tryEmit(Settled(repo, attempt, Outcome.FAILED))
+        outcomes.tryEmit(Settled(repo, install.id, Outcome.FAILED))
     }
 
     private fun commit(context: Context, app: StoreApp, packageName: String, apk: File, attempt: Int) {
