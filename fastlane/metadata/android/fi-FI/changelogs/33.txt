@@ -1,0 +1,1 @@
+Ei oletuslähdettä: kaupan omat sovellukset tulevat indeksistä, joten tuore asennus ei kysy GitHubilta mitään eikä törmää tuntirajaan. GitHub-tunniste selitetään: sitä tarvitsevat vain monta lähdettä lisänneet.

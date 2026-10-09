@@ -65,7 +65,9 @@ the repository is public, has a recognised license and that its latest full rele
 
 Under **Sources** in the app, anyone can type a GitHub user name or paste a link to a profile
 or a repository. That account's apps, or that one app, are then listed on that device, under
-the same two requirements. Useful for trying your own app before adding the topic, or for
+the same two requirements. A source is read from GitHub directly on every refresh, which
+GitHub allows 60 times an hour per network without a token; the store's own list costs
+nothing. Useful for trying your own app before adding the topic, or for
 following a developer who has not added it.
 
 ### Optional extras
@@ -77,6 +79,13 @@ following a developer who has not added it.
   `launcher`, `keyboard`, `dialer` and `weather` are recognised; the rest goes under Other.
 - **Description**: the repository's description is shown on the card, the release notes in
   the details.
+- **Screenshots and translated descriptions**: the `fastlane/metadata/android/<locale>/`
+  folder that F-Droid reads is used too. `short_description.txt` takes the place of the
+  repository's description on the card and in the details, `full_description.txt` and
+  `images/phoneScreenshots/` are shown in the details, in the language of the device when
+  the folder has it. English, Finnish, German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi are read;
+  nothing more is needed.
 - **Several APKs**: keep the architecture (`arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86` or
   `universal`) in the file name and each device gets the right one.
 
@@ -94,26 +103,40 @@ following a developer who has not added it.
 ## For users
 
 - One list: updates, installed apps and apps to install. One tap to install or update,
-  **Update all** when several updates wait. Downloads continue in the background.
+  **Update all** when several updates wait; they go in order, the store's own last, and a
+  download is cancelled by tapping its ring. Downloads continue in the background.
+- An update can be skipped, or an app held back from updates altogether, from its details.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
 - Every app with its own icon, read from the APK or given by its catalogue.
-- The details tell the latest version, when it was published, the size of the file and, when
-  it is newer than the store itself needs, the Android version the app needs. An installed app
-  whose newest version needs a newer Android than the device has stays in the list, with a
-  note; one not installed is left out.
+- A choice of themes: five palettes and, on Android 12 and later, the colours of the
+  wallpaper, with a pure black dark theme for OLED screens. A theme colours the background,
+  the cards and the menus too, and every theme keeps the same contrast.
+- The details tell the latest version, when it was published, the size of the file and the
+  Android version the app needs. An installed app whose newest version needs a newer Android
+  than the device has stays in the list, with a note; one not installed is left out.
 - Stars and download counts from GitHub.
+- Screenshots and a longer description in the details, when the developer publishes them,
+  whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.
 - Refresh on open, a background check every four hours and a notification for new versions.
+  On Android 12 and later the check can also install the updates of the apps the store
+  itself installed, without asking, only on Wi-Fi or only while charging if you like.
 - A warning before installing over an app signed with a different key.
 - Beta versions on request.
 - More apps with switches in the settings: apps found by searching GitHub, Codeberg and
   GitLab, and the IzzyOnDroid and F-Droid catalogues. An app offered by several places is
   listed once.
 - No account. The app talks to GitHub and, for files, to Codeberg, GitLab, IzzyOnDroid and
-  F-Droid.
+  F-Droid. The list itself comes from the store's index, so the app asks GitHub for nothing
+  unless you add sources; those are read from GitHub directly, 60 times an hour per network
+  without a token. A GitHub token given in the settings lifts that limit; it stays on the
+  device, outside backups, and goes to GitHub alone.
+- The sources, bookmarks and settings can be exported to a file and imported on another
+  device.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),
   haptics that follow the system setting.
-- English and Finnish.
+- In 17 languages: English, Finnish, German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi.
 
 ## Automatically found apps
 

@@ -76,7 +76,17 @@ data class StoreApp(
     /** What a catalogue warns about in the app, such as tracking, in its own words. */
     val antiFeatures: List<String> = emptyList(),
     /** The app's icon as the index publishes it, or null when it publishes none. */
-    val icon: AppIcon? = null
+    val icon: AppIcon? = null,
+    /**
+     * What the developer publishes of the app beyond its summary, by language ("en", "fi"),
+     * as the index tells it; empty when it tells nothing.
+     */
+    val metadata: Map<String, AppMetadata> = emptyMap(),
+    /**
+     * The push of the repository the [metadata] was read for, as the index marks it, or null
+     * when it has not been read for a push, as for an app of a catalogue.
+     */
+    val metadataAt: String? = null
 ) {
     /** Whether the app comes from a repository's releases rather than from a catalogue. */
     val fromRepository: Boolean
@@ -103,6 +113,22 @@ data class StoreApp(
     /** Version shown to the user: the manifest's name when known, else the release tag. */
     val displayVersion: String
         get() = versionName ?: tag.removePrefix("v")
+
+    /**
+     * The short text that tells what the app is, on a device whose [languages] are those, in
+     * order of preference: the summary the developer wrote for the store in the first of them
+     * that has one, else in English, and failing that the [description]. The description
+     * counts as English: a catalogue writes its English summary there and leaves it out of
+     * the metadata, and a repository's description is English as a rule. So a summary in a
+     * language the device does not read never wins over it.
+     */
+    fun summary(languages: List<String>): String {
+        for (language in languages) {
+            metadata[language]?.summary?.let { return it }
+            if (language == "en" && description.isNotBlank()) return description
+        }
+        return metadata["en"]?.summary ?: description
+    }
 
     /** What the APK's manifest said of it, or null when the manifest could not be read. */
     val apkInfo: ApkInfo?
@@ -141,6 +167,8 @@ data class StoreApp(
         .put("minSdkCodename", minSdkCodename ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
+        .put("metadata", JSONObject().also { json -> metadata.forEach { (language, it) -> json.put(language, it.toJson()) } })
+        .put("metadataAt", metadataAt ?: JSONObject.NULL)
 
     companion object {
         const val SOURCE_GITHUB = "github"
@@ -214,8 +242,70 @@ data class StoreApp(
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }
                 .orEmpty(),
-            icon = AppIcon.of(json.opt("icon"))
+            icon = AppIcon.of(json.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata")),
+            metadataAt = (json.opt("metadataAt") as? String)?.takeIf { it.isNotEmpty() }
         )
+    }
+}
+
+/**
+ * What the developer publishes of the app in one language, as the index tells it: the
+ * address of a [description] longer than the summary, or null when there is none, the
+ * addresses of [screenshots] taken on a phone, and the [summary] itself, written for the
+ * store, or null when the index carries none.
+ */
+data class AppMetadata(val description: String?, val screenshots: List<String>, val summary: String? = null) {
+
+    fun toJson(): JSONObject = JSONObject()
+        .put("summary", summary ?: JSONObject.NULL)
+        .put("description", description ?: JSONObject.NULL)
+        .put("screenshots", JSONArray(screenshots))
+
+    companion object {
+        /**
+         * The metadata an index entry's "metadata" field describes, by language; a language
+         * with nothing to show is left out.
+         */
+        fun mapOf(json: JSONObject?): Map<String, AppMetadata> {
+            if (json == null) return emptyMap()
+            val metadata = LinkedHashMap<String, AppMetadata>()
+            for (language in json.keys()) {
+                val entry = json.optJSONObject(language) ?: continue
+                // Asked for as what it is: Android's optString reads a null as the word "null".
+                val summary = (entry.opt("summary") as? String)?.takeIf { it.isNotBlank() }
+                val description = (entry.opt("description") as? String)?.takeIf { it.isNotBlank() }
+                val screenshots = entry.optJSONArray("screenshots")
+                    ?.let { array -> List(array.length()) { array.opt(it) as? String } }
+                    .orEmpty()
+                    .filterNotNull()
+                    .filter { it.isNotBlank() }
+                if (summary != null || description != null || screenshots.isNotEmpty()) {
+                    metadata[language] = AppMetadata(description, screenshots, summary)
+                }
+            }
+            return metadata
+        }
+
+        /**
+         * The metadata to show of [metadata] on a device whose [languages] are those, in
+         * order of preference: the description of the first language that has one, else of
+         * English, else of whatever there is, and the screenshots likewise, as a developer
+         * often publishes the screenshots in one language only; the summary of the first
+         * language that has one, else of English, but never of another language, since the
+         * description stands in for English then (see [StoreApp.summary]); null when there
+         * is nothing at all.
+         */
+        fun pick(metadata: Map<String, AppMetadata>, languages: List<String>): AppMetadata? {
+            if (metadata.isEmpty()) return null
+            val read = (languages + "en").distinct().mapNotNull { metadata[it] }
+            val inOrder = read + metadata.keys.filter { it !in languages && it != "en" }.mapNotNull { metadata[it] }
+            return AppMetadata(
+                inOrder.firstNotNullOfOrNull { it.description },
+                inOrder.firstOrNull { it.screenshots.isNotEmpty() }?.screenshots.orEmpty(),
+                read.firstNotNullOfOrNull { it.summary }
+            )
+        }
     }
 }
 

@@ -41,12 +41,12 @@ class InstallReceiver : BroadcastReceiver() {
             return
         }
 
-        InstallService.cancelReady(appContext, repo)
         InstallManager.onSessionResult(
             appContext,
             repo,
             status,
-            intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+            intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE),
+            intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1).takeIf { it >= 0 }
         )
     }
 

@@ -1,0 +1,13 @@
+ARK-Store installe et met à jour des applications directement depuis leurs publications GitHub. Pour publier une application, il suffit à son développeur d'ajouter le topic « arkstore » à son dépôt public et open source. La boutique répertorie chaque dépôt de ce type dont la dernière publication comporte un APK, indique quelles applications sont installées et lesquelles ont une version plus récente, puis les installe ou les met à jour d'un simple appui.
+
+• Catalogue automatique : une nouvelle application apparaît dès qu'une publication avec un APK est mise en ligne
+• Ajout manuel d'un compte ou d'un dépôt GitHub également possible
+• Étoiles et nombre de téléchargements issus de GitHub
+• Recherche et catégories
+• Seules les applications publiques et open source sont répertoriées
+• Versions exactes, lues directement dans l'APK
+• Installation et mise à jour d'un simple appui, avec « Tout mettre à jour »
+• Recherche de mises à jour en arrière-plan, avec notification
+• Avertissement lorsqu'une application installée est signée avec une autre clé
+• Aucun compte, aucune connexion, aucun service tiers
+• Disponible en 17 langues

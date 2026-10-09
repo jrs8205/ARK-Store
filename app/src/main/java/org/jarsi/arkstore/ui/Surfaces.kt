@@ -145,6 +145,39 @@ object Surfaces {
     private const val DRAWING = 2
 
     /**
+     * How far the shading may move a colour where text can be, of the whole range of a
+     * channel: a dark surface, which carries light text, may brighten by [LIFT], and a light
+     * one, which carries dark text, may darken by [SHADE]. The shader holds itself to these,
+     * and the palettes leave their text that much room; PalettesTest checks them for it.
+     */
+    internal const val LIFT = 0.02f
+    internal const val SHADE = 0.05f
+
+    /** Whether the shader takes [base] for a light surface, one that carries dark text. */
+    internal fun light(base: Color): Boolean =
+        0.2126f * base.red + 0.7152f * base.green + 0.0722f * base.blue > 0.5f
+
+    /**
+     * The colour nearest to its text that the metal shows of [base] where text can be: a
+     * light surface at its darkest, a dark one at its brightest.
+     */
+    internal fun underText(base: Color): Color {
+        val shift = if (light(base)) -SHADE else LIFT
+        return Color(
+            (base.red + shift).coerceIn(0f, 1f),
+            (base.green + shift).coerceIn(0f, 1f),
+            (base.blue + shift).coerceIn(0f, 1f)
+        )
+    }
+
+    /**
+     * Whether a surface of the colour [base] is drawn as metal. Pure black is left as it is:
+     * the highlight would light it, and the pure black theme is there to keep the pixels of
+     * an OLED screen off.
+     */
+    internal fun takes(base: Color): Boolean = base != Color.Black
+
+    /**
      * Draws a small plate of a grey off screen and looks at a pixel of it: the shader must
      * compile for this driver and draw a colour near the grey, not nothing or garbage.
      */
@@ -370,8 +403,8 @@ object Surfaces {
             half3 shaded = base.rgb * (diffuse + streak + fresnel) + half3(ward * 0.14);
             // Within reach of the text, the colour stays where the text keeps its contrast.
             half lum = dot(base.rgb, half3(0.2126, 0.7152, 0.0722));
-            half up = mix(lum > 0.5 ? 0.2 : 0.02, 0.25, rim);
-            half down = mix(lum > 0.5 ? 0.05 : 0.2, 0.25, rim);
+            half up = mix(lum > 0.5 ? 0.2 : $LIFT, 0.25, rim);
+            half down = mix(lum > 0.5 ? $SHADE : 0.2, 0.25, rim);
             half3 color = base.rgb + clamp(shaded - base.rgb, half3(-down), half3(up));
             return half4(color, 1.0);
         }
@@ -380,13 +413,14 @@ object Surfaces {
 
 /**
  * Draws the surface as brushed metal of the colour [base] with the given [relief], when
- * materials are on and the device can draw them; otherwise draws nothing, and the content's
- * own background shows. [radius] is the corner radius of the surface's shape, null for a pill;
- * the bevel follows it. [grain] is how strongly the brushing shows. With [reachBelow] the
- * metal is drawn that far below the surface's own bounds as well, for a surface at the top
- * of something larger that clips it to its shape. With [still] the surface is drawn once
- * into an image, at half resolution, and the image is drawn from then on: for a large
- * surface that does not change, such as the screen's background.
+ * materials are on, the device can draw them and the colour takes them ([Surfaces.takes]);
+ * otherwise draws nothing, and the content's own background shows. [radius] is the corner
+ * radius of the surface's shape, null for a pill; the bevel follows it. [grain] is how
+ * strongly the brushing shows. With [reachBelow] the metal is drawn that far below the
+ * surface's own bounds as well, for a surface at the top of something larger that clips it
+ * to its shape. With [still] the surface is drawn once into an image, at half resolution,
+ * and the image is drawn from then on: for a large surface that does not change, such as
+ * the screen's background.
  */
 @Composable
 fun Modifier.material(
@@ -397,7 +431,7 @@ fun Modifier.material(
     reachBelow: Dp = 0.dp,
     still: Boolean = false
 ): Modifier {
-    if (!LocalMaterial.current || !Surfaces.supported) return this
+    if (!LocalMaterial.current || !Surfaces.supported || !Surfaces.takes(base)) return this
     val density = LocalDensity.current
     val context = LocalContext.current
     val radiusPx = radius?.let { with(density) { it.toPx() } }

@@ -1,0 +1,1 @@
+Asetusten Ulkoasu-osiosta voi valita teeman: viisi palettia ja Android 12:sta alkaen taustakuvan värit, sekä puhdas musta tumma teema OLED-näytöille.

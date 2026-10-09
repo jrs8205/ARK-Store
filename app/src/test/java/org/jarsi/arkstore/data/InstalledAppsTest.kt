@@ -103,6 +103,18 @@ class InstalledAppsTest {
     }
 
     @Test
+    fun anUpdateTheUserHasSkippedIsToldApartFromOneOnOffer() {
+        val app = offered.copy(signer = "a")
+        val installed = InstalledVersion(4, "1.4", sameSigner = true, installer = "store", label = "Calculator")
+        assertEquals(AppStatus.UPDATE_SKIPPED, InstalledApps.status(app, installed, skipped = true))
+        assertEquals(AppStatus.UPDATE_AVAILABLE, InstalledApps.status(app, installed, skipped = false))
+        // Nothing to skip when there is no update, or when it cannot be installed anyway.
+        assertEquals(AppStatus.UP_TO_DATE, InstalledApps.status(app.copy(versionCode = 4), installed, skipped = true))
+        assertEquals(AppStatus.NEEDS_NEWER_ANDROID, InstalledApps.status(app, installed, runs = false, skipped = true))
+        assertEquals(AppStatus.OTHER_SIGNER, InstalledApps.status(app, installed.copy(otherSigner = true, sameSigner = false), skipped = true))
+    }
+
+    @Test
     fun anExactSignerMatchOverridesAnEarlierConflict() {
         val app = offered.copy(label = "Calculator", signer = "a")
         val before = InstalledVersion(4, "1.4", otherSigner = true, beta = true, installer = "store", label = "Laskin")

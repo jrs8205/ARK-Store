@@ -1,0 +1,1 @@
+Instale e atualize apps Android direto das versões publicadas no GitHub

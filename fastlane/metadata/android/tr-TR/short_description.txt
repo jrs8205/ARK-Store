@@ -1,0 +1,1 @@
+Android uygulamalarını doğrudan GitHub yayınlarından yükleyin ve güncelleyin

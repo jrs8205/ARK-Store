@@ -1,0 +1,1 @@
+The store speaks 17 languages: German, Spanish, French, Italian, Portuguese, Russian, Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi join English and Finnish, in the app and in the descriptions it reads. The short description is chosen in the device's language, else in English.

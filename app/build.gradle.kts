@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 28
-        versionName = "1.6.0"
+        versionCode = 36
+        versionName = "1.8.0-beta.5"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
@@ -73,7 +73,9 @@ android {
     }
 
     androidResources {
-        localeFilters += listOf("en", "fi")
+        localeFilters += listOf(
+            "en", "fi", "de", "es", "fr", "it", "pt", "ru", "uk", "pl", "nl", "tr", "zh-rCN", "ja", "ko", "ar", "hi"
+        )
     }
 
     signingConfigs {

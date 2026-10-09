@@ -1,5 +1,101 @@
 # Changelog
 
+## 1.8.0
+
+- Several updates at once go in order. Three files are downloaded at a time and the rest
+  wait in a queue, shown as such; the store's own update is installed last, once every other
+  install is done with, since installing it ends the process. The next install prompt opens
+  only once the system has settled the previous install, not as soon as its prompt closes:
+  on Android 11 and earlier, where every install is confirmed, a prompt opened over an
+  install still running showed as a dark screen that took no touch until it was done. An
+  install whose session the system dropped without a word can be tried again
+- A download, waiting or running, is cancelled by tapping its ring. An unasked update's
+  download stops when the Wi-Fi is left, the charger unplugged or the switch turned off,
+  instead of running on regardless
+- Skip this version or do not update this app, from the details of an update: the app moves
+  to the installed ones with a note, is not counted or announced, and is not installed
+  unasked; the next version is offered again after a skip. Both go with the export
+- The screenshots and descriptions of apps published on Codeberg and GitLab, and of the
+  sources added on the device, are read too; a source added on the device costs one request
+  per push for them
+- Everything from the 1.8.0 betas below: screenshots and longer descriptions, automatic
+  updates, the GitHub token, export and import, no source to begin with, the short
+  description in the device's language, the store in 17 languages, and the new releases of
+  the installed apps found at once
+
+## 1.8.0-beta.5
+
+- A new release of an app installed on the device shows up at once again, as it did in
+  1.6.0: the accounts of the installed apps are asked directly about the repositories
+  pushed to since the index was built, one request per account, while a fresh install
+  with none of them still asks GitHub for nothing. The index itself is rebuilt on a
+  schedule that GitHub kept loosely, hours apart at times
+- The details tell when an installed app was last updated, so that an update made
+  unasked can be seen to have gone through
+- An install attempt is told apart from an earlier one of the same app throughout: the
+  background check gives up only the attempt it began, a late result or cancellation of
+  an earlier attempt leaves the current one alone, and a download that fails after its
+  cancel counts as cancelled
+
+## 1.8.0-beta.4
+
+- The store speaks 17 languages: German, Spanish, French, Italian, Portuguese, Russian,
+  Ukrainian, Polish, Dutch, Turkish, Chinese, Japanese, Korean, Arabic and Hindi join English
+  and Finnish, in the app itself and in the store's own listing. The index reads the
+  descriptions, short descriptions and screenshots developers publish in those languages, and
+  the F-Droid and IzzyOnDroid catalogues contribute their translated summaries
+- The short description is chosen in the device's language, else in English; one in another
+  language no longer takes the place of the English description
+
+## 1.8.0-beta.3
+
+- The short description a developer writes for the store, `short_description.txt` in the
+  repository's `fastlane/metadata/android/<locale>/` folder, takes the place of the
+  repository's description on the card and in the details, in the device's language when
+  the developer provides it. The F-Droid and IzzyOnDroid catalogues contribute their
+  translated summaries the same way
+
+## 1.8.0-beta.2
+
+- No source to begin with: the store's own apps come from the index like everyone else's, so
+  a fresh install asks GitHub for nothing and never runs into its limit of 60 requests an
+  hour per network. The GitHub token is explained as what it is, something only those who
+  add many sources need. An install that already has a source keeps it; remove the store's
+  own account under Sources if you no longer want it read from GitHub
+
+## 1.8.0-beta.1
+
+- The details show the screenshots and the longer description a developer publishes in the
+  repository's `fastlane/metadata/android/` folder, the one F-Droid reads; a screenshot opens
+  to fill the screen. The F-Droid and IzzyOnDroid catalogues contribute their screenshots too
+- Automatic updates: on Android 12 and later, a switch in the settings lets the background
+  check install the updates of the apps the store itself installed without asking, only on
+  Wi-Fi or only while charging if wanted. Other apps, and an update Android wants confirmed,
+  still get a notification
+- A GitHub token in the settings raises GitHub's limit of requests from 60 an hour for the
+  whole network to 5,000. It is checked with GitHub before it is kept, goes to GitHub's API
+  alone, and stays out of backups, device transfers and exports
+- Export and import of the sources, the bookmarks and the settings as a file, through the
+  system's file picker. Importing adds the sources and bookmarks to those on the device and
+  applies the settings
+
+## 1.7.0-beta.3
+
+- A chosen theme takes effect at once; in 1.7.0-beta.2 it showed only after the store was
+  opened again
+
+## 1.7.0-beta.2
+
+- A choice of themes in the settings, under Appearance: five palettes and, on Android 12
+  and later, the colours of the wallpaper. A theme colours the background, the cards and
+  the menus too, and every theme keeps the same contrast
+- A pure black dark theme for OLED screens
+
+## 1.7.0-beta.1
+
+- The details tell which Android an app needs whenever it is known, also when the store
+  itself needs no less, so that every app reads the same way
+
 ## 1.6.0
 
 - The title bar, the search and the filters slide out of view as the list scrolls down and

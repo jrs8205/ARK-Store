@@ -1,0 +1,1 @@
+Tiedot kertovat, minkä Androidin sovellus vaatii, aina kun se tiedetään, myös silloin kun kauppa itse ei vaadi enempää, jotta jokainen sovellus näyttää saman tiedon.

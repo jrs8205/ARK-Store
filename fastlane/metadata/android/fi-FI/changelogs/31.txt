@@ -1,0 +1,1 @@
+Valittu teema tulee voimaan heti; versiossa 1.7.0-beta.2 se näkyi vasta, kun kauppa avattiin uudelleen.

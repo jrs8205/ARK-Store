@@ -1,0 +1,1 @@
+The short description a developer writes for the store takes the place of the repository's description on the card and in the details, in the device's language when the developer provides it. The F-Droid and IzzyOnDroid catalogues contribute their translated summaries too.

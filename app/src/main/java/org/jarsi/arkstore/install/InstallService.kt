@@ -126,7 +126,7 @@ class InstallService : Service() {
     }
 
     private fun progress(states: Map<String, InstallState>): Progress {
-        val downloading = states.filterValues { it is InstallState.Downloading }
+        val downloading = states.filterValues { it is InstallState.Downloading || it is InstallState.Queued }
         val single = downloading.entries.singleOrNull()
         val title = when {
             single != null -> getString(

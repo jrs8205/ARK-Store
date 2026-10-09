@@ -3,9 +3,12 @@ package org.jarsi.arkstore.ui
 import android.content.Context
 import android.icu.text.CompactDecimalFormat
 import android.content.Intent
+import android.os.Build
 import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,6 +41,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -96,6 +100,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -119,6 +124,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -136,7 +142,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.data.AppMetadata
 import org.jarsi.arkstore.data.AppStatus
+import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
@@ -144,6 +152,7 @@ import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
+import org.jarsi.arkstore.work.AutoUpdate
 import org.jarsi.arkstore.work.UpdateCheckWorker
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,6 +162,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
+    val updatePolicy by viewModel.updatePolicy.collectAsStateWithLifecycle()
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -166,14 +176,19 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var searchFocused by remember { mutableStateOf(false) }
     var searchBounds by remember { mutableStateOf(Rect.Zero) }
     val preferences = remember { context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE) }
-    var sortOrder by remember {
+    // Read again after each import, which writes them behind the screen's back.
+    val imports by viewModel.imports.collectAsStateWithLifecycle()
+    var sortOrder by remember(imports) {
         mutableStateOf(
             SortOrder.entries.firstOrNull { it.name == preferences.getString(PREF_SORT, null) }
                 ?: SortOrder.NAME
         )
     }
-    var material by remember { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
-    var hideTop by remember { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    var material by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_MATERIAL, true)) }
+    var hideTop by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_HIDE_TOP, true)) }
+    // The theme itself follows these through ThemeSettings; see Theme.kt.
+    var palette by remember(imports) { mutableStateOf(Palette.fromKey(preferences.getString(PREF_PALETTE, null))) }
+    var black by remember(imports) { mutableStateOf(preferences.getBoolean(PREF_BLACK, false)) }
     // The bar, the search and the filters slide out of view as the list scrolls down and back
     // in as it scrolls up, when the setting says so; see CollapsingTop.
     val top = remember { CollapsingTop() }
@@ -185,15 +200,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
     InstallHaptics(installs)
 
     // With materials on, the screen itself is a sheet of brushed metal, and the bar and the
-    // list lie on it; see Surfaces.
+    // list lie on it; see Surfaces. A pure black background is no metal, and fills the screen
+    // as it does with materials off.
     CompositionLocalProvider(LocalMaterial provides (material && Surfaces.ready(context))) {
+    val background = MaterialTheme.colorScheme.background
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .material(MaterialTheme.colorScheme.background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
+            .material(background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
     ) {
     Scaffold(
-        containerColor = if (LocalMaterial.current) Color.Transparent else MaterialTheme.colorScheme.background,
+        containerColor = if (LocalMaterial.current && Surfaces.takes(background)) Color.Transparent else background,
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
@@ -269,11 +286,12 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // repository, developer or package does, and last those matched by their description
         // alone; within each the chosen order holds.
         val words = remember(query) { searchWords(query) }
+        val languages = deviceLanguages()
         val visible = state.rows.mapNotNull { row ->
             val shown = (activeCategory == null || row.app.category == activeCategory) &&
                 (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
                 (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
-            if (shown) matchRank(row, words)?.let { Pair(row, it) } else null
+            if (shown) matchRank(row, words, languages)?.let { Pair(row, it) } else null
         }
             .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
             .map { it.first }
@@ -387,8 +405,9 @@ fun StoreScreen(viewModel: StoreViewModel) {
             ) {
                 val updates = visible.filter { it.status == AppStatus.UPDATE_AVAILABLE }
                 val installed = visible.filter {
-                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.OTHER_SIGNER ||
-                        it.status == AppStatus.OTHER_BUILD || it.status == AppStatus.NEEDS_NEWER_ANDROID
+                    it.status == AppStatus.UP_TO_DATE || it.status == AppStatus.UPDATE_SKIPPED ||
+                        it.status == AppStatus.OTHER_SIGNER || it.status == AppStatus.OTHER_BUILD ||
+                        it.status == AppStatus.NEEDS_NEWER_ANDROID
                 }
                 val available = visible.filter {
                     it.status == AppStatus.NOT_INSTALLED || it.status == AppStatus.OTHER_APP
@@ -537,7 +556,11 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 selected,
                 onInstall = { viewModel.install(selected.app) },
                 bookmarked = Bookmarks.marked(selected.app, bookmarked),
-                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) }
+                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) },
+                onSkipVersion = { viewModel.skipVersion(selected.app) },
+                onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
+                onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
+                held = selected.app.packageName?.let { it in updatePolicy.held } == true
             )
         }
     }
@@ -555,6 +578,16 @@ fun StoreScreen(viewModel: StoreViewModel) {
         StoreSheet(onDismissRequest = { showSettings = false }) {
             SettingsSheet(
                 viewModel = viewModel,
+                palette = palette,
+                onPaletteChange = {
+                    palette = it
+                    preferences.edit { putString(PREF_PALETTE, it.key) }
+                },
+                black = black,
+                onBlackChange = {
+                    black = it
+                    preferences.edit { putBoolean(PREF_BLACK, it) }
+                },
                 material = material,
                 onMaterialChange = {
                     material = it
@@ -643,6 +676,7 @@ private fun LazyListScope.section(
             install = installs[row.app.fullName],
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
+            onCancel = { viewModel.cancelInstall(row.app.fullName) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
         )
@@ -687,6 +721,7 @@ private fun ErrorBanner(error: LoadError) {
                 when (error) {
                     LoadError.NETWORK -> R.string.error_network
                     LoadError.RATE_LIMIT -> R.string.error_rate_limit
+                    LoadError.TOKEN -> R.string.error_token
                 }
             ),
             style = MaterialTheme.typography.bodyLarge,
@@ -703,6 +738,7 @@ private fun AppCard(
     install: InstallState?,
     bookmarked: Boolean,
     onInstall: () -> Unit,
+    onCancel: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
 ) {
@@ -766,8 +802,8 @@ private fun AppCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 when (install) {
-                    is InstallState.Downloading -> Progress(install.progress)
-                    InstallState.Installing -> Progress(null)
+                    InstallState.Queued, is InstallState.Downloading, InstallState.Installing ->
+                        Progress(ringOf(install), onCancel)
                     else -> when (row.status) {
                         AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
                             Text(stringResource(R.string.action_update))
@@ -778,8 +814,8 @@ private fun AppCard(
                         // Another app under this name: nothing to open and nothing to install
                         // over it; the note below says so.
                         AppStatus.OTHER_APP -> Unit
-                        AppStatus.UP_TO_DATE, AppStatus.OTHER_SIGNER, AppStatus.OTHER_BUILD,
-                        AppStatus.NEEDS_NEWER_ANDROID -> {
+                        AppStatus.UP_TO_DATE, AppStatus.UPDATE_SKIPPED, AppStatus.OTHER_SIGNER,
+                        AppStatus.OTHER_BUILD, AppStatus.NEEDS_NEWER_ANDROID -> {
                             val launch = remember(app.packageName) {
                                 app.packageName?.let {
                                     context.packageManager.getLaunchIntentForPackage(it)
@@ -800,9 +836,10 @@ private fun AppCard(
                 }
             }
 
-            if (app.description.isNotBlank()) {
+            val summary = app.summary(deviceLanguages())
+            if (summary.isNotBlank()) {
                 Text(
-                    text = app.description,
+                    text = summary,
                     style = MaterialTheme.typography.bodyMedium,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
@@ -929,21 +966,47 @@ private fun Stat(icon: Int, value: String, description: String) {
     }
 }
 
+/**
+ * The [ring] of an install on its way: spinning while the system installs, filling while
+ * the file downloads, and empty while the download waits its turn. A download, waiting or
+ * not, is cancelled by tapping it, with [onCancel].
+ */
 @Composable
-private fun Progress(progress: Float?) {
-    val description = stringResource(
-        if (progress == null) R.string.state_installing else R.string.state_downloading
-    )
-    Box(
-        modifier = Modifier
+private fun Progress(ring: InstallRing, onCancel: () -> Unit) {
+    val description = stringResource(ring.label)
+    val progress = ring.progress
+    val haptics = LocalHapticFeedback.current
+    val modifier = if (ring.cancellable) {
+        val cancel = stringResource(R.string.action_cancel_download)
+        Modifier
             .size(48.dp)
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center
-    ) {
+            .clip(CircleShape)
+            .clickable(
+                onClickLabel = cancel,
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    onCancel()
+                }
+            )
+            .semantics { contentDescription = "$description. $cancel" }
+    } else {
+        Modifier
+            .size(48.dp)
+            .semantics { contentDescription = description }
+    }
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         if (progress == null) {
             CircularProgressIndicator(modifier = Modifier.size(32.dp))
         } else {
             CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(32.dp))
+        }
+        if (ring.cancellable) {
+            Icon(
+                painter = painterResource(R.drawable.ic_close),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
@@ -952,7 +1015,13 @@ private fun Progress(progress: Float?) {
 @Composable
 private fun ReleaseNotesText(markdown: String) {
     val lines = remember(markdown) { ReleaseNotes.parse(markdown) }
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    NotesText(lines)
+}
+
+/** Lines read the way release notes are, shown with their headings, bullets, bold and code. */
+@Composable
+internal fun NotesText(lines: List<ReleaseNotes.Line>, modifier: Modifier = Modifier) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = modifier) {
         lines.forEach { line ->
             val text = buildAnnotatedString {
                 line.spans.forEach { span ->
@@ -986,7 +1055,12 @@ private fun DetailsSheet(
     row: AppRow,
     onInstall: () -> Unit,
     bookmarked: Boolean,
-    onBookmarkToggle: () -> Unit
+    onBookmarkToggle: () -> Unit,
+    onSkipVersion: () -> Unit = {},
+    onHoldUpdates: () -> Unit = {},
+    onOfferUpdates: () -> Unit = {},
+    /** Whether the app is held back from every update, as opposed to one version skipped. */
+    held: Boolean = false
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -997,19 +1071,24 @@ private fun DetailsSheet(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
             .navigationBarsPadding()
-            .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
+            .padding(start = DETAILS_INSET, end = DETAILS_INSET, bottom = 24.dp)
     ) {
         Text(
             text = app.title,
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.semantics { heading() }
         )
-        if (app.description.isNotBlank()) {
+        val languages = deviceLanguages()
+        val summary = app.summary(languages)
+        if (summary.isNotBlank()) {
             Text(
-                text = app.description,
+                text = summary,
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(top = 8.dp)
             )
+        }
+        AppMetadata.pick(app.metadata, languages)?.let {
+            Showcase(it, inset = DETAILS_INSET, modifier = Modifier.padding(top = 12.dp))
         }
 
         Spacer(Modifier.height(16.dp))
@@ -1073,17 +1152,13 @@ private fun DetailsSheet(
                 stringResource(R.string.detail_installed_from),
                 stringResource(installerName(it.installer, context.packageName))
             )
+            // With the installer, this tells whether an update the store made unasked went through.
+            formatDateTime(it.updatedAt)?.let { time -> DetailLine(stringResource(R.string.detail_updated_at), time) }
         }
         formatDate(app.publishedAt)?.let {
             DetailLine(stringResource(R.string.detail_published), it)
         }
-        // A requirement the store itself meets says nothing to whoever runs the store.
-        val ownMinSdk = remember { context.applicationInfo.minSdkVersion }
-        val told = app.minSdkCodename != null ||
-            (app.minSdk != null && AndroidVersions.worthTelling(app.minSdk, ownMinSdk))
-        if (told) {
-            requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
-        }
+        requirement(app)?.let { DetailLine(stringResource(R.string.detail_requires), it) }
         DetailLine(
             stringResource(R.string.detail_size),
             Formatter.formatShortFileSize(context, app.apkSize)
@@ -1188,6 +1263,32 @@ private fun DetailsSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 16.dp)
             )
+            if (app.packageName != null) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    StoreOutlinedButton(onClick = onSkipVersion) {
+                        Text(stringResource(R.string.action_skip_version))
+                    }
+                    StoreOutlinedButton(onClick = onHoldUpdates) {
+                        Text(stringResource(R.string.action_hold_updates))
+                    }
+                }
+            }
+        } else if (row.installed != null && row.status == AppStatus.UPDATE_SKIPPED) {
+            Text(
+                text = if (held) {
+                    stringResource(R.string.held_detail)
+                } else {
+                    stringResource(R.string.skipped_detail, app.displayVersion)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            StoreOutlinedButton(onClick = onOfferUpdates, modifier = Modifier.padding(top = 8.dp)) {
+                Text(stringResource(R.string.action_offer_updates))
+            }
         }
         // Not for another app under this name: its version says nothing about a beta.
         if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
@@ -1275,12 +1376,13 @@ private fun DetailLine(label: String, value: String) {
  * known.
  */
 @Composable
-private fun requirement(app: StoreApp): String? {
-    app.minSdkCodename?.let { return stringResource(R.string.requires_preview, it) }
-    val sdk = app.minSdk ?: return null
-    return AndroidVersions.name(sdk)?.let { stringResource(R.string.requires_android, it) }
-        ?: stringResource(R.string.requires_api, sdk)
-}
+private fun requirement(app: StoreApp): String? =
+    when (val needs = AndroidVersions.requirement(app.minSdk, app.minSdkCodename)) {
+        is AndroidVersions.Requirement.Version -> stringResource(R.string.requires_android, needs.name)
+        is AndroidVersions.Requirement.Level -> stringResource(R.string.requires_api, needs.sdk)
+        is AndroidVersions.Requirement.Preview -> stringResource(R.string.requires_preview, needs.codename)
+        null -> null
+    }
 
 @Composable
 private fun versionLine(row: AppRow): String {
@@ -1290,6 +1392,10 @@ private fun versionLine(row: AppRow): String {
             R.string.version_update,
             installed.versionName ?: installed.versionCode.toString(),
             row.app.displayVersion
+        )
+        row.status == AppStatus.UPDATE_SKIPPED && installed != null -> stringResource(
+            R.string.version_skipped,
+            installed.versionName ?: installed.versionCode.toString()
         )
         row.status == AppStatus.OTHER_APP -> row.app.displayVersion
         installed != null -> installed.versionName ?: row.app.displayVersion
@@ -1345,13 +1451,15 @@ private fun StoreButton(
 private fun StoreOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
     val metal = LocalMaterial.current
     OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = true),
+        enabled = enabled,
+        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = enabled),
         contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
     ) {
         ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
@@ -1429,6 +1537,10 @@ private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, to
 @Composable
 private fun SettingsSheet(
     viewModel: StoreViewModel,
+    palette: Palette,
+    onPaletteChange: (Palette) -> Unit,
+    black: Boolean,
+    onBlackChange: (Boolean) -> Unit,
     material: Boolean,
     onMaterialChange: (Boolean) -> Unit,
     hideTop: Boolean,
@@ -1454,8 +1566,21 @@ private fun SettingsSheet(
             modifier = Modifier.padding(top = 4.dp)
         )
         OriginSettings(viewModel)
-        SettingSwitch(
+        GitHubSettings(viewModel)
+        ThemePicker(
             heading = stringResource(R.string.appearance_title),
+            palette = palette,
+            onPaletteChange = onPaletteChange
+        )
+        SettingSwitch(
+            heading = null,
+            label = stringResource(R.string.black_switch),
+            description = stringResource(R.string.black_description),
+            checked = black,
+            onCheckedChange = onBlackChange
+        )
+        SettingSwitch(
+            heading = null,
             label = stringResource(R.string.hide_top_switch),
             description = stringResource(R.string.hide_top_description),
             checked = hideTop,
@@ -1476,12 +1601,223 @@ private fun SettingsSheet(
                 onCheckedChange = onMaterialChange
             )
         }
+        AutoUpdateSettings(viewModel)
         NotificationSetting()
+        TransferSettings(viewModel)
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 24.dp)
+        )
+    }
+}
+
+/**
+ * The personal access token for GitHub, see [GitHubToken]: typed and checked with GitHub
+ * before it is kept, and shown only as whether one is held and what it allows.
+ */
+@Composable
+private fun GitHubSettings(viewModel: StoreViewModel) {
+    val state by viewModel.token.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    // Not saved with the screen's state: a token belongs in its own preferences alone.
+    var input by remember { mutableStateOf("") }
+    LaunchedEffect(state.present) {
+        if (state.present) input = ""
+    }
+    Text(
+        text = stringResource(R.string.github_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(R.string.github_token_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+    Text(
+        text = if (state.present) {
+            val limit = state.limit
+            if (limit != null) {
+                stringResource(R.string.github_token_saved, fullNumber(limit.toLong()))
+            } else {
+                stringResource(R.string.github_token_saved_unknown)
+            }
+        } else {
+            stringResource(R.string.github_token_none)
+        },
+        style = MaterialTheme.typography.bodyLarge,
+        modifier = Modifier.padding(top = 8.dp)
+    )
+    if (state.present) {
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                viewModel.removeToken()
+            },
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(stringResource(R.string.action_remove_token))
+        }
+        return
+    }
+    OutlinedTextField(
+        value = input,
+        onValueChange = {
+            input = it
+            viewModel.clearTokenError()
+        },
+        enabled = !state.checking,
+        label = { Text(stringResource(R.string.github_token_hint)) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        isError = state.error != null,
+        supportingText = state.error?.let { error ->
+            {
+                Text(
+                    stringResource(
+                        when (error) {
+                            TokenError.REJECTED -> R.string.github_token_rejected
+                            TokenError.NETWORK -> R.string.error_network
+                            TokenError.RATE_LIMIT -> R.string.error_rate_limit
+                        }
+                    )
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done
+        ),
+        keyboardActions = KeyboardActions(onDone = { if (input.isNotBlank()) viewModel.saveToken(input) }),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp)
+    )
+    Button(
+        onClick = {
+            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            viewModel.saveToken(input)
+        },
+        enabled = input.isNotBlank() && !state.checking,
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        Text(stringResource(R.string.action_save_token))
+    }
+}
+
+/**
+ * Whether the background check installs updates unasked, and when; see [AutoUpdate]. Before
+ * Android 12 the switch stays off and says why.
+ */
+@Composable
+private fun AutoUpdateSettings(viewModel: StoreViewModel) {
+    val context = LocalContext.current
+    val imports by viewModel.imports.collectAsStateWithLifecycle()
+    var settings by remember(imports) { mutableStateOf(AutoUpdate.read(context)) }
+    val supported = Build.VERSION.SDK_INT >= AutoUpdate.SUPPORTED_SDK
+    fun change(changed: AutoUpdate) {
+        settings = changed
+        AutoUpdate.write(context, changed)
+    }
+    SettingSwitch(
+        heading = stringResource(R.string.auto_update_title),
+        label = stringResource(R.string.auto_update_switch),
+        description = stringResource(
+            if (supported) R.string.auto_update_description else R.string.auto_update_unsupported
+        ),
+        checked = settings.enabled && supported,
+        enabled = supported,
+        onCheckedChange = { change(settings.copy(enabled = it)) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.auto_update_unmetered_switch),
+        description = stringResource(R.string.auto_update_unmetered_description),
+        checked = settings.unmeteredOnly,
+        enabled = supported && settings.enabled,
+        onCheckedChange = { change(settings.copy(unmeteredOnly = it)) }
+    )
+    SettingSwitch(
+        heading = null,
+        label = stringResource(R.string.auto_update_charging_switch),
+        description = stringResource(R.string.auto_update_charging_description),
+        checked = settings.chargingOnly,
+        enabled = supported && settings.enabled,
+        onCheckedChange = { change(settings.copy(chargingOnly = it)) }
+    )
+}
+
+/**
+ * Saves the sources, the bookmarks and the settings to a file the user picks, and brings
+ * them back from one; see [Backup]. The system's file picker does the picking.
+ */
+@Composable
+private fun TransferSettings(viewModel: StoreViewModel) {
+    val state by viewModel.transfer.collectAsStateWithLifecycle()
+    val haptics = LocalHapticFeedback.current
+    val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(Backup.MIME_TYPE)) { uri ->
+        if (uri != null) viewModel.exportTo(uri)
+    }
+    val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.importFrom(uri)
+    }
+    Text(
+        text = stringResource(R.string.transfer_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(R.string.transfer_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 8.dp)
+    ) {
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                export.launch(Backup.FILE_NAME)
+            },
+            enabled = !state.busy
+        ) {
+            Text(stringResource(R.string.action_export))
+        }
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                import.launch(arrayOf("*/*"))
+            },
+            enabled = !state.busy
+        ) {
+            Text(stringResource(R.string.action_import))
+        }
+    }
+    val imported = state.imported
+    val outcome = when {
+        state.error == TransferError.NOT_A_BACKUP -> stringResource(R.string.transfer_not_backup)
+        state.error == TransferError.FAILED -> stringResource(R.string.transfer_failed)
+        imported != null -> stringResource(R.string.transfer_imported, imported.first, imported.second)
+        state.exported -> stringResource(R.string.transfer_exported)
+        else -> null
+    }
+    if (outcome != null) {
+        Text(
+            text = outcome,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp)
         )
     }
 }
@@ -1747,6 +2083,7 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
                                 SourceError.NOT_OPEN -> R.string.sources_error_not_open
                                 SourceError.NETWORK -> R.string.error_network
                                 SourceError.RATE_LIMIT -> R.string.error_rate_limit
+                                SourceError.TOKEN -> R.string.error_token
                             }
                         )
                     )
@@ -1781,16 +2118,17 @@ private fun SourcesSheet(viewModel: StoreViewModel) {
     }
 }
 
-private const val PREFS_UI = "ui"
-private const val PREF_SORT = "sort"
-private const val PREF_MATERIAL = "material"
-private const val PREF_HIDE_TOP = "hide_top"
+/** What the details keep clear of the screen's edges. */
+private val DETAILS_INSET = 24.dp
+internal const val PREF_SORT = "sort"
+internal const val PREF_MATERIAL = "material"
+internal const val PREF_HIDE_TOP = "hide_top"
 
 /** The room the list keeps below the top however high the top is; see CollapsingTop. */
 private val MIN_LIST_ROOM = 200.dp
 
 /** The order of apps within each section of the list. */
-private enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
+internal enum class SortOrder(val label: Int, val comparator: Comparator<AppRow>) {
     NAME(R.string.sort_name, compareBy { it.app.title.lowercase() }),
     DOWNLOADS(
         R.string.sort_downloads,
@@ -2081,10 +2419,11 @@ private fun searchWords(query: String): List<String> =
 
 /**
  * How well [row] answers a search for [words]: 0 when its name carries them all, 1 when its
- * name together with its repository, developer and package does, 2 when its description is
- * needed as well; null when it does not answer. No words match every app by name.
+ * name together with its repository, developer and package does, 2 when its description, or
+ * the summary shown on a device of [languages], is needed as well; null when it does not
+ * answer. No words match every app by name.
  */
-private fun matchRank(row: AppRow, words: List<String>): Int? {
+private fun matchRank(row: AppRow, words: List<String>, languages: List<String>): Int? {
     if (words.isEmpty()) return 0
     val app = row.app
     fun String.carries() = words.all { contains(it, ignoreCase = true) }
@@ -2093,9 +2432,16 @@ private fun matchRank(row: AppRow, words: List<String>): Int? {
     return when {
         name.carries() -> 0
         identity.carries() -> 1
-        "$identity ${app.description}".carries() -> 2
+        "$identity ${app.description} ${app.summary(languages)}".carries() -> 2
         else -> null
     }
+}
+
+/** The languages of the device, in order of preference, as [AppMetadata.pick] takes them. */
+@Composable
+private fun deviceLanguages(): List<String> {
+    val locales = LocalConfiguration.current.locales
+    return remember(locales) { List(locales.size()) { locales[it].language } }
 }
 
 private fun categoryLabel(id: String): Int = when (id) {
@@ -2125,6 +2471,13 @@ private fun formatDate(iso: String): String? = runCatching {
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
         .withZone(ZoneId.systemDefault())
         .format(Instant.parse(iso))
+}.getOrNull()
+
+/** A moment in [millis] since the epoch as a date and a time of day, or null for none (0). */
+private fun formatDateTime(millis: Long): String? = if (millis <= 0) null else runCatching {
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochMilli(millis))
 }.getOrNull()
 
 private fun openUrl(context: Context, url: String) {

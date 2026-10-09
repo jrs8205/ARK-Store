@@ -20,6 +20,7 @@
     <string name="section_available">Not installed</string>
 
     <string name="version_update" translatable="false">%1$s → %2$s</string>
+    <string name="version_skipped">%1$s (update skipped)</string>
     <string name="footer_checked">Last checked %1$s</string>
 
     <string name="list_loading">Loading apps…</string>
@@ -58,6 +59,8 @@
     <string name="action_remove_source">Remove source %1$s</string>
     <string name="state_downloading">Downloading</string>
     <string name="state_installing">Installing</string>
+    <string name="state_queued">Queued</string>
+    <string name="action_cancel_download">Cancel download</string>
     <plurals name="stat_stars">
         <item quantity="one">%d star</item>
         <item quantity="other">%d stars</item>
@@ -134,6 +137,15 @@
     <string name="material_switch">Material surfaces</string>
     <string name="material_description">Draws the screen and everything on it as brushed metal lit from above, computed by the graphics processor. On by default on Android 13 and later; turn it off here if you prefer flat colours or want to save power.</string>
     <string name="material_unavailable">Not available on this device: its graphics driver could not draw the surfaces, so the flat colours stay.</string>
+    <string name="theme_title">Theme</string>
+    <string name="palette_ark">ARK</string>
+    <string name="palette_forest">Forest</string>
+    <string name="palette_graphite">Graphite</string>
+    <string name="palette_wine">Wine</string>
+    <string name="palette_midnight">Midnight</string>
+    <string name="palette_wallpaper">Wallpaper</string>
+    <string name="black_switch">Pure black in the dark theme</string>
+    <string name="black_description">The dark theme uses a black background, which saves power on an OLED screen.</string>
     <string name="settings_version" translatable="false">ARK-Store %1$s</string>
     <string name="action_cancel">Cancel</string>
     <string name="beta_return_note">Turning this off offers stable versions again. A beta that is already installed stays until the next stable version replaces it; to go back sooner, open the app\'s details.</string>
@@ -186,6 +198,7 @@
     <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>
     <string name="detail_installed_from">Installed from</string>
+    <string name="detail_updated_at">Last updated</string>
     <string name="installer_play" translatable="false">Google Play</string>
     <string name="installer_fdroid" translatable="false">F-Droid</string>
     <string name="installer_aurora" translatable="false">Aurora Store</string>
@@ -193,6 +206,11 @@
     <string name="installer_other">another app, or by hand</string>
     <string name="same_signer_detail">The installed app is signed with the same key as the version offered here, so ARK-Store can update it.</string>
     <string name="unknown_signer_detail">Whether the installed app is signed with the same key as the version offered here is not known yet. It is checked once the file has been downloaded.</string>
+    <string name="action_skip_version">Skip this version</string>
+    <string name="action_hold_updates">Do not update this app</string>
+    <string name="action_offer_updates">Offer updates again</string>
+    <string name="skipped_detail">Version %1$s is skipped. The next one will be offered again.</string>
+    <string name="held_detail">Updates of this app are not offered. They are not listed, counted or installed automatically.</string>
     <string name="other_signer_note">Installed from another source. ARK-Store cannot update it.</string>
     <string name="other_signer_detail">The installed app is signed with a different key than the version offered here, usually because it was installed from another store. Android does not let ARK-Store update it. To switch to this version, uninstall the app first and then install it from here. Uninstalling removes the app\'s data.</string>
     <string name="other_build_note">Possibly another developer\'s build. Not offered as an update.</string>
@@ -204,4 +222,31 @@
     <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>
     <string name="channel_installs">Ready to install</string>
     <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
+    <string name="screenshot_description">Screenshot %1$d of %2$d</string>
+    <string name="auto_update_title">Automatic updates</string>
+    <string name="auto_update_switch">Install updates in the background</string>
+    <string name="auto_update_description">Apps that ARK-Store installed are updated without asking when the background check finds a newer version. Other apps still get a notification, as does an update that Android wants confirmed.</string>
+    <string name="auto_update_unsupported">Needs Android 12 or later. On this device the background check only notifies.</string>
+    <string name="auto_update_unmetered_switch">Only on Wi-Fi</string>
+    <string name="auto_update_unmetered_description">Not on mobile data or another metered network</string>
+    <string name="auto_update_charging_switch">Only while charging</string>
+    <string name="auto_update_charging_description">Waits until the device is plugged in</string>
+    <string name="error_token">GitHub rejected the token given in the settings. Replace or remove it there.</string>
+    <string name="github_title">GitHub</string>
+    <string name="github_token_description">Only needed if you add sources: the store reads the accounts and repositories you have added straight from GitHub, and without a token GitHub lets a network do that 60 times an hour. If the list stops refreshing with a note that GitHub is limiting requests, a token raises the limit. Create a fine-grained personal access token with no permissions at github.com/settings/personal-access-tokens; public repositories can be read without any. The token stays on this device, outside backups and exports, and goes to GitHub alone.</string>
+    <string name="github_token_hint">Personal access token</string>
+    <string name="github_token_none">No token. Most people need none.</string>
+    <string name="github_token_saved">Token in use: %1$s requests an hour.</string>
+    <string name="github_token_saved_unknown">Token in use.</string>
+    <string name="github_token_rejected">GitHub does not accept this token.</string>
+    <string name="action_save_token">Save token</string>
+    <string name="action_remove_token">Remove token</string>
+    <string name="transfer_title">Export and import</string>
+    <string name="transfer_description">Save the sources, the bookmarks and the settings to a file, and bring them back from one, here or on another device. The GitHub token is not included. Importing adds the file\'s sources and bookmarks to those here and applies its settings.</string>
+    <string name="action_export">Export</string>
+    <string name="action_import">Import</string>
+    <string name="transfer_exported">Saved.</string>
+    <string name="transfer_imported">Imported: %1$d new sources and %2$d new bookmarks. The settings were applied.</string>
+    <string name="transfer_not_backup">This is not a file exported by ARK-Store.</string>
+    <string name="transfer_failed">The file could not be read or written.</string>
 </resources>

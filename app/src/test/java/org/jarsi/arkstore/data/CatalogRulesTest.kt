@@ -247,6 +247,20 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun metadataComesFromAnyPlaceThatHasIt() {
+        val published = app()
+        val metadata = mapOf("en" to AppMetadata(null, listOf("https://x/org.example/1.png")))
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "dev").copy(metadata = metadata)
+        val row = merged(listOf(published, fdroid)).single()
+        assertEquals(published.fullName, row.app.fullName)
+        assertEquals(metadata, row.app.metadata)
+        // Metadata of the app's own is kept.
+        val own = mapOf("en" to AppMetadata("https://x/full_description.txt", emptyList()))
+        assertEquals(own, merged(listOf(published.copy(metadata = own), fdroid)).single().app.metadata)
+        assertTrue(merged(listOf(published)).single().app.metadata.isEmpty())
+    }
+
+    @Test
     fun appWithoutAnIconIsShownByItsFirstLetterOrDigit() {
         assertEquals("B", CatalogRules.initial("bitwarden"))
         assertEquals("7", CatalogRules.initial("7-Zip"))
@@ -496,5 +510,50 @@ class CatalogRulesTest {
         assertTrue(CatalogRules.belongsTo("owner/App", "owner/app"))
         assertFalse(CatalogRules.belongsTo("owner/app", "owner/other"))
         assertFalse(CatalogRules.belongsTo("owner2/app", "owner"))
+    }
+
+    @Test
+    fun accountsOfInstalledAppsAreAskedApartFromWhatASourceCovers() {
+        val asked = CatalogRules.accountsToAsk(
+            installed = listOf("Owner/App", "owner/Other", "Dev/tool", "Covered/app", "Also/one"),
+            sources = listOf("covered", "also/one")
+        )
+        // An account is spelled as its first repository spells it, and asked once.
+        assertEquals(
+            mapOf("Owner" to listOf("Owner/App", "owner/Other"), "Dev" to listOf("Dev/tool")),
+            asked
+        )
+    }
+
+    @Test
+    fun noInstalledAppMeansNoAccountToAsk() {
+        assertTrue(CatalogRules.accountsToAsk(emptyList(), listOf("owner")).isEmpty())
+        assertTrue(CatalogRules.accountsToAsk(listOf("owner/app"), listOf("Owner")).isEmpty())
+    }
+
+    @Test
+    fun repositoryPushedToSinceTheIndexSawItIsAskedAbout() {
+        assertTrue(CatalogRules.pushedSince("2026-10-08T16:00:00Z", "2026-10-08T18:14:46Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T18:14:46Z", "2026-10-08T18:14:46Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T18:14:46Z", "2026-10-08T16:00:00Z"))
+        // An index that does not tell when it saw the repository is not trusted over GitHub;
+        // GitHub not telling when the repository was pushed to leaves the index to speak.
+        assertTrue(CatalogRules.pushedSince("", "2026-10-08T16:00:00Z"))
+        assertFalse(CatalogRules.pushedSince("2026-10-08T16:00:00Z", ""))
+    }
+
+    @Test
+    fun theNewerOfTwoReadingsOfAReleaseIsKept() {
+        val older = app(versionCode = 1)
+        val newer = app(versionCode = 2)
+        assertSame(newer, CatalogRules.newerRelease(older, newer))
+        assertSame(newer, CatalogRules.newerRelease(newer, older))
+        assertSame(older, CatalogRules.newerRelease(older, null))
+        assertSame(newer, CatalogRules.newerRelease(null, newer))
+        assertNull(CatalogRules.newerRelease(null, null))
+        // Of two readings of the same version, the later one is taken: its stars, downloads
+        // and file are the current ones.
+        val later = app(versionCode = 2).copy(stars = 99, apkUrl = "https://example.invalid/replacement.apk")
+        assertSame(later, CatalogRules.newerRelease(newer, later))
     }
 }

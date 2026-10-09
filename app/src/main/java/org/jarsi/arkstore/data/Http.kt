@@ -20,6 +20,8 @@ class RateLimitedException(val resetAtMillis: Long) : IOException("GitHub rate l
 object Http {
     private const val TIMEOUT_MS = 20_000
     private const val USER_AGENT = "ARK-Store/${BuildConfig.VERSION_NAME}"
+    private const val MAX_REDIRECTS = 3
+    private val REDIRECTS = setOf(301, 302, 307, 308)
 
     private fun open(url: String): HttpURLConnection =
         (URL(url).openConnection() as HttpURLConnection).apply {
@@ -29,26 +31,41 @@ object Http {
             setRequestProperty("User-Agent", USER_AGENT)
         }
 
-    /** Fetches a GitHub API document. */
+    /**
+     * Fetches a GitHub API document, with the [token] the user has given, if any. Redirects,
+     * as for a renamed repository, are followed by hand, so that the token goes to the API
+     * alone, see [GitHubToken.authorization].
+     */
     @Throws(IOException::class)
-    fun getApi(url: String): String {
-        val connection = open(url).apply {
-            setRequestProperty("Accept", "application/vnd.github+json")
-            setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
-        }
-        try {
-            val code = connection.responseCode
-            if (code == 200) return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
-            if ((code == 403 || code == 429) &&
-                connection.getHeaderField("x-ratelimit-remaining") == "0"
-            ) {
-                val reset = connection.getHeaderField("x-ratelimit-reset")?.toLongOrNull() ?: 0
-                throw RateLimitedException(reset * 1000)
+    fun getApi(url: String, token: String? = GitHubToken.get()): String {
+        var address = url
+        repeat(MAX_REDIRECTS + 1) {
+            val connection = open(address).apply {
+                instanceFollowRedirects = false
+                setRequestProperty("Accept", "application/vnd.github+json")
+                setRequestProperty("X-GitHub-Api-Version", "2022-11-28")
+                GitHubToken.authorization(address, token)?.let { setRequestProperty("Authorization", it) }
             }
-            throw HttpStatusException(code, connection.getHeaderField("retry-after") != null)
-        } finally {
-            connection.disconnect()
+            try {
+                val code = connection.responseCode
+                if (code == 200) return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
+                if (code in REDIRECTS) {
+                    val location = connection.getHeaderField("Location") ?: throw HttpStatusException(code)
+                    address = URL(URL(address), location).toString()
+                    return@repeat
+                }
+                if ((code == 403 || code == 429) &&
+                    connection.getHeaderField("x-ratelimit-remaining") == "0"
+                ) {
+                    val reset = connection.getHeaderField("x-ratelimit-reset")?.toLongOrNull() ?: 0
+                    throw RateLimitedException(reset * 1000)
+                }
+                throw HttpStatusException(code, connection.getHeaderField("retry-after") != null)
+            } finally {
+                connection.disconnect()
+            }
         }
+        throw IOException("Too many redirects")
     }
 
     /**

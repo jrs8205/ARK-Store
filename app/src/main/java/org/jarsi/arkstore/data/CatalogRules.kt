@@ -299,10 +299,12 @@ internal object CatalogRules {
             val project = project(row)
             val withIt = inLine.filter { it === row || it.fromRepository || project(it).let { named -> named == null || named == project } }
             val others = withIt.filter { it !in kept }.map { it.source }.distinct()
-            // The icon comes from any place that has one: the app is the same wherever it
-            // comes from, and few places tell its icon.
-            val icon = withIt.firstNotNullOfOrNull { it.icon }
-            Merged(if (row.icon == null && icon != null) row.copy(icon = icon) else row, others)
+            // The icon and the metadata come from any place that has them: the app is the
+            // same wherever it comes from, and few places tell its icon.
+            val icon = row.icon ?: withIt.firstNotNullOfOrNull { it.icon }
+            val metadata = row.metadata.ifEmpty { withIt.firstOrNull { it.metadata.isNotEmpty() }?.metadata.orEmpty() }
+            val filled = if (icon != row.icon || metadata != row.metadata) row.copy(icon = icon, metadata = metadata) else row
+            Merged(filled, others)
         }
     }
 
@@ -389,4 +391,39 @@ internal object CatalogRules {
         } else {
             fullName.substringBefore('/').equals(source, ignoreCase = true)
         }
+
+    /**
+     * The accounts to ask GitHub about directly although the index lists their apps, each
+     * with the repositories of the apps [installed] from it, by full name. An installed app
+     * is one whose new release the user waits for, and the index is rebuilt only now and
+     * then; what a [sources] entry covers is asked about with it already. An account is
+     * spelled as its first repository spells it, whatever the case of the others.
+     */
+    fun accountsToAsk(installed: Collection<String>, sources: Collection<String>): Map<String, List<String>> =
+        installed.filter { name -> sources.none { belongsTo(name, it) } }
+            .groupBy { it.substringBefore('/').lowercase() }
+            .values
+            .associateBy { it.first().substringBefore('/') }
+
+    /**
+     * Whether a repository has been pushed to, at [pushedAt], since the index saw it at
+     * [stamp]; both are GitHub's timestamps, which order as text. An index that does not
+     * say is not trusted over GitHub, and GitHub not saying leaves the index to speak.
+     */
+    fun pushedSince(stamp: String, pushedAt: String): Boolean = pushedAt > stamp
+
+    /**
+     * The newer of two readings of the same release line of an app, [a] and then [b], by
+     * the version each offers; either may be missing. Two readings of a repository pushed
+     * to at the same moment can still differ: one may have been read before the release had
+     * its file. Of the same version the later reading, [b], is taken: its stars, downloads,
+     * descriptions and file are the current ones, and a file replaced under the same
+     * version is found at its new address.
+     */
+    fun newerRelease(a: StoreApp?, b: StoreApp?): StoreApp? = when {
+        a == null -> b
+        b == null -> a
+        a.versionCode > b.versionCode -> a
+        else -> b
+    }
 }

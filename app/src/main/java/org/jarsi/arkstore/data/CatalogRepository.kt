@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.data
 
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.content.edit
@@ -65,6 +66,25 @@ class CatalogRepository private constructor(context: Context) {
         fun mapApps(transform: (StoreApp) -> StoreApp) =
             Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered, stored)
 
+        /**
+         * The newer of this entry and [other], the later reading, of the same repository:
+         * the one of the later push, or, of the same push, the newer release of each kind
+         * from either, and of the same release the later reading, see
+         * [CatalogRules.newerRelease].
+         */
+        fun newerWith(other: Entry): Entry = when {
+            stamp > other.stamp -> this
+            other.stamp > stamp -> other
+            else -> Entry(
+                stamp,
+                maxOf(fetchedAt, other.fetchedAt),
+                CatalogRules.newerRelease(app, other.app),
+                CatalogRules.newerRelease(beta, other.beta),
+                discovered || other.discovered,
+                stored
+            )
+        }
+
         /** This entry marked the way the store index lists its repository. */
         fun listedAs(auto: Boolean) = Entry(
             stamp,
@@ -81,6 +101,14 @@ class CatalogRepository private constructor(context: Context) {
     private val thisAndroid = CatalogRules.Android.THIS
 
     private val packages = context.packageManager
+
+    private val resources = context.resources
+    private val appContext = context.applicationContext
+
+    /** The languages the device reads, most preferred first; what metadata is read for. */
+    private fun deviceLanguages(): List<String> = resources.configuration.locales.let { locales ->
+        List(locales.size()) { locales[it].language }
+    }
 
     private val preferences = context.getSharedPreferences("catalog", Context.MODE_PRIVATE)
 
@@ -233,7 +261,7 @@ class CatalogRepository private constructor(context: Context) {
                         // The index is rebuilt about hourly. A repository pushed to since then
                         // is asked about directly, so a release just made shows up at once.
                         val known = indexed?.get(fullName)
-                        if (known != null && known.stamp >= repo.optString("pushed_at")) continue
+                        if (known != null && !CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
                         repos.putIfAbsent(fullName, repo)
                     }
                 } catch (e: IOException) {
@@ -243,15 +271,50 @@ class CatalogRepository private constructor(context: Context) {
                 }
             }
 
-            // The index speaks for every repository that is not asked about directly. The
-            // exception is one kept from a source that could not be reached, when it was read
-            // from GitHub after the index was built: falling back to the index would offer an
-            // older release than the one already known.
+            // The index is rebuilt on a schedule that GitHub keeps loosely, hours apart at
+            // times. An app installed on this device is one whose new release the user waits
+            // for, so the account of each is asked directly, as a source is, about the
+            // repositories pushed to since the index was built; only those of the installed
+            // apps are looked up. A device with none installed asks nothing, as before.
+            if (indexed != null) {
+                val packages = InstalledApps.snapshot(appContext)
+                val installed = indexed.filter { (_, entry) ->
+                    (entry.app ?: entry.beta)?.packageName in packages
+                }.keys
+                for ((owner, names) in CatalogRules.accountsToAsk(installed, sources.list())) {
+                    // The index's spelling of each name is kept, whatever case GitHub gives
+                    // it, so that the app has one name throughout: in the catalogue, on the
+                    // screen and in the install under way. GitHub answers to either spelling.
+                    val wanted = names.associateBy { it.lowercase() }
+                    val since = names.minOf { indexed.getValue(it).stamp }
+                    try {
+                        for (repo in listPushedSince(owner, since)) {
+                            val fullName = wanted[repo.getString("full_name").lowercase()] ?: continue
+                            val known = indexed.getValue(fullName)
+                            if (!CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
+                            repo.put("full_name", fullName)
+                            repos.putIfAbsent(fullName, repo)
+                        }
+                    } catch (e: IOException) {
+                        // What was read of these apps before stays, as for a source: a release
+                        // found since the index was built would otherwise give way to the index.
+                        Log.w(TAG, "Account $owner of installed apps unavailable", e)
+                        record(e)
+                        names.forEach { name -> entries[name]?.let { updated[name] = it } }
+                    }
+                }
+            }
+
+            // The index speaks for every repository that is not asked about directly, unless
+            // what is known of the app already is newer: read from GitHub after the index was
+            // built, whether kept from before or taken over from a source or an account that
+            // could not be reached now. Of a later push the whole entry is newer; of the same
+            // push, a release the index read before its file was there is not, see
+            // [Entry.newerWith]. The index still says how the app was found.
             indexed?.forEach { (fullName, entry) ->
                 if (fullName in repos) return@forEach
-                val kept = updated[fullName]
-                val newer = kept != null && kept.stamp > entry.stamp
-                updated[fullName] = if (newer) kept.listedAs(entry.auto) else entry
+                val known = updated[fullName] ?: entries[fullName]
+                updated[fullName] = known?.newerWith(entry)?.listedAs(entry.auto) ?: entry
             }
 
             // The more apps there are, the longer each stored answer has to last, or the
@@ -308,7 +371,13 @@ class CatalogRepository private constructor(context: Context) {
                         } catch (e: IOException) {
                             Log.w(TAG, "Release lookup failed for $fullName", e)
                             record(e)
-                            old?.let { fullName to it }
+                            // The newer of what was known before and what the index says, so
+                            // that an app is neither dropped for a lookup that failed, when
+                            // the index has it, nor put back to a release older than one
+                            // already found.
+                            val listed = indexed?.get(fullName)
+                            (if (old != null && listed != null) old.newerWith(listed) else old ?: listed)
+                                ?.let { fullName to it }
                         }
                     }
                 }.awaitAll().filterNotNull()
@@ -668,7 +737,8 @@ class CatalogRepository private constructor(context: Context) {
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.
             antiFeatures = list(if (apk.has("antiFeatures")) apk else json, "antiFeatures"),
-            icon = AppIcon.of(json.opt("icon"))
+            icon = AppIcon.of(json.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata"))
         )
     }
 
@@ -759,8 +829,20 @@ class CatalogRepository private constructor(context: Context) {
             signer = StoreApp.indexedSigner(apk),
             minSdk = StoreApp.minSdkOf(apk),
             minSdkCodename = StoreApp.minSdkCodenameOf(apk),
-            icon = AppIcon.of(apk.opt("icon"))
+            icon = AppIcon.of(apk.opt("icon")),
+            metadata = AppMetadata.mapOf(json.optJSONObject("metadata")),
+            metadataAt = (json.opt("metadataAt") as? String)?.takeIf { it.isNotEmpty() }
         )
+    }
+
+    /**
+     * Asks GitHub what [token] is good for and returns the hourly limit of requests it
+     * allows. A token GitHub does not know fails with a 401.
+     */
+    @Throws(IOException::class)
+    suspend fun checkToken(token: String): Int = withContext(Dispatchers.IO) {
+        // The limit itself is asked for, which costs nothing of it.
+        GitHubToken.limitOf(Http.getApi("$API/rate_limit", token)) ?: throw IOException("No limit told")
     }
 
     /** Repositories whose developers have tagged them with the store topic. */
@@ -792,6 +874,33 @@ class CatalogRepository private constructor(context: Context) {
             )
             for (i in 0 until batch.length()) repos += batch.getJSONObject(i)
             if (batch.length() < PAGE_SIZE) break
+        }
+        return repos.filter { !it.optBoolean("fork") && !it.optBoolean("archived") }
+            .filter(::isListable)
+    }
+
+    /**
+     * The repositories of the account [source] pushed to since [since], a GitHub timestamp,
+     * newest first: only as many pages as hold them are read, which is one as a rule.
+     */
+    private fun listPushedSince(source: String, since: String): List<JSONObject> {
+        val repos = ArrayList<JSONObject>()
+        for (page in 1..MAX_REPO_PAGES) {
+            val batch = JSONArray(
+                Http.getApi(
+                    "$API/users/$source/repos?per_page=$PAGE_SIZE&type=owner&sort=pushed&direction=desc&page=$page"
+                )
+            )
+            var last = batch.length() < PAGE_SIZE
+            for (i in 0 until batch.length()) {
+                val repo = batch.getJSONObject(i)
+                if (!CatalogRules.pushedSince(since, repo.optString("pushed_at"))) {
+                    last = true
+                    break
+                }
+                repos += repo
+            }
+            if (last) break
         }
         return repos.filter { !it.optBoolean("fork") && !it.optBoolean("archived") }
             .filter(::isListable)
@@ -910,8 +1019,70 @@ class CatalogRepository private constructor(context: Context) {
         // A prerelease at the top of the list is usually newer than the full release, but the
         // list is ordered by commit date; CatalogRules.offered compares the versions.
         val newest = releases.firstOrNull()?.takeIf { it.optBoolean("prerelease") }
-        return stable?.let { build(it, prerelease = false) } to
-            newest?.let { build(it, prerelease = true) }
+        val app = stable?.let { build(it, prerelease = false) }
+        val beta = newest?.let { build(it, prerelease = true) }
+        // Read only for a repository with something to list: a tree costs a request.
+        if (app == null && beta == null) return null to null
+        val (metadata, metadataAt) = repoMetadata(repo, previous)
+        return app?.copy(metadata = metadata, metadataAt = metadataAt) to
+            beta?.copy(metadata = metadata, metadataAt = metadataAt)
+    }
+
+    /**
+     * What the repository [repo] publishes of its app (see [FastlaneMetadata]), with the mark
+     * of the read: as one of the [previous] apps knows it, when that was read for the current
+     * push and the device's languages ([FastlaneMetadata.covers]), so that a lookup costs a
+     * request only once per push; else read now, from the list of the files in the metadata
+     * folder of the default branch, which is one request to the API, and the short
+     * descriptions, which are not. What could be read, unmarked, when any of it could not be,
+     * so that the next lookup tries again: it is an extra, not worth failing the release for.
+     */
+    private fun repoMetadata(repo: JSONObject, previous: List<StoreApp>): Pair<Map<String, AppMetadata>, String?> {
+        val none = emptyMap<String, AppMetadata>() to null
+        val stamp = repo.optString("pushed_at").takeIf { it.isNotEmpty() } ?: return none
+        val languages = deviceLanguages()
+        previous.firstOrNull { FastlaneMetadata.covers(it, stamp, languages) }?.let { return it.metadata to it.metadataAt }
+        val fullName = repo.getString("full_name")
+        val branch = repo.optString("default_branch").takeIf { it.isNotEmpty() } ?: return none
+        val encodedBranch = Uri.encode(branch, "/")
+        val marked = stamp.filter { it.isDigit() }
+        val mark = FastlaneMetadata.mark(stamp, languages)
+        return try {
+            // The folder's own tree: small, whereas the whole repository's can run past what
+            // GitHub gives at once. A repository without the folder has no metadata, for good
+            // until its next push.
+            val folder = Uri.encode("$branch:${FastlaneMetadata.FOLDER.trimEnd('/')}", "/:")
+            val tree = try {
+                JSONObject(Http.getApi("$API/repos/$fullName/git/trees/$folder?recursive=1"))
+            } catch (e: HttpStatusException) {
+                if (e.code == 404) return emptyMap<String, AppMetadata>() to mark else throw e
+            }
+            if (tree.optBoolean("truncated")) {
+                Log.w(TAG, "Metadata folder of $fullName is too large to list")
+                return none
+            }
+            val paths = tree.optJSONArray("tree")?.let { array ->
+                (0 until array.length()).mapNotNull { array.optJSONObject(it) }
+                    .filter { it.optString("type") == "blob" }
+                    .map { FastlaneMetadata.FOLDER + it.optString("path") }
+            }.orEmpty()
+            val read = FastlaneMetadata.read(
+                paths,
+                languages,
+                address = { path -> "$RAW/$fullName/$encodedBranch/${Uri.encode(path, "/")}?at=$marked" }
+            ) { address ->
+                try {
+                    String(Http.getBytes(address, MAX_TEXT_BYTES), Charsets.UTF_8)
+                } catch (e: IOException) {
+                    Log.w(TAG, "Could not read $address", e)
+                    null
+                }
+            }
+            read.metadata to if (read.complete) mark else null
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not read metadata of $fullName", e)
+            none
+        }
     }
 
     /**
@@ -1060,6 +1231,9 @@ class CatalogRepository private constructor(context: Context) {
 
     companion object {
         private const val TAG = "CatalogRepository"
+        /** The source names of the other catalogues, see [setCatalogue]. */
+        val CATALOGUE_NAMES: Set<String> get() = CATALOGUES.keys
+
         private const val PREF_BETA = "include_beta"
         private const val PREF_AUTO = "include_auto"
         private const val PREF_INDEX_ETAG = "index_etag"
@@ -1076,6 +1250,9 @@ class CatalogRepository private constructor(context: Context) {
             StoreApp.SOURCE_FDROID to BuildConfig.FDROID_INDEX_URL
         )
         private const val API = "https://api.github.com"
+        private const val RAW = "https://raw.githubusercontent.com"
+        /** The most a short description is read for; the index reads as far. */
+        private const val MAX_TEXT_BYTES = 16 * 1024
         private const val PARALLEL_REQUESTS = 4
         private const val PAGE_SIZE = 100
         private const val MAX_REPO_PAGES = 10

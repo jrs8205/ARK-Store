@@ -1,0 +1,13 @@
+ARK-Store installiert und aktualisiert Apps direkt aus ihren GitHub-Releases. Entwickler veröffentlichen eine App, indem sie ihrem öffentlichen Open-Source-Repository das Topic „arkstore“ hinzufügen. Der Store listet jedes dieser Repositorys auf, dessen neuestem Release eine APK beiliegt. Er zeigt, welche Apps installiert sind und für welche es eine neuere Version gibt, und installiert oder aktualisiert sie mit einem Fingertipp.
+
+• Automatischer Katalog: Eine neue App erscheint, sobald ein Release mit APK veröffentlicht wird
+• GitHub-Konten oder Repositorys auch von Hand hinzufügen
+• Sterne und Downloadzahlen von GitHub
+• Suche und Kategorien
+• Es werden nur öffentliche Open-Source-Apps aufgeführt
+• Genaue Versionsangaben, direkt aus der APK gelesen
+• Installieren und Aktualisieren mit einem Fingertipp, auch „Alle aktualisieren“
+• Update-Prüfung im Hintergrund mit Benachrichtigung
+• Warnt, wenn eine installierte App mit einem anderen Schlüssel signiert ist
+• Keine Konten, keine Anmeldung, keine Drittanbieterdienste
+• In 17 Sprachen verfügbar

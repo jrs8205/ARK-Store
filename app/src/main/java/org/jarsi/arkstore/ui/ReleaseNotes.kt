@@ -29,7 +29,7 @@ internal object ReleaseNotes {
     // An unquoted value never starts with a quote, so that each attribute reads one way
     // only and a tag left open fails in time linear in its length.
     private val tag = Regex(
-        """</?(?:img|br|hr|p|div|details|summary|b|i|u|s|em|strong|code|kbd|sub|sup|ul|ol|li|a|h[1-6])""" +
+        """</?(?:img|br|hr|p|div|details|summary|b|i|u|s|em|strong|code|kbd|sub|sup|ul|ol|li|a|h[1-6]|big|small|tt|strike|del)""" +
             """(?:\s+[\w:-]+=(?:"[^"]*"|'[^']*'|[^\s>"']+))*\s*/?>""",
         RegexOption.IGNORE_CASE
     )
@@ -45,11 +45,11 @@ internal object ReleaseNotes {
     private const val HELD = ''
     private val privateUse = Regex("""[-]""")
 
-    fun parse(markdown: String): List<Line> {
+    fun parse(markdown: String, limit: Int = LIMIT): List<Line> {
         val lines = ArrayList<Line>()
         var blank = false
         var fenced: MatchResult? = null
-        for (raw in markdown.take(LIMIT).replace("\r\n", "\n").split('\n')) {
+        for (raw in markdown.take(limit).replace("\r\n", "\n").split('\n')) {
             val line = raw.trimEnd()
             val fence = fence.matchEntire(line)
             if (fenced != null) {

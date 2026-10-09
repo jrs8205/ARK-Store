@@ -13,10 +13,26 @@ object AndroidVersions {
     /** The version released as API level [sdk], such as "8.0" for 26, or null for a level not named here. */
     fun name(sdk: Int): String? = names.getOrNull(sdk - 1)
 
+    /** The Android an app needs, as far as it is known. */
+    sealed interface Requirement {
+        /** A released Android, by its version such as "8.0". */
+        data class Version(val name: String) : Requirement
+
+        /** An API level the versions here do not name yet. */
+        data class Level(val sdk: Int) : Requirement
+
+        /** A preview of Android, by its codename. */
+        data class Preview(val codename: String) : Requirement
+    }
+
     /**
-     * Whether an app that needs API level [minSdk] is worth telling about in a store that
-     * itself needs [ownMinSdk]: every device that runs the store runs a file that needs no
-     * more, so only a higher requirement says anything.
+     * What to tell about an app whose file needs API level [minSdk], or the preview
+     * [codename]: told whenever it is known, also for a requirement the store itself meets,
+     * so that every app reads the same way; null when neither is known.
      */
-    fun worthTelling(minSdk: Int, ownMinSdk: Int): Boolean = minSdk > ownMinSdk
+    fun requirement(minSdk: Int?, codename: String?): Requirement? = when {
+        codename != null -> Requirement.Preview(codename)
+        minSdk == null -> null
+        else -> name(minSdk)?.let { Requirement.Version(it) } ?: Requirement.Level(minSdk)
+    }
 }

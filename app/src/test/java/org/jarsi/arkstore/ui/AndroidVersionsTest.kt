@@ -1,9 +1,7 @@
 package org.jarsi.arkstore.ui
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AndroidVersionsTest {
@@ -18,12 +16,42 @@ class AndroidVersionsTest {
     }
 
     @Test
-    fun requirementTheStoreItselfMeetsIsNotWorthTelling() {
-        // Every device that runs the store runs such a file; the manifest of a file that names
-        // no lowest Android gives 1.
-        assertFalse(AndroidVersions.worthTelling(minSdk = 1, ownMinSdk = 26))
-        assertFalse(AndroidVersions.worthTelling(minSdk = 26, ownMinSdk = 26))
-        assertTrue(AndroidVersions.worthTelling(minSdk = 27, ownMinSdk = 26))
+    fun requirementTheStoreItselfMeetsIsStillTold() {
+        // The store needs 26 itself; the row is told whenever the requirement is known, so
+        // that every app reads the same way. A manifest that names no lowest Android gives 1.
+        assertEquals(
+            AndroidVersions.Requirement.Version("8.0"),
+            AndroidVersions.requirement(minSdk = 26, codename = null)
+        )
+        assertEquals(
+            AndroidVersions.Requirement.Version("1.0"),
+            AndroidVersions.requirement(minSdk = 1, codename = null)
+        )
+        assertEquals(
+            AndroidVersions.Requirement.Version("14"),
+            AndroidVersions.requirement(minSdk = 34, codename = null)
+        )
+    }
+
+    @Test
+    fun requirementNotYetNamedIsToldByItsLevel() {
+        assertEquals(
+            AndroidVersions.Requirement.Level(99),
+            AndroidVersions.requirement(minSdk = 99, codename = null)
+        )
+    }
+
+    @Test
+    fun previewIsToldByItsCodenameBeforeTheLevel() {
+        assertEquals(
+            AndroidVersions.Requirement.Preview("Baklava"),
+            AndroidVersions.requirement(minSdk = 36, codename = "Baklava")
+        )
+    }
+
+    @Test
+    fun unknownRequirementIsNotTold() {
+        assertNull(AndroidVersions.requirement(minSdk = null, codename = null))
     }
 
     @Test
