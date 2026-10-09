@@ -551,7 +551,9 @@ class CatalogRulesTest {
         assertSame(older, CatalogRules.newerRelease(older, null))
         assertSame(newer, CatalogRules.newerRelease(null, newer))
         assertNull(CatalogRules.newerRelease(null, null))
-        // Of two readings of the same version, the first given is kept.
-        assertSame(newer, CatalogRules.newerRelease(newer, app(versionCode = 2)))
+        // Of two readings of the same version, the later one is taken: its stars, downloads
+        // and file are the current ones.
+        val later = app(versionCode = 2).copy(stars = 99, apkUrl = "https://example.invalid/replacement.apk")
+        assertSame(later, CatalogRules.newerRelease(newer, later))
     }
 }

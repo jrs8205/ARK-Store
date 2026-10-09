@@ -413,15 +413,17 @@ internal object CatalogRules {
     fun pushedSince(stamp: String, pushedAt: String): Boolean = pushedAt > stamp
 
     /**
-     * The newer of two readings, [a] and [b], of the same release line of an app, by the
-     * version each offers; either may be missing. Two readings of a repository pushed to
-     * at the same moment can still differ: one may have been read before the release had
-     * its file. Of the same version the first is kept.
+     * The newer of two readings of the same release line of an app, [a] and then [b], by
+     * the version each offers; either may be missing. Two readings of a repository pushed
+     * to at the same moment can still differ: one may have been read before the release had
+     * its file. Of the same version the later reading, [b], is taken: its stars, downloads,
+     * descriptions and file are the current ones, and a file replaced under the same
+     * version is found at its new address.
      */
     fun newerRelease(a: StoreApp?, b: StoreApp?): StoreApp? = when {
         a == null -> b
         b == null -> a
-        b.versionCode > a.versionCode -> b
-        else -> a
+        a.versionCode > b.versionCode -> a
+        else -> b
     }
 }

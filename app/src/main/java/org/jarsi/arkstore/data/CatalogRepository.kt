@@ -67,9 +67,10 @@ class CatalogRepository private constructor(context: Context) {
             Entry(stamp, fetchedAt, app?.let(transform), beta?.let(transform), discovered, stored)
 
         /**
-         * The newer of this entry and [other] as readings of the same repository: the one
-         * of the later push, or, of the same push, the newer release of each kind from
-         * either, see [CatalogRules.newerRelease]; this entry on a tie.
+         * The newer of this entry and [other], the later reading, of the same repository:
+         * the one of the later push, or, of the same push, the newer release of each kind
+         * from either, and of the same release the later reading, see
+         * [CatalogRules.newerRelease].
          */
         fun newerWith(other: Entry): Entry = when {
             stamp > other.stamp -> this
