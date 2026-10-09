@@ -1,0 +1,1 @@
+A new release of an app installed on the device shows up at once again: its account is asked directly about what was pushed since the index was built. The details tell when an installed app was last updated. Install attempts are told apart from earlier ones of the same app throughout.

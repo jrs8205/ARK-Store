@@ -20,7 +20,22 @@
   per push for them
 - Everything from the 1.8.0 betas below: screenshots and longer descriptions, automatic
   updates, the GitHub token, export and import, no source to begin with, the short
-  description in the device's language, and the store in 17 languages
+  description in the device's language, the store in 17 languages, and the new releases of
+  the installed apps found at once
+
+## 1.8.0-beta.5
+
+- A new release of an app installed on the device shows up at once again, as it did in
+  1.6.0: the accounts of the installed apps are asked directly about the repositories
+  pushed to since the index was built, one request per account, while a fresh install
+  with none of them still asks GitHub for nothing. The index itself is rebuilt on a
+  schedule that GitHub kept loosely, hours apart at times
+- The details tell when an installed app was last updated, so that an update made
+  unasked can be seen to have gone through
+- An install attempt is told apart from an earlier one of the same app throughout: the
+  background check gives up only the attempt it began, a late result or cancellation of
+  an earlier attempt leaves the current one alone, and a download that fails after its
+  cancel counts as cancelled
 
 ## 1.8.0-beta.4
 

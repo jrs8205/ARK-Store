@@ -1,0 +1,1 @@
+Asennetun sovelluksen uusi julkaisu näkyy taas heti: sen tililtä kysytään suoraan, mitä on pushattu indeksin rakentamisen jälkeen. Tietosivu kertoo, milloin asennettu sovellus on viimeksi päivitetty. Asennusyritykset erotetaan saman sovelluksen aiemmista yrityksistä kaikkialla.
