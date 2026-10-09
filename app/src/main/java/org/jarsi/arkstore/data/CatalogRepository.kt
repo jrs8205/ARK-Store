@@ -304,15 +304,16 @@ class CatalogRepository private constructor(context: Context) {
                 }
             }
 
-            // The index speaks for every repository that is not asked about directly. The
-            // exception is one kept from a source that could not be reached, when it was read
-            // from GitHub after the index was built: falling back to the index would offer an
-            // older release than the one already known.
+            // The index speaks for every repository that is not asked about directly, unless
+            // what is known of the app already is newer: read from GitHub after the index was
+            // built, whether kept from before or taken over from a source or an account that
+            // could not be reached now. Of a later push the whole entry is newer; of the same
+            // push, a release the index read before its file was there is not, see
+            // [Entry.newerWith]. The index still says how the app was found.
             indexed?.forEach { (fullName, entry) ->
                 if (fullName in repos) return@forEach
-                val kept = updated[fullName]
-                val newer = kept != null && kept.stamp > entry.stamp
-                updated[fullName] = if (newer) kept.listedAs(entry.auto) else entry
+                val known = updated[fullName] ?: entries[fullName]
+                updated[fullName] = known?.newerWith(entry)?.listedAs(entry.auto) ?: entry
             }
 
             // The more apps there are, the longer each stored answer has to last, or the
