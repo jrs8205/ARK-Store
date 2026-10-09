@@ -264,7 +264,8 @@ class CatalogRepository private constructor(context: Context) {
                 }.keys
                 for ((owner, names) in CatalogRules.accountsToAsk(installed, sources.list())) {
                     // The index's spelling of each name is kept, whatever case GitHub gives
-                    // it, so that the app has one entry.
+                    // it, so that the app has one name throughout: in the catalogue, on the
+                    // screen and in the install under way. GitHub answers to either spelling.
                     val wanted = names.associateBy { it.lowercase() }
                     val since = names.minOf { indexed.getValue(it).stamp }
                     try {
@@ -272,6 +273,7 @@ class CatalogRepository private constructor(context: Context) {
                             val fullName = wanted[repo.getString("full_name").lowercase()] ?: continue
                             val known = indexed.getValue(fullName)
                             if (!CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
+                            repo.put("full_name", fullName)
                             repos.putIfAbsent(fullName, repo)
                         }
                     } catch (e: IOException) {
@@ -349,7 +351,12 @@ class CatalogRepository private constructor(context: Context) {
                         } catch (e: IOException) {
                             Log.w(TAG, "Release lookup failed for $fullName", e)
                             record(e)
-                            old?.let { fullName to it }
+                            // The newer of what was known before and what the index says, so
+                            // that an app is neither dropped for a lookup that failed, when
+                            // the index has it, nor put back to a release older than one
+                            // already found.
+                            listOfNotNull(old, indexed?.get(fullName)).maxByOrNull { it.stamp }
+                                ?.let { fullName to it }
                         }
                     }
                 }.awaitAll().filterNotNull()
