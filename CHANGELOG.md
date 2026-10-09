@@ -27,8 +27,9 @@
 
 - A new release of an app installed on the device shows up at once again, as it did in
   1.6.0: the accounts of the installed apps are asked directly about the repositories
-  pushed to since the index was built, one request per account, while a fresh install
-  with none of them still asks GitHub for nothing. The index itself is rebuilt on a
+  pushed to since the index was built, a request per account as a rule and one more for
+  each release found, while a fresh install with none of them still asks GitHub for
+  nothing. The index itself is rebuilt on a
   schedule that GitHub kept loosely, hours apart at times
 - The details tell when an installed app was last updated, so that an update made
   unasked can be seen to have gone through

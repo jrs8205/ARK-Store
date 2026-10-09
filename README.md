@@ -127,10 +127,11 @@ following a developer who has not added it.
   GitLab, and the IzzyOnDroid and F-Droid catalogues. An app offered by several places is
   listed once.
 - No account. The app talks to GitHub and, for files, to Codeberg, GitLab, IzzyOnDroid and
-  F-Droid. The list itself comes from the store's index, so the app asks GitHub for nothing
-  unless you add sources; those are read from GitHub directly, 60 times an hour per network
-  without a token. A GitHub token given in the settings lifts that limit; it stays on the
-  device, outside backups, and goes to GitHub alone.
+  F-Droid. The list itself comes from the store's index. GitHub is asked directly only about
+  the accounts of the apps installed from the store, for releases newer than the index, and
+  about the sources you add; a fresh install asks it for nothing. GitHub allows 60 such
+  requests an hour per network without a token. A GitHub token given in the settings lifts
+  that limit; it stays on the device, outside backups, and goes to GitHub alone.
 - The sources, bookmarks and settings can be exported to a file and imported on another
   device.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),
