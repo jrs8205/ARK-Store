@@ -331,4 +331,22 @@
         <item quantity="other">تم حفظ %1$d تطبيق في ملف ZIP.</item>
     </plurals>
     <string name="backup_zip_left_out">استُبعدت لأنها تغيّرت بعد قراءة القائمة: %1$s</string>
+    <string name="backup_history_title">أحدث النسخ الاحتياطية وعمليات الاستعادة</string>
+    <string name="backup_history_none">لا توجد نسخ احتياطية بعد.</string>
+    <string name="backup_event_folder">إلى المجلد %1$s</string>
+    <string name="backup_event_zip">إلى ملف ZIP %1$s</string>
+    <string name="backup_event_restore">استعادة من %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="zero">%1$d تطبيق، %2$s</item>
+        <item quantity="one">تطبيق واحد، %2$s</item>
+        <item quantity="two">تطبيقان، %2$s</item>
+        <item quantity="few">%1$d تطبيقات، %2$s</item>
+        <item quantity="many">%1$d تطبيقًا، %2$s</item>
+        <item quantity="other">%1$d تطبيق، %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">تم الحفظ: %1$d، محدّث مسبقًا: %2$d، فشل: %3$d</string>
+    <string name="backup_event_zip_saved">تم الحفظ: %1$d، استُبعد: %2$d</string>
+    <string name="backup_event_restored">سُلِّم إلى النظام: %1$d، فشل: %2$d</string>
+    <string name="backup_event_cancelled">تم الإلغاء</string>
+    <string name="backup_event_failed">فشل</string>
 </resources>

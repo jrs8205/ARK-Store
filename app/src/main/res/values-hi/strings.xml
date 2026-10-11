@@ -291,4 +291,18 @@
         <item quantity="other">%1$d ऐप ZIP फ़ाइल में सेव किए गए।</item>
     </plurals>
     <string name="backup_zip_left_out">सूची पढ़े जाने के बाद बदल जाने के कारण इन्हें छोड़ दिया गया: %1$s</string>
+    <string name="backup_history_title">हाल के बैकअप और रीस्टोर</string>
+    <string name="backup_history_none">अभी तक कोई बैकअप नहीं है।</string>
+    <string name="backup_event_folder">फ़ोल्डर %1$s में</string>
+    <string name="backup_event_zip">ZIP फ़ाइल %1$s में</string>
+    <string name="backup_event_restore">%1$s से रीस्टोर किया गया</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d ऐप, %2$s</item>
+        <item quantity="other">%1$d ऐप, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">सेव किए गए: %1$d, अप-टू-डेट: %2$d, विफल: %3$d</string>
+    <string name="backup_event_zip_saved">सेव किए गए: %1$d, छोड़े गए: %2$d</string>
+    <string name="backup_event_restored">सिस्टम को सौंपे गए: %1$d, विफल: %2$d</string>
+    <string name="backup_event_cancelled">रद्द किया गया</string>
+    <string name="backup_event_failed">विफल</string>
 </resources>

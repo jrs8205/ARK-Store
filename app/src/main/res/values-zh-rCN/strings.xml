@@ -281,4 +281,17 @@
         <item quantity="other">已将 %1$d 个应用保存到 ZIP 文件。</item>
     </plurals>
     <string name="backup_zip_left_out">以下应用在读取列表后发生了变化，因此未包含在内：%1$s</string>
+    <string name="backup_history_title">最近的备份和恢复</string>
+    <string name="backup_history_none">还没有备份。</string>
+    <string name="backup_event_folder">备份到文件夹 %1$s</string>
+    <string name="backup_event_zip">备份到 ZIP 文件 %1$s</string>
+    <string name="backup_event_restore">从 %1$s 恢复</string>
+    <plurals name="backup_event_apps">
+        <item quantity="other">%1$d 个应用，%2$s</item>
+    </plurals>
+    <string name="backup_event_saved">已保存 %1$d 个，已是最新 %2$d 个，失败 %3$d 个</string>
+    <string name="backup_event_zip_saved">已保存 %1$d 个，未包含 %2$d 个</string>
+    <string name="backup_event_restored">已交给系统 %1$d 个，失败 %2$d 个</string>
+    <string name="backup_event_cancelled">已取消</string>
+    <string name="backup_event_failed">失败</string>
 </resources>

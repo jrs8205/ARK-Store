@@ -47,6 +47,10 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** The folder chosen, when the right to it is held. */
     val tree: StateFlow<Uri?> = _tree.asStateFlow()
 
+    private val _readRequests = MutableStateFlow(0)
+    /** Ticks at every choice of a folder or a zip file, the same one too, for the restore page to read it. */
+    val readRequests: StateFlow<Int> = _readRequests.asStateFlow()
+
     private val _zip = MutableStateFlow<Uri?>(null)
     /** The zip file chosen to restore from, which stands before the folder while it is chosen. */
     val zip: StateFlow<Uri?> = _zip.asStateFlow()
@@ -118,6 +122,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun forgetRead() {
+        _readRequests.value++
         readJob?.cancel()
         _reading.value = false
         _folder.value = null

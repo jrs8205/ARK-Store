@@ -291,4 +291,18 @@
         <item quantity="other">%1$d Apps in der ZIP-Datei gespeichert.</item>
     </plurals>
     <string name="backup_zip_left_out">Nicht aufgenommen, da sie sich nach dem Einlesen der Liste geändert haben: %1$s</string>
+    <string name="backup_history_title">Letzte Sicherungen und Wiederherstellungen</string>
+    <string name="backup_history_none">Noch keine Sicherungen.</string>
+    <string name="backup_event_folder">In den Ordner %1$s</string>
+    <string name="backup_event_zip">In die ZIP-Datei %1$s</string>
+    <string name="backup_event_restore">Wiederhergestellt aus %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d App, %2$s</item>
+        <item quantity="other">%1$d Apps, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">gespeichert: %1$d, aktuell: %2$d, fehlgeschlagen: %3$d</string>
+    <string name="backup_event_zip_saved">gespeichert: %1$d, nicht aufgenommen: %2$d</string>
+    <string name="backup_event_restored">an das System übergeben: %1$d, fehlgeschlagen: %2$d</string>
+    <string name="backup_event_cancelled">abgebrochen</string>
+    <string name="backup_event_failed">fehlgeschlagen</string>
 </resources>

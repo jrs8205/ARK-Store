@@ -130,14 +130,16 @@ object ZipBackup {
     data class Head(val entries: List<BackupEntry>, val settings: String?)
 
     /**
-     * Reads the apps' entries and the settings from [input]. A zip the store wrote has them all
-     * before the first file, where the reading stops; one in another order, as a folder zipped by
-     * hand, is read to its end. An entry that does not pass, or that names another package than
-     * its folder, is left out. A stream that is no zip holds nothing.
+     * Reads the apps' entries and the settings from [input]. A zip the store wrote has its index,
+     * its settings and every app's entry before the first file, where the reading stops once the
+     * index's apps are all found; any other zip, as a folder zipped by hand, is read to its end.
+     * An entry that does not pass, or that names another package than its folder, is left out. A
+     * stream that is no zip holds nothing.
      */
     suspend fun readHead(input: InputStream): Head {
         val entries = LinkedHashMap<String, BackupEntry>()
         var settings: String? = null
+        var indexed: Set<String>? = null
         val zip = ZipInputStream(input)
         while (true) {
             coroutineContext.ensureActive()
@@ -153,8 +155,16 @@ object ZipBackup {
                         entries[entry.packageName] = entry
                     }
                 }
-                is Name.File -> if (entries.isNotEmpty()) break
-                Name.Index, null -> Unit
+                is Name.File -> {
+                    val all = indexed
+                    if (all != null && settings != null && entries.keys.containsAll(all)) break
+                }
+                Name.Index -> if (indexed == null) {
+                    indexed = readText(zip, AppBackup.MAX_JSON_BYTES)
+                        ?.let(AppBackup::indexFromText)
+                        ?.mapTo(HashSet()) { it.packageName }
+                }
+                null -> Unit
             }
         }
         return Head(entries.values.toList(), settings)

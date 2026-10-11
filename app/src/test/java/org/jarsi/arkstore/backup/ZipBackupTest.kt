@@ -173,6 +173,34 @@ class ZipBackupTest {
     }
 
     @Test
+    fun aFolderZippedByHandIsReadToItsEnd() = runBlocking {
+        // Folder by folder, as a file manager packs it: each app's entry is followed by its files.
+        val zip = rawZip(
+            "Backup/org.a.app/app.json" to a.toJson().toString().toByteArray(),
+            "Backup/org.a.app/base.apk" to ByteArray(10),
+            "Backup/org.b.app/app.json" to b.toJson().toString().toByteArray(),
+            "Backup/org.b.app/base.apk" to ByteArray(10),
+            "Backup/ark-store-settings.json" to "{}".toByteArray()
+        )
+        val head = ZipBackup.readHead(ByteArrayInputStream(zip))
+        assertEquals(listOf(a, b), head.entries)
+        assertEquals("{}", head.settings)
+    }
+
+    @Test
+    fun anIndexFirstIsNoReasonToStopBeforeEveryAppItNamesIsFound() = runBlocking {
+        val index = AppBackup.indexToJson(listOf(a, b), "x").toString().toByteArray()
+        val zip = rawZip(
+            "index.json" to index,
+            "ark-store-settings.json" to "{}".toByteArray(),
+            "org.a.app/app.json" to a.toJson().toString().toByteArray(),
+            "org.a.app/base.apk" to ByteArray(10),
+            "org.b.app/app.json" to b.toJson().toString().toByteArray()
+        )
+        assertEquals(listOf(a, b), ZipBackup.readHead(ByteArrayInputStream(zip)).entries)
+    }
+
+    @Test
     fun anEntryOfAnotherPackageThanItsFolderIsNotTaken() = runBlocking {
         val zip = rawZip("org.c.app/app.json" to b.toJson().toString().toByteArray())
         assertEquals(emptyList<BackupEntry>(), ZipBackup.readHead(ByteArrayInputStream(zip)).entries)

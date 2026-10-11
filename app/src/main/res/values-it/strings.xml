@@ -301,4 +301,19 @@
         <item quantity="other">%1$d app salvate nel file ZIP.</item>
     </plurals>
     <string name="backup_zip_left_out">Escluse perché sono cambiate dopo la lettura dell\'elenco: %1$s</string>
+    <string name="backup_history_title">Backup e ripristini recenti</string>
+    <string name="backup_history_none">Ancora nessun backup.</string>
+    <string name="backup_event_folder">Nella cartella %1$s</string>
+    <string name="backup_event_zip">Nel file ZIP %1$s</string>
+    <string name="backup_event_restore">Ripristino da %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d app, %2$s</item>
+        <item quantity="many">%1$d app, %2$s</item>
+        <item quantity="other">%1$d app, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">salvate: %1$d, già aggiornate: %2$d, non riuscite: %3$d</string>
+    <string name="backup_event_zip_saved">salvate: %1$d, escluse: %2$d</string>
+    <string name="backup_event_restored">inviate al sistema: %1$d, non riuscite: %2$d</string>
+    <string name="backup_event_cancelled">annullato</string>
+    <string name="backup_event_failed">non riuscito</string>
 </resources>

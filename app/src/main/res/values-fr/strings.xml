@@ -301,4 +301,19 @@
         <item quantity="other">%1$d applications enregistrées dans le fichier ZIP.</item>
     </plurals>
     <string name="backup_zip_left_out">Laissées de côté, car elles ont changé après la lecture de la liste : %1$s</string>
+    <string name="backup_history_title">Sauvegardes et restaurations récentes</string>
+    <string name="backup_history_none">Aucune sauvegarde pour l\'instant.</string>
+    <string name="backup_event_folder">Dans le dossier %1$s</string>
+    <string name="backup_event_zip">Dans le fichier ZIP %1$s</string>
+    <string name="backup_event_restore">Restauration depuis %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d application, %2$s</item>
+        <item quantity="many">%1$d applications, %2$s</item>
+        <item quantity="other">%1$d applications, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">enregistrées : %1$d ; déjà à jour : %2$d ; échecs : %3$d</string>
+    <string name="backup_event_zip_saved">enregistrées : %1$d ; laissées de côté : %2$d</string>
+    <string name="backup_event_restored">transmises au système : %1$d ; échecs : %2$d</string>
+    <string name="backup_event_cancelled">annulé</string>
+    <string name="backup_event_failed">échec</string>
 </resources>

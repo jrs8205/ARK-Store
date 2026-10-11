@@ -291,4 +291,18 @@
         <item quantity="other">Zip-tiedostoon tallennettiin %1$d sovellusta.</item>
     </plurals>
     <string name="backup_zip_left_out">Jätettiin pois, koska ne muuttuivat listan lukemisen jälkeen: %1$s</string>
+    <string name="backup_history_title">Viimeisimmät varmuuskopiot ja palautukset</string>
+    <string name="backup_history_none">Ei vielä varmuuskopioita.</string>
+    <string name="backup_event_folder">Kansioon %1$s</string>
+    <string name="backup_event_zip">Zip-tiedostoon %1$s</string>
+    <string name="backup_event_restore">Palautus kohteesta %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d sovellus, %2$s</item>
+        <item quantity="other">%1$d sovellusta, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">tallennettu %1$d, ajan tasalla %2$d, epäonnistui %3$d</string>
+    <string name="backup_event_zip_saved">tallennettu %1$d, jätetty pois %2$d</string>
+    <string name="backup_event_restored">annettu järjestelmälle %1$d, epäonnistui %2$d</string>
+    <string name="backup_event_cancelled">keskeytetty</string>
+    <string name="backup_event_failed">epäonnistui</string>
 </resources>

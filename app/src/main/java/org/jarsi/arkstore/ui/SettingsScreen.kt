@@ -3,6 +3,8 @@ package org.jarsi.arkstore.ui
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
+import android.text.format.DateUtils
+import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -46,6 +48,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -61,6 +64,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.backup.BackupEvent
+import org.jarsi.arkstore.backup.BackupManager
 import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.work.AutoUpdate
@@ -406,6 +411,10 @@ private fun TransferSettings(viewModel: StoreViewModel) {
 @Composable
 private fun AppBackupSettings(onBackup: () -> Unit, onRestore: () -> Unit) {
     val haptics = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val state by BackupManager.state.collectAsStateWithLifecycle()
+    // Read again whenever a job begins or ends, not at every step of its progress.
+    val history = remember(state::class) { BackupManager.history(context) }
     Text(
         text = stringResource(R.string.backup_title),
         style = MaterialTheme.typography.titleMedium,
@@ -425,8 +434,9 @@ private fun AppBackupSettings(onBackup: () -> Unit, onRestore: () -> Unit) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 4.dp)
     )
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    // One above the other: side by side, the longer names of other languages would wrap.
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(top = 8.dp)
     ) {
         StoreOutlinedButton(
@@ -445,6 +455,74 @@ private fun AppBackupSettings(onBackup: () -> Unit, onRestore: () -> Unit) {
         ) {
             Text(stringResource(R.string.action_restore_apps))
         }
+    }
+    Text(
+        text = stringResource(R.string.backup_history_title),
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier
+            .padding(top = 16.dp)
+            .semantics { heading() }
+    )
+    if (history.isEmpty()) {
+        Text(
+            text = stringResource(R.string.backup_history_none),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    history.take(HISTORY_SHOWN).forEach { BackupEventLine(it) }
+}
+
+private const val HISTORY_SHOWN = 5
+
+/** One backup or restore: when, to or from where, how many apps of what size, and how it went. */
+@Composable
+private fun BackupEventLine(event: BackupEvent) {
+    val context = LocalContext.current
+    val place = event.place.ifBlank { "–" }
+    val what = stringResource(
+        when (event.kind) {
+            BackupEvent.Kind.FOLDER -> R.string.backup_event_folder
+            BackupEvent.Kind.ZIP -> R.string.backup_event_zip
+            BackupEvent.Kind.RESTORE -> R.string.backup_event_restore
+        },
+        place
+    )
+    val `when` = DateUtils.formatDateTime(
+        context,
+        event.at,
+        DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_NUMERIC_DATE or DateUtils.FORMAT_SHOW_YEAR
+    )
+    val size = pluralStringResource(
+        R.plurals.backup_event_apps,
+        event.apps,
+        event.apps,
+        Formatter.formatShortFileSize(context, event.bytes)
+    )
+    val result = when (event.outcome) {
+        BackupEvent.Outcome.CANCELLED -> stringResource(R.string.backup_event_cancelled)
+        BackupEvent.Outcome.FAILED -> stringResource(R.string.backup_event_failed)
+        BackupEvent.Outcome.DONE -> when (event.kind) {
+            BackupEvent.Kind.FOLDER -> stringResource(R.string.backup_event_saved, event.saved, event.skipped, event.failed)
+            BackupEvent.Kind.ZIP -> stringResource(R.string.backup_event_zip_saved, event.saved, event.failed)
+            BackupEvent.Kind.RESTORE -> stringResource(R.string.backup_event_restored, event.saved, event.failed)
+        }
+    }
+    Column(modifier = Modifier.padding(top = 8.dp).semantics(mergeDescendants = true) {}) {
+        Text(
+            text = "$`when` · $what",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Text(
+            text = "$size · $result",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (event.outcome == BackupEvent.Outcome.DONE && event.failed == 0) {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            } else {
+                MaterialTheme.colorScheme.error
+            }
+        )
     }
 }
 

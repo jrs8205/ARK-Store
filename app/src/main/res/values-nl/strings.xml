@@ -291,4 +291,18 @@
         <item quantity="other">%1$d apps opgeslagen in het zip-bestand.</item>
     </plurals>
     <string name="backup_zip_left_out">Weggelaten, omdat ze zijn veranderd nadat de lijst was gelezen: %1$s</string>
+    <string name="backup_history_title">Recente back-ups en terugzettingen</string>
+    <string name="backup_history_none">Nog geen back-ups.</string>
+    <string name="backup_event_folder">Naar de map %1$s</string>
+    <string name="backup_event_zip">Naar het zip-bestand %1$s</string>
+    <string name="backup_event_restore">Teruggezet uit %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d app, %2$s</item>
+        <item quantity="other">%1$d apps, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">opgeslagen: %1$d, al actueel: %2$d, mislukt: %3$d</string>
+    <string name="backup_event_zip_saved">opgeslagen: %1$d, weggelaten: %2$d</string>
+    <string name="backup_event_restored">doorgegeven aan het systeem: %1$d, mislukt: %2$d</string>
+    <string name="backup_event_cancelled">geannuleerd</string>
+    <string name="backup_event_failed">mislukt</string>
 </resources>

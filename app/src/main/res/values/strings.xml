@@ -306,4 +306,18 @@
         <item quantity="other">Saved %1$d apps to the zip file.</item>
     </plurals>
     <string name="backup_zip_left_out">Left out, as they changed after the list was read: %1$s</string>
+    <string name="backup_history_title">Recent backups and restores</string>
+    <string name="backup_history_none">No backups yet.</string>
+    <string name="backup_event_folder">To the folder %1$s</string>
+    <string name="backup_event_zip">To the zip file %1$s</string>
+    <string name="backup_event_restore">Restored from %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d app, %2$s</item>
+        <item quantity="other">%1$d apps, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">saved %1$d, up to date %2$d, failed %3$d</string>
+    <string name="backup_event_zip_saved">saved %1$d, left out %2$d</string>
+    <string name="backup_event_restored">handed to the system %1$d, failed %2$d</string>
+    <string name="backup_event_cancelled">cancelled</string>
+    <string name="backup_event_failed">failed</string>
 </resources>

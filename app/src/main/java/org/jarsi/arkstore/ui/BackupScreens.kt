@@ -151,8 +151,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                         noPicker = !launch { folderPicker.launch(null) }
                     }
                 },
-                enabled = canStart,
-                modifier = Modifier.fillMaxWidth()
+                enabled = canStart
             ) {
                 Text(stringResource(R.string.action_save_backup))
             }
@@ -162,7 +161,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                     noPicker = !launch { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
                 },
                 enabled = canStart,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                modifier = Modifier.padding(top = 8.dp)
             ) {
                 Text(stringResource(R.string.action_save_zip))
             }
@@ -175,6 +174,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
 internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -> Unit, onBack: () -> Unit) {
     val tree by viewModel.tree.collectAsStateWithLifecycle()
     val zip by viewModel.zip.collectAsStateWithLifecycle()
+    val readRequests by viewModel.readRequests.collectAsStateWithLifecycle()
     val folder by viewModel.folder.collectAsStateWithLifecycle()
     val reading by viewModel.reading.collectAsStateWithLifecycle()
     val folderError by viewModel.folderError.collectAsStateWithLifecycle()
@@ -195,7 +195,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     }
     val isZip = zip != null
     // Read afresh each time the page is opened or another backup is chosen: one may have been written since.
-    LaunchedEffect(tree, zip) { viewModel.loadFolder() }
+    LaunchedEffect(tree, zip, readRequests) { viewModel.loadFolder() }
     // An install that has gone through changes what the backup has to offer this device.
     LaunchedEffect(installedChanged) { if (installedChanged > 0) viewModel.refreshStatuses() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
@@ -312,8 +312,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                     haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
                     viewModel.startRestore(onImportSettings)
                 },
-                enabled = canStart,
-                modifier = Modifier.fillMaxWidth()
+                enabled = canStart
             ) {
                 Text(stringResource(R.string.action_restore))
             }

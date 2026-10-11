@@ -311,4 +311,20 @@
         <item quantity="other">У ZIP-файл збережено %1$d додатка.</item>
     </plurals>
     <string name="backup_zip_left_out">Пропущено, бо вони змінилися після читання списку: %1$s</string>
+    <string name="backup_history_title">Останні резервні копії та відновлення</string>
+    <string name="backup_history_none">Резервних копій ще немає.</string>
+    <string name="backup_event_folder">У папку %1$s</string>
+    <string name="backup_event_zip">У ZIP-файл %1$s</string>
+    <string name="backup_event_restore">Відновлення з %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d додаток, %2$s</item>
+        <item quantity="few">%1$d додатки, %2$s</item>
+        <item quantity="many">%1$d додатків, %2$s</item>
+        <item quantity="other">%1$d додатка, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">збережено: %1$d, уже актуальні: %2$d, не вдалося: %3$d</string>
+    <string name="backup_event_zip_saved">збережено: %1$d, пропущено: %2$d</string>
+    <string name="backup_event_restored">передано системі: %1$d, не вдалося: %2$d</string>
+    <string name="backup_event_cancelled">скасовано</string>
+    <string name="backup_event_failed">не вдалося</string>
 </resources>

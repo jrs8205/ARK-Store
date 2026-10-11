@@ -291,4 +291,18 @@
         <item quantity="other">%1$d uygulama ZIP dosyasına kaydedildi.</item>
     </plurals>
     <string name="backup_zip_left_out">Liste okunduktan sonra değiştikleri için dışarıda bırakılanlar: %1$s</string>
+    <string name="backup_history_title">Son yedeklemeler ve geri yüklemeler</string>
+    <string name="backup_history_none">Henüz yedek yok.</string>
+    <string name="backup_event_folder">%1$s klasörüne</string>
+    <string name="backup_event_zip">%1$s ZIP dosyasına</string>
+    <string name="backup_event_restore">%1$s konumundan geri yüklendi</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d uygulama, %2$s</item>
+        <item quantity="other">%1$d uygulama, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">kaydedilen: %1$d, zaten güncel: %2$d, başarısız: %3$d</string>
+    <string name="backup_event_zip_saved">kaydedilen: %1$d, dışarıda bırakılan: %2$d</string>
+    <string name="backup_event_restored">sisteme teslim edilen: %1$d, başarısız: %2$d</string>
+    <string name="backup_event_cancelled">iptal edildi</string>
+    <string name="backup_event_failed">başarısız oldu</string>
 </resources>

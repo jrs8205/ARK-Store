@@ -311,4 +311,20 @@
         <item quantity="other">В ZIP-файл сохранено %1$d приложений.</item>
     </plurals>
     <string name="backup_zip_left_out">Пропущены, так как изменились после чтения списка: %1$s</string>
+    <string name="backup_history_title">Последние резервные копии и восстановления</string>
+    <string name="backup_history_none">Резервных копий пока нет.</string>
+    <string name="backup_event_folder">В папку %1$s</string>
+    <string name="backup_event_zip">В ZIP-файл %1$s</string>
+    <string name="backup_event_restore">Восстановление из %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d приложение, %2$s</item>
+        <item quantity="few">%1$d приложения, %2$s</item>
+        <item quantity="many">%1$d приложений, %2$s</item>
+        <item quantity="other">%1$d приложений, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">сохранено: %1$d, уже актуальны: %2$d, не удалось: %3$d</string>
+    <string name="backup_event_zip_saved">сохранено: %1$d, пропущено: %2$d</string>
+    <string name="backup_event_restored">передано системе: %1$d, не удалось: %2$d</string>
+    <string name="backup_event_cancelled">отменено</string>
+    <string name="backup_event_failed">не удалось</string>
 </resources>

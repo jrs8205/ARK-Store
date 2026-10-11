@@ -311,4 +311,20 @@
         <item quantity="other">Zapisano %1$d aplikacji w pliku ZIP.</item>
     </plurals>
     <string name="backup_zip_left_out">Pominięto, ponieważ zmieniły się po odczytaniu listy: %1$s</string>
+    <string name="backup_history_title">Ostatnie kopie zapasowe i przywracania</string>
+    <string name="backup_history_none">Nie ma jeszcze kopii zapasowych.</string>
+    <string name="backup_event_folder">Do folderu %1$s</string>
+    <string name="backup_event_zip">Do pliku ZIP %1$s</string>
+    <string name="backup_event_restore">Przywrócono z %1$s</string>
+    <plurals name="backup_event_apps">
+        <item quantity="one">%1$d aplikacja, %2$s</item>
+        <item quantity="few">%1$d aplikacje, %2$s</item>
+        <item quantity="many">%1$d aplikacji, %2$s</item>
+        <item quantity="other">%1$d aplikacji, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">zapisano: %1$d, już aktualne: %2$d, nieudane: %3$d</string>
+    <string name="backup_event_zip_saved">zapisano: %1$d, pominięto: %2$d</string>
+    <string name="backup_event_restored">przekazano do systemu: %1$d, nieudane: %2$d</string>
+    <string name="backup_event_cancelled">anulowano</string>
+    <string name="backup_event_failed">nie powiodło się</string>
 </resources>

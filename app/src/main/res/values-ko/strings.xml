@@ -281,4 +281,17 @@
         <item quantity="other">앱 %1$d개를 ZIP 파일에 저장했습니다.</item>
     </plurals>
     <string name="backup_zip_left_out">목록을 읽은 뒤 변경되어 제외된 앱: %1$s</string>
+    <string name="backup_history_title">최근 백업 및 복원</string>
+    <string name="backup_history_none">아직 백업이 없습니다.</string>
+    <string name="backup_event_folder">폴더 %1$s에 백업</string>
+    <string name="backup_event_zip">ZIP 파일 %1$s에 백업</string>
+    <string name="backup_event_restore">%1$s에서 복원</string>
+    <plurals name="backup_event_apps">
+        <item quantity="other">앱 %1$d개, %2$s</item>
+    </plurals>
+    <string name="backup_event_saved">저장 %1$d개, 이미 최신 %2$d개, 실패 %3$d개</string>
+    <string name="backup_event_zip_saved">저장 %1$d개, 제외 %2$d개</string>
+    <string name="backup_event_restored">시스템에 전달 %1$d개, 실패 %2$d개</string>
+    <string name="backup_event_cancelled">취소됨</string>
+    <string name="backup_event_failed">실패</string>
 </resources>

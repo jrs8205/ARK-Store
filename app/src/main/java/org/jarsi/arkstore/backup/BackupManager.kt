@@ -115,10 +115,11 @@ object BackupManager {
     private const val TAG = "BackupManager"
     private const val PREFS = "backup"
     private const val PREF_TREE = "tree"
+    private const val PREF_LOG = "log"
     private const val APK_MIME = "application/vnd.android.package-archive"
     private const val JSON_MIME = "application/json"
     /** Where the settings of a zip read for a restore are kept for their import. */
-    private const val ZIP_SETTINGS = "backup-settings.json"
+    private const val ZIP_SETTINGS_DIR = "backup-settings"
     private const val BUFFER_BYTES = 64 * 1024
     /** The progress is told again after this much more has been copied. */
     private const val PROGRESS_STEP_BYTES = 1024 * 1024L
@@ -217,8 +218,16 @@ object BackupManager {
             Log.w(TAG, "Could not read a zip file", e)
             null
         } ?: return@withContext null
+        // A file of this read's own: a read given up meanwhile must not overwrite the next one's.
+        File(context.cacheDir, ZIP_SETTINGS_DIR).listFiles()?.forEach { it.delete() }
         val settings = head.settings?.let { text ->
-            File(context.cacheDir, ZIP_SETTINGS).apply { writeText(text) }.let(Uri::fromFile)
+            try {
+                val dir = File(context.cacheDir, ZIP_SETTINGS_DIR).apply { mkdirs() }
+                File(dir, "settings-${restores.incrementAndGet()}.json").apply { writeText(text) }.let(Uri::fromFile)
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not keep the zip file's settings", e)
+                null
+            }
         }
         val installed = InstalledApps.snapshot(context)
         val rows = head.entries.map { entry ->
@@ -275,7 +284,10 @@ object BackupManager {
      */
     fun backup(context: Context, tree: Uri, selected: List<BackupCandidate>, settingsJson: String): Boolean {
         val appContext = context.applicationContext
-        return start(appContext, restoring = false) {
+        val told = Told(BackupEvent.Kind.FOLDER, selected.size, selected.sumOf { it.entry.size }) {
+            Documents(appContext.contentResolver, tree).name()
+        }
+        return start(appContext, restoring = false, told = told) {
             write(Documents(appContext.contentResolver, tree), selected, settingsJson)
         }
     }
@@ -286,7 +298,10 @@ object BackupManager {
      */
     fun backupZip(context: Context, uri: Uri, selected: List<BackupCandidate>, settingsJson: String): Boolean {
         val appContext = context.applicationContext
-        return start(appContext, restoring = false, zip = true) {
+        val told = Told(BackupEvent.Kind.ZIP, selected.size, selected.sumOf { it.entry.size }) {
+            displayName(appContext, uri)
+        }
+        return start(appContext, restoring = false, zip = true, told = told) {
             writeZip(appContext, uri, selected, settingsJson)
         }
     }
@@ -294,7 +309,8 @@ object BackupManager {
     /** Installs [selected] from [folder], one after the other; returns whether the job was begun. */
     fun restore(context: Context, folder: BackupFolder, selected: List<RestoreEntry>): Boolean {
         val appContext = context.applicationContext
-        return start(appContext, restoring = true, zip = folder.zip) {
+        val told = Told(BackupEvent.Kind.RESTORE, selected.size, selected.sumOf { it.entry.size }) { folder.name }
+        return start(appContext, restoring = true, zip = folder.zip, told = told) {
             if (folder.zip) {
                 installZip(appContext, folder.tree, selected)
             } else {
@@ -335,13 +351,30 @@ object BackupManager {
         return if (held && DocumentsContract.isTreeUri(uri)) uri else null
     }
 
+    /** What a job is, for the log of [history]: its kind, how many apps of what size, and where. */
+    private class Told(val kind: BackupEvent.Kind, val apps: Int, val bytes: Long, val place: suspend () -> String?)
+
     @Synchronized
-    private fun start(context: Context, restoring: Boolean, zip: Boolean = false, work: suspend () -> BackupState): Boolean {
+    private fun start(
+        context: Context,
+        restoring: Boolean,
+        zip: Boolean = false,
+        told: Told,
+        work: suspend () -> BackupState
+    ): Boolean {
         if (job?.isActive == true) return false
         _state.value = BackupState.Running(restoring, 0, 0, "", 0, 0)
         BackupService.start(context)
         job = scope.launch {
-            _state.value = try {
+            val place = try {
+                told.place()
+            } catch (e: CancellationException) {
+                null
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not read the place's name", e)
+                null
+            }.orEmpty()
+            val end = try {
                 work()
             } catch (e: CancelledWith) {
                 BackupState.Failed(restoring, BackupError.CANCELLED, e.indexWritten, zip)
@@ -351,9 +384,18 @@ object BackupManager {
                 Log.w(TAG, if (restoring) "Restore failed" else "Backup failed", e)
                 BackupState.Failed(restoring, BackupError.FOLDER_UNAVAILABLE, zip = zip)
             }
+            // Written down before it is shown, so that the settings read it with the outcome.
+            withContext(NonCancellable) {
+                val event = BackupLog.event(told.kind, System.currentTimeMillis(), place, told.apps, told.bytes, end)
+                prefs(context).edit { putString(PREF_LOG, BackupLog.toText(BackupLog.added(history(context), event))) }
+            }
+            _state.value = end
         }
         return true
     }
+
+    /** The last backups and restores on this device, newest first. */
+    fun history(context: Context): List<BackupEvent> = BackupLog.fromText(prefs(context).getString(PREF_LOG, null))
 
     /**
      * Writes the zip: the apps whose files are still those of the list, the rest left out and
@@ -369,12 +411,13 @@ object BackupManager {
             candidate.readable && candidate.sources.size == candidate.entry.files.size &&
                 candidate.sources.zip(candidate.entry.files).all { (file, said) -> file.canRead() && file.length() == said.size }
         }
-        if (whole.isEmpty()) throw IOException("None of the apps chosen can be written as they are")
         val byPackage = whole.associateBy { it.entry.packageName }
         val total = whole.sumOf { it.entry.size }
         var index = 0
         var label = ""
         try {
+            // The picker has made the file already; one with nothing to put in it goes too.
+            if (whole.isEmpty()) throw IOException("None of the apps chosen can be written as they are")
             val out = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("Nothing to write to")
             out.use { stream ->
                 ZipBackup.write(
