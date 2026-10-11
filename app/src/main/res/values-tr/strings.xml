@@ -236,13 +236,13 @@
     <string name="transfer_failed">Dosya okunamadı veya yazılamadı.</string>
     <string name="action_back">Geri</string>
     <string name="backup_title">Uygulama yedekleme</string>
-    <string name="backup_description">Google Play dışından yüklenen uygulamaları APK dosyaları olarak seçtiğiniz bir klasöre kopyalayın ve oradan bu cihaza veya başka bir cihaza geri yükleyin. Uygulamaların kendi verileri dahil edilmez. Aynı klasöre yapılan ikinci yedekleme yalnızca değişenleri kopyalar; kaldırdığınız bir uygulama, siz oradan silene kadar klasörde kalır.</string>
+    <string name="backup_description">Google Play dışından yüklenen uygulamaları APK dosyaları olarak bir klasöre veya ZIP dosyasına kopyalayın ve bu cihaza veya başka bir cihaza geri yükleyin. Uygulamaların kendi verileri dahil edilmez.</string>
     <string name="action_backup_apps">Uygulamaları yedekle</string>
     <string name="action_restore_apps">Uygulamaları geri yükle</string>
     <string name="backup_notification_saving">%1$s yedekleniyor</string>
     <string name="backup_notification_restoring">%1$s geri yükleniyor</string>
     <string name="backup_folder">Klasör: %1$s</string>
-    <string name="backup_no_folder">Yedeğin tutulacağı bir klasör seçin: bu cihazda, bir bellek kartında veya dosya seçicinin gösterdiği bir bulut hizmetinde.</string>
+    <string name="backup_no_folder">Henüz klasör seçilmedi. Klasöre kaydettiğinizde sorulur.</string>
     <string name="backup_no_picker">Klasör seçmek için bir uygulama bulunamadı.</string>
     <string name="action_choose_folder">Klasör seç</string>
     <string name="action_change_folder">Klasörü değiştir</string>
@@ -277,4 +277,18 @@
     <string name="restore_installing">Yükleniyor…</string>
     <string name="restore_fail_invalid">Klasördeki dosya geçerli bir uygulama paketi değil.</string>
     <string name="backup_index_not_written">Klasörün dizini ve mağazanın ayar dosyası yazılamadı. Kopyalanan uygulamalar yine de kendi klasörlerinden geri yüklenebilir.</string>
+    <string name="backup_ways">Klasör güncel kalır: sonraki yedekleme yalnızca değişenleri kopyalar ve cihazdan kaldırılan bir uygulama, siz oradan silene kadar klasörde kalır. ZIP dosyası, başka bir telefona veya Google Drive gibi bir bulut hizmetine taşımak için tek bir dosyadır ve her seferinde tamamen yeniden yazılır.</string>
+    <string name="action_save_zip">ZIP dosyasına kaydet</string>
+    <string name="action_choose_zip">ZIP dosyası seç</string>
+    <string name="backup_zip_file">ZIP dosyası: %1$s</string>
+    <string name="restore_choose_source">Yedeğin kaydedildiği klasörü veya ZIP dosyasını seçin.</string>
+    <string name="restore_zip_nothing">ZIP dosyasında ARK-Store tarafından yedeklenmiş uygulama yok.</string>
+    <string name="backup_zip_unreadable">ZIP dosyası okunamadı.</string>
+    <string name="backup_zip_failed">ZIP dosyası yazılamadı, bu yüzden kaldırıldı.</string>
+    <string name="backup_zip_cancelled">İptal edildi. Tamamlanmamış ZIP dosyası kaldırıldı.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d uygulama ZIP dosyasına kaydedildi.</item>
+        <item quantity="other">%1$d uygulama ZIP dosyasına kaydedildi.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Liste okunduktan sonra değiştikleri için dışarıda bırakılanlar: %1$s</string>
 </resources>

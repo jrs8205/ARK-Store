@@ -252,13 +252,13 @@
     <string name="transfer_failed">Nie udało się odczytać ani zapisać pliku.</string>
     <string name="action_back">Wstecz</string>
     <string name="backup_title">Kopia zapasowa aplikacji</string>
-    <string name="backup_description">Skopiuj aplikacje zainstalowane z innych źródeł niż Google Play jako pliki APK do wybranego folderu i zainstaluj je z niego ponownie – na tym lub innym urządzeniu. Dane samych aplikacji nie są kopiowane. Kolejna kopia zapasowa w tym samym folderze obejmuje tylko to, co się zmieniło; aplikacja usunięta z urządzenia pozostaje w folderze, dopóki jej stamtąd nie usuniesz.</string>
+    <string name="backup_description">Skopiuj aplikacje zainstalowane z innych źródeł niż Google Play jako pliki APK do folderu lub pliku ZIP i zainstaluj je ponownie – na tym lub innym urządzeniu. Dane samych aplikacji nie są kopiowane.</string>
     <string name="action_backup_apps">Utwórz kopię zapasową aplikacji</string>
     <string name="action_restore_apps">Przywróć aplikacje</string>
     <string name="backup_notification_saving">Tworzenie kopii zapasowej: %1$s</string>
     <string name="backup_notification_restoring">Przywracanie: %1$s</string>
     <string name="backup_folder">Folder: %1$s</string>
-    <string name="backup_no_folder">Wybierz folder na kopię zapasową: na tym urządzeniu, na karcie pamięci lub w usłudze w chmurze, którą pokazuje okno wyboru plików.</string>
+    <string name="backup_no_folder">Nie wybrano jeszcze folderu. Prośba o wybór pojawi się przy zapisywaniu w folderze.</string>
     <string name="backup_no_picker">Nie znaleziono aplikacji, za pomocą której można wybrać folder.</string>
     <string name="action_choose_folder">Wybierz folder</string>
     <string name="action_change_folder">Zmień folder</string>
@@ -295,4 +295,20 @@
     <string name="restore_installing">Instalowanie…</string>
     <string name="restore_fail_invalid">Plik w folderze nie jest prawidłowym pakietem aplikacji.</string>
     <string name="backup_index_not_written">Nie udało się zapisać indeksu folderu ani pliku ustawień sklepu. Skopiowane aplikacje nadal można przywrócić z ich folderów.</string>
+    <string name="backup_ways">Folder pozostaje aktualny: kolejna kopia zapasowa obejmuje tylko to, co się zmieniło, a aplikacja usunięta z urządzenia zostaje w nim, dopóki jej stamtąd nie usuniesz. Plik ZIP to jeden plik do przeniesienia na inny telefon lub do usługi w chmurze, takiej jak Google Drive, za każdym razem zapisywany od nowa w całości.</string>
+    <string name="action_save_zip">Zapisz w pliku ZIP</string>
+    <string name="action_choose_zip">Wybierz plik ZIP</string>
+    <string name="backup_zip_file">Plik ZIP: %1$s</string>
+    <string name="restore_choose_source">Wybierz folder lub plik ZIP, w którym zapisano kopię zapasową.</string>
+    <string name="restore_zip_nothing">W pliku ZIP nie ma aplikacji, których kopię zapasową utworzył ARK-Store.</string>
+    <string name="backup_zip_unreadable">Nie udało się odczytać pliku ZIP.</string>
+    <string name="backup_zip_failed">Nie udało się zapisać pliku ZIP, więc został usunięty.</string>
+    <string name="backup_zip_cancelled">Anulowano. Niedokończony plik ZIP został usunięty.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">Zapisano %1$d aplikację w pliku ZIP.</item>
+        <item quantity="few">Zapisano %1$d aplikacje w pliku ZIP.</item>
+        <item quantity="many">Zapisano %1$d aplikacji w pliku ZIP.</item>
+        <item quantity="other">Zapisano %1$d aplikacji w pliku ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Pominięto, ponieważ zmieniły się po odczytaniu listy: %1$s</string>
 </resources>

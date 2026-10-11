@@ -252,13 +252,13 @@
     <string name="transfer_failed">Не удалось прочитать или записать файл.</string>
     <string name="action_back">Назад</string>
     <string name="backup_title">Резервное копирование приложений</string>
-    <string name="backup_description">Скопируйте приложения, установленные не из Google Play, в виде APK-файлов в выбранную вами папку, чтобы потом снова установить их оттуда на этом или другом устройстве. Данные самих приложений не копируются. При повторном резервном копировании в ту же папку копируется только то, что изменилось; приложение, которое вы удалили с устройства, остаётся в папке, пока вы не удалите его и оттуда.</string>
+    <string name="backup_description">Скопируйте приложения, установленные не из Google Play, в виде APK-файлов в папку или ZIP-файл, чтобы потом снова установить их на этом или другом устройстве. Данные самих приложений не копируются.</string>
     <string name="action_backup_apps">Создать резервную копию</string>
     <string name="action_restore_apps">Восстановить приложения</string>
     <string name="backup_notification_saving">Резервное копирование: %1$s</string>
     <string name="backup_notification_restoring">Восстановление: %1$s</string>
     <string name="backup_folder">Папка: %1$s</string>
-    <string name="backup_no_folder">Выберите папку для хранения резервной копии: на этом устройстве, на карте памяти или в облачном сервисе, доступном в окне выбора файлов.</string>
+    <string name="backup_no_folder">Папка ещё не выбрана. Её нужно будет выбрать при сохранении в папку.</string>
     <string name="backup_no_picker">Не найдено приложение для выбора папки.</string>
     <string name="action_choose_folder">Выбрать папку</string>
     <string name="action_change_folder">Сменить папку</string>
@@ -295,4 +295,20 @@
     <string name="restore_installing">Установка…</string>
     <string name="restore_fail_invalid">Файл в папке не является корректным пакетом приложения.</string>
     <string name="backup_index_not_written">Не удалось записать индекс в папке и файл настроек магазина. Скопированные приложения всё равно можно восстановить из их папок.</string>
+    <string name="backup_ways">Папка всегда актуальна: при следующем резервном копировании копируется только то, что изменилось, а приложение, удалённое с устройства, остаётся в ней, пока вы не удалите его оттуда. ZIP-файл — это один файл для переноса на другой телефон или в облачный сервис, например Google Drive; каждый раз он записывается заново целиком.</string>
+    <string name="action_save_zip">Сохранить в ZIP-файл</string>
+    <string name="action_choose_zip">Выбрать ZIP-файл</string>
+    <string name="backup_zip_file">ZIP-файл: %1$s</string>
+    <string name="restore_choose_source">Выберите папку или ZIP-файл, куда была сохранена резервная копия.</string>
+    <string name="restore_zip_nothing">В ZIP-файле нет резервных копий приложений, созданных ARK-Store.</string>
+    <string name="backup_zip_unreadable">Не удалось прочитать ZIP-файл.</string>
+    <string name="backup_zip_failed">Не удалось записать ZIP-файл, поэтому он удалён.</string>
+    <string name="backup_zip_cancelled">Отменено. Незавершённый ZIP-файл удалён.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">В ZIP-файл сохранено %1$d приложение.</item>
+        <item quantity="few">В ZIP-файл сохранено %1$d приложения.</item>
+        <item quantity="many">В ZIP-файл сохранено %1$d приложений.</item>
+        <item quantity="other">В ZIP-файл сохранено %1$d приложений.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Пропущены, так как изменились после чтения списка: %1$s</string>
 </resources>

@@ -236,13 +236,13 @@
     <string name="transfer_failed">फ़ाइल को पढ़ा या उसमें लिखा नहीं जा सका।</string>
     <string name="action_back">वापस जाएं</string>
     <string name="backup_title">ऐप का बैकअप</string>
-    <string name="backup_description">Google Play के बाहर से इंस्टॉल किए गए ऐप को उनकी APK फ़ाइलों के रूप में अपनी पसंद के किसी फ़ोल्डर में कॉपी करें, और वहां से उन्हें इसी या किसी दूसरे डिवाइस पर वापस इंस्टॉल करें। ऐप का अपना डेटा इसमें शामिल नहीं होता। उसी फ़ोल्डर में दोबारा बैकअप लेने पर सिर्फ़ वही कॉपी होता है जो बदला है; जिस ऐप को आपने अनइंस्टॉल कर दिया है, वह फ़ोल्डर में तब तक रहता है, जब तक आप उसे वहां से मिटा नहीं देते।</string>
+    <string name="backup_description">Google Play के बाहर से इंस्टॉल किए गए ऐप को उनकी APK फ़ाइलों के रूप में किसी फ़ोल्डर या ZIP फ़ाइल में कॉपी करें, और उन्हें इसी या किसी दूसरे डिवाइस पर वापस इंस्टॉल करें। ऐप का अपना डेटा इसमें शामिल नहीं होता।</string>
     <string name="action_backup_apps">ऐप का बैकअप लें</string>
     <string name="action_restore_apps">ऐप रीस्टोर करें</string>
     <string name="backup_notification_saving">बैकअप लिया जा रहा है: %1$s</string>
     <string name="backup_notification_restoring">रीस्टोर किया जा रहा है: %1$s</string>
     <string name="backup_folder">फ़ोल्डर: %1$s</string>
-    <string name="backup_no_folder">बैकअप रखने के लिए कोई फ़ोल्डर चुनें: इस डिवाइस पर, मेमोरी कार्ड पर या फ़ाइल पिकर में दिखने वाली किसी क्लाउड सेवा में।</string>
+    <string name="backup_no_folder">अभी कोई फ़ोल्डर नहीं चुना गया है। फ़ोल्डर में सेव करते समय इसे चुनने के लिए कहा जाएगा।</string>
     <string name="backup_no_picker">फ़ोल्डर चुनने के लिए कोई ऐप नहीं मिला।</string>
     <string name="action_choose_folder">फ़ोल्डर चुनें</string>
     <string name="action_change_folder">फ़ोल्डर बदलें</string>
@@ -277,4 +277,18 @@
     <string name="restore_installing">इंस्टॉल हो रहा है…</string>
     <string name="restore_fail_invalid">फ़ोल्डर में मौजूद फ़ाइल कोई मान्य ऐप पैकेज नहीं है।</string>
     <string name="backup_index_not_written">फ़ोल्डर का इंडेक्स और स्टोर की सेटिंग फ़ाइल नहीं लिखे जा सके। कॉपी किए गए ऐप अब भी अपने-अपने फ़ोल्डर से रीस्टोर किए जा सकते हैं।</string>
+    <string name="backup_ways">फ़ोल्डर अप-टू-डेट रहता है: अगले बैकअप में सिर्फ़ वही कॉपी होता है जो बदला है, और डिवाइस से हटाया गया ऐप उसमें तब तक रहता है, जब तक आप उसे वहां से मिटा नहीं देते। ZIP फ़ाइल एक ही फ़ाइल होती है, जिसे दूसरे फ़ोन पर या Google Drive जैसी क्लाउड सेवा में ले जाया जा सकता है; इसे हर बार पूरा नए सिरे से लिखा जाता है।</string>
+    <string name="action_save_zip">ZIP फ़ाइल में सेव करें</string>
+    <string name="action_choose_zip">ZIP फ़ाइल चुनें</string>
+    <string name="backup_zip_file">ZIP फ़ाइल: %1$s</string>
+    <string name="restore_choose_source">वह फ़ोल्डर या ZIP फ़ाइल चुनें, जिसमें बैकअप सेव किया गया था।</string>
+    <string name="restore_zip_nothing">इस ZIP फ़ाइल में ARK-Store से बैकअप किया गया कोई ऐप नहीं है।</string>
+    <string name="backup_zip_unreadable">ZIP फ़ाइल पढ़ी नहीं जा सकी।</string>
+    <string name="backup_zip_failed">ZIP फ़ाइल लिखी नहीं जा सकी, इसलिए उसे हटा दिया गया।</string>
+    <string name="backup_zip_cancelled">रद्द किया गया। अधूरी ZIP फ़ाइल हटा दी गई।</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d ऐप ZIP फ़ाइल में सेव किया गया।</item>
+        <item quantity="other">%1$d ऐप ZIP फ़ाइल में सेव किए गए।</item>
+    </plurals>
+    <string name="backup_zip_left_out">सूची पढ़े जाने के बाद बदल जाने के कारण इन्हें छोड़ दिया गया: %1$s</string>
 </resources>

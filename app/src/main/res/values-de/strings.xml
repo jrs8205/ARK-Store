@@ -236,13 +236,13 @@
     <string name="transfer_failed">Die Datei konnte nicht gelesen oder geschrieben werden.</string>
     <string name="action_back">Zurück</string>
     <string name="backup_title">App-Sicherung</string>
-    <string name="backup_description">Kopiere die Apps, die nicht über Google Play installiert wurden, als APK-Dateien in einen Ordner deiner Wahl und installiere sie von dort wieder, auf diesem oder einem anderen Gerät. Die Daten der Apps selbst sind nicht enthalten. Eine weitere Sicherung in denselben Ordner kopiert nur, was sich geändert hat; eine App, die du entfernt hast, bleibt im Ordner, bis du sie dort löschst.</string>
+    <string name="backup_description">Kopiere die Apps, die nicht über Google Play installiert wurden, als APK-Dateien in einen Ordner oder eine ZIP-Datei und installiere sie wieder, auf diesem oder einem anderen Gerät. Die Daten der Apps selbst sind nicht enthalten.</string>
     <string name="action_backup_apps">Apps sichern</string>
     <string name="action_restore_apps">Apps wiederherstellen</string>
     <string name="backup_notification_saving">%1$s wird gesichert</string>
     <string name="backup_notification_restoring">%1$s wird wiederhergestellt</string>
     <string name="backup_folder">Ordner: %1$s</string>
-    <string name="backup_no_folder">Wähle einen Ordner für die Sicherung: auf diesem Gerät, auf einer Speicherkarte oder in einem Cloud-Dienst, den die Dateiauswahl anzeigt.</string>
+    <string name="backup_no_folder">Noch kein Ordner ausgewählt. Er wird abgefragt, wenn du in einen Ordner speicherst.</string>
     <string name="backup_no_picker">Es wurde keine App gefunden, mit der sich ein Ordner auswählen lässt.</string>
     <string name="action_choose_folder">Ordner auswählen</string>
     <string name="action_change_folder">Ordner ändern</string>
@@ -277,4 +277,18 @@
     <string name="restore_installing">Wird installiert…</string>
     <string name="restore_fail_invalid">Die Datei im Ordner ist kein gültiges App-Paket.</string>
     <string name="backup_index_not_written">Der Index im Ordner und die Einstellungsdatei des Stores konnten nicht geschrieben werden. Die kopierten Apps lassen sich trotzdem aus ihren Ordnern wiederherstellen.</string>
+    <string name="backup_ways">Ein Ordner bleibt aktuell: Die nächste Sicherung kopiert nur, was sich geändert hat, und eine vom Gerät entfernte App bleibt darin, bis du sie dort löschst. Eine ZIP-Datei ist eine einzige Datei zum Übertragen auf ein anderes Smartphone oder in einen Cloud-Dienst wie Google Drive und wird jedes Mal komplett neu geschrieben.</string>
+    <string name="action_save_zip">In ZIP-Datei speichern</string>
+    <string name="action_choose_zip">ZIP-Datei auswählen</string>
+    <string name="backup_zip_file">ZIP-Datei: %1$s</string>
+    <string name="restore_choose_source">Wähle den Ordner oder die ZIP-Datei mit der Sicherung.</string>
+    <string name="restore_zip_nothing">Die ZIP-Datei enthält keine von ARK-Store gesicherten Apps.</string>
+    <string name="backup_zip_unreadable">Die ZIP-Datei konnte nicht gelesen werden.</string>
+    <string name="backup_zip_failed">Die ZIP-Datei konnte nicht geschrieben werden und wurde deshalb entfernt.</string>
+    <string name="backup_zip_cancelled">Abgebrochen. Die unvollständige ZIP-Datei wurde entfernt.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d App in der ZIP-Datei gespeichert.</item>
+        <item quantity="other">%1$d Apps in der ZIP-Datei gespeichert.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Nicht aufgenommen, da sie sich nach dem Einlesen der Liste geändert haben: %1$s</string>
 </resources>

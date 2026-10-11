@@ -244,13 +244,13 @@
     <string name="transfer_failed">Impossibile leggere o scrivere il file.</string>
     <string name="action_back">Indietro</string>
     <string name="backup_title">Backup delle app</string>
-    <string name="backup_description">Copia le app installate al di fuori di Google Play, come file APK, in una cartella a tua scelta e reinstallale da lì su questo o su un altro dispositivo. I dati delle app non sono inclusi. Un secondo backup nella stessa cartella copia solo ciò che è cambiato; un\'app che hai disinstallato resta nella cartella finché non la elimini da lì.</string>
+    <string name="backup_description">Copia le app installate al di fuori di Google Play, come file APK, in una cartella o in un file ZIP e reinstallale su questo o su un altro dispositivo. I dati delle app non sono inclusi.</string>
     <string name="action_backup_apps">Esegui il backup delle app</string>
     <string name="action_restore_apps">Ripristina le app</string>
     <string name="backup_notification_saving">Backup in corso: %1$s</string>
     <string name="backup_notification_restoring">Ripristino in corso: %1$s</string>
     <string name="backup_folder">Cartella: %1$s</string>
-    <string name="backup_no_folder">Scegli una cartella in cui conservare il backup: su questo dispositivo, su una scheda o in un servizio cloud mostrato dal selettore di file.</string>
+    <string name="backup_no_folder">Non hai ancora scelto una cartella. Ti verrà chiesta quando salverai in una cartella.</string>
     <string name="backup_no_picker">Non è stata trovata nessuna app con cui scegliere una cartella.</string>
     <string name="action_choose_folder">Scegli cartella</string>
     <string name="action_change_folder">Cambia cartella</string>
@@ -286,4 +286,19 @@
     <string name="restore_installing">Installazione in corso…</string>
     <string name="restore_fail_invalid">Il file nella cartella non è un pacchetto app valido.</string>
     <string name="backup_index_not_written">Non è stato possibile scrivere l\'indice della cartella e il file delle impostazioni dello store. Le app copiate possono comunque essere ripristinate dalle rispettive cartelle.</string>
+    <string name="backup_ways">Una cartella resta aggiornata: il backup successivo copia solo ciò che è cambiato e un\'app rimossa dal dispositivo vi resta finché non la elimini da lì. Un file ZIP è un unico file per passare a un altro telefono o a un servizio cloud come Google Drive, e viene riscritto per intero ogni volta.</string>
+    <string name="action_save_zip">Salva in un file ZIP</string>
+    <string name="action_choose_zip">Scegli file ZIP</string>
+    <string name="backup_zip_file">File ZIP: %1$s</string>
+    <string name="restore_choose_source">Scegli la cartella o il file ZIP in cui è stato salvato il backup.</string>
+    <string name="restore_zip_nothing">Il file ZIP non contiene app salvate da ARK-Store.</string>
+    <string name="backup_zip_unreadable">Impossibile leggere il file ZIP.</string>
+    <string name="backup_zip_failed">Impossibile scrivere il file ZIP, quindi è stato rimosso.</string>
+    <string name="backup_zip_cancelled">Annullato. Il file ZIP incompleto è stato rimosso.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d app salvata nel file ZIP.</item>
+        <item quantity="many">%1$d app salvate nel file ZIP.</item>
+        <item quantity="other">%1$d app salvate nel file ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Escluse perché sono cambiate dopo la lettura dell\'elenco: %1$s</string>
 </resources>

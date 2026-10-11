@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.text.format.Formatter
+import java.time.LocalDate
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -43,12 +44,13 @@ import org.jarsi.arkstore.backup.BackupError
 import org.jarsi.arkstore.backup.BackupState
 import org.jarsi.arkstore.backup.Installers
 import org.jarsi.arkstore.backup.RestoreStatus
+import org.jarsi.arkstore.backup.ZipBackup
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.localKey
 
-/** Chooses the installed apps to copy to the folder, and copies them. */
+/** Chooses the installed apps to copy, and copies them to the folder or to a zip file. */
 @Composable
 internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String, onBack: () -> Unit) {
     val tree by viewModel.tree.collectAsStateWithLifecycle()
@@ -57,11 +59,44 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val running = state is BackupState.Running
+    var noPicker by rememberSaveable { mutableStateOf(false) }
+    // A save to a folder not chosen yet asks for one first, and goes on once it is chosen.
+    var saveWhenChosen by rememberSaveable { mutableStateOf(false) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            viewModel.chooseTree(uri)
+            if (saveWhenChosen) viewModel.startBackup(settingsJson())
+        }
+        saveWhenChosen = false
+    }
+    val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(ZipBackup.MIME_TYPE)) { uri ->
+        if (uri != null) viewModel.startZipBackup(uri, settingsJson())
+    }
     // Read on coming here and again after every install: the versions and files change with them.
     LaunchedEffect(installedChanged) { viewModel.loadCandidates() }
     StorePage(title = stringResource(R.string.action_backup_apps), onBack = onBack, scrolling = false) {
-        FolderChooser(tree, name = null, enabled = !running, onChosen = viewModel::chooseTree)
+        SourceLine(
+            text = when {
+                noPicker -> stringResource(R.string.backup_no_picker)
+                tree == null -> stringResource(R.string.backup_no_folder)
+                else -> stringResource(R.string.backup_folder, folderName(tree!!))
+            },
+            error = noPicker
+        )
+        if (tree != null) {
+            StoreOutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    noPicker = !launch { folderPicker.launch(tree) }
+                },
+                enabled = !running,
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Text(stringResource(R.string.action_change_folder))
+            }
+        }
         val list = candidates
         if (list == null) {
             Text(
@@ -98,21 +133,48 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                 }
             }
         }
-        JobFooter(
-            state = state,
-            canStart = tree != null && list != null && list.any { it.readable && it.entry.packageName in selected },
-            startLabel = R.string.action_save_backup,
-            onStart = { viewModel.startBackup(settingsJson()) },
-            onCancel = viewModel::cancel,
-            onDismiss = viewModel::dismiss
-        )
+        val canStart = list != null && list.any { it.readable && it.entry.packageName in selected }
+        JobFooter(state = state, onCancel = viewModel::cancel, onDismiss = viewModel::dismiss) {
+            Text(
+                text = stringResource(R.string.backup_ways),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            StoreButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    if (tree != null) {
+                        viewModel.startBackup(settingsJson())
+                    } else {
+                        saveWhenChosen = true
+                        noPicker = !launch { folderPicker.launch(null) }
+                    }
+                },
+                enabled = canStart,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_save_backup))
+            }
+            StoreOutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    noPicker = !launch { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
+                },
+                enabled = canStart,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Text(stringResource(R.string.action_save_zip))
+            }
+        }
     }
 }
 
-/** Shows what the folder holds against this device, and installs what is chosen. */
+/** Shows what the folder or the zip file holds against this device, and installs what is chosen. */
 @Composable
 internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -> Unit, onBack: () -> Unit) {
     val tree by viewModel.tree.collectAsStateWithLifecycle()
+    val zip by viewModel.zip.collectAsStateWithLifecycle()
     val folder by viewModel.folder.collectAsStateWithLifecycle()
     val reading by viewModel.reading.collectAsStateWithLifecycle()
     val folderError by viewModel.folderError.collectAsStateWithLifecycle()
@@ -122,28 +184,75 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
     val running = state is BackupState.Running
-    // Read afresh each time the page is opened: a backup may have been written since.
-    LaunchedEffect(tree) { viewModel.loadFolder() }
-    // An install that has gone through changes what the folder has to offer this device.
+    var noPicker by rememberSaveable { mutableStateOf(false) }
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) viewModel.chooseTree(uri)
+    }
+    val zipPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.chooseZip(uri)
+    }
+    val isZip = zip != null
+    // Read afresh each time the page is opened or another backup is chosen: one may have been written since.
+    LaunchedEffect(tree, zip) { viewModel.loadFolder() }
+    // An install that has gone through changes what the backup has to offer this device.
     LaunchedEffect(installedChanged) { if (installedChanged > 0) viewModel.refreshStatuses() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
         val read = folder
-        FolderChooser(tree, name = read?.name, enabled = !running, onChosen = viewModel::chooseTree)
+        SourceLine(
+            text = when {
+                noPicker -> stringResource(R.string.backup_no_picker)
+                zip != null -> stringResource(R.string.backup_zip_file, read?.name ?: zip!!.lastPathSegment.orEmpty())
+                tree != null -> stringResource(R.string.backup_folder, read?.name ?: folderName(tree!!))
+                else -> stringResource(R.string.restore_choose_source)
+            },
+            error = noPicker
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            StoreOutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    noPicker = !launch { folderPicker.launch(tree) }
+                },
+                enabled = !running
+            ) {
+                Text(stringResource(if (tree == null || isZip) R.string.action_choose_folder else R.string.action_change_folder))
+            }
+            StoreOutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    noPicker = !launch { zipPicker.launch(arrayOf("*/*")) }
+                },
+                enabled = !running
+            ) {
+                Text(stringResource(R.string.action_choose_zip))
+            }
+        }
         when {
-            tree == null -> Spacer(Modifier.weight(1f))
+            zip == null && tree == null -> Spacer(Modifier.weight(1f))
             read == null -> {
+                val failed = folderError && !reading
                 Text(
-                    text = stringResource(if (folderError && !reading) R.string.backup_folder_unavailable else R.string.restore_reading),
+                    text = stringResource(
+                        when {
+                            !failed -> R.string.restore_reading
+                            isZip -> R.string.backup_zip_unreadable
+                            else -> R.string.backup_folder_unavailable
+                        }
+                    ),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = if (folderError && !reading) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
                 Spacer(Modifier.weight(1f))
             }
             read.entries.isEmpty() -> {
                 Text(
-                    text = stringResource(R.string.restore_nothing),
+                    text = stringResource(if (read.zip) R.string.restore_zip_nothing else R.string.restore_nothing),
                     style = MaterialTheme.typography.bodyLarge,
                     modifier = Modifier.padding(vertical = 16.dp)
                 )
@@ -193,64 +302,42 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                 }
             }
         }
-        JobFooter(
-            state = state,
-            canStart = read != null && (
-                read.entries.any { it.status.selectable && it.entry.packageName in selected } ||
-                    (importSettings && read.settings != null)
-                ),
-            startLabel = R.string.action_restore,
-            onStart = { viewModel.startRestore(onImportSettings) },
-            onCancel = viewModel::cancel,
-            onDismiss = viewModel::dismiss
-        )
+        val canStart = read != null && (
+            read.entries.any { it.status.selectable && it.entry.packageName in selected } ||
+                (importSettings && read.settings != null)
+            )
+        JobFooter(state = state, onCancel = viewModel::cancel, onDismiss = viewModel::dismiss) {
+            StoreButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    viewModel.startRestore(onImportSettings)
+                },
+                enabled = canStart,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(stringResource(R.string.action_restore))
+            }
+        }
     }
 }
 
-/** The folder in use, with the way to choose another; asks for one at once when none is chosen. */
+/** Opens a picker through [open]; false when the device has no app to pick with. */
+private inline fun launch(open: () -> Unit): Boolean = try {
+    open()
+    true
+} catch (_: ActivityNotFoundException) {
+    false
+}
+
+/** What the page works with: the folder, the zip file, or what to choose. */
 @Composable
-private fun FolderChooser(tree: Uri?, name: String?, enabled: Boolean, onChosen: (Uri) -> Unit) {
-    val haptics = LocalHapticFeedback.current
-    val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) onChosen(uri)
-    }
-    var noPicker by rememberSaveable { mutableStateOf(false) }
-    fun open() {
-        try {
-            picker.launch(tree)
-        } catch (_: ActivityNotFoundException) {
-            noPicker = true
-        }
-    }
-    // Asked once per visit: a user who closed the picker without choosing is not asked again
-    // until they come back, and a turn of the screen does not ask either.
-    var asked by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(tree) {
-        if (tree == null && !asked) {
-            asked = true
-            open()
-        }
-    }
+private fun SourceLine(text: String, error: Boolean) {
     Text(
-        text = when {
-            noPicker -> stringResource(R.string.backup_no_picker)
-            tree == null -> stringResource(R.string.backup_no_folder)
-            else -> stringResource(R.string.backup_folder, name ?: folderName(tree))
-        },
+        text = text,
         style = MaterialTheme.typography.bodyMedium,
-        color = if (noPicker) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp)
     )
-    StoreOutlinedButton(
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-            open()
-        },
-        enabled = enabled,
-        modifier = Modifier.padding(top = 8.dp)
-    ) {
-        Text(stringResource(if (tree == null) R.string.action_choose_folder else R.string.action_change_folder))
-    }
 }
 
 /** The folder's path as the provider names it, for a folder whose own name has not been read. */
@@ -349,29 +436,18 @@ private fun CheckRow(
     }
 }
 
-/** The job's standing at the foot of the page: the way to begin it, its progress, or how it ended. */
+/** The job's standing at the foot of the page: the ways to begin it ([idle]), its progress, or how it ended. */
 @Composable
 private fun JobFooter(
     state: BackupState,
-    canStart: Boolean,
-    startLabel: Int,
-    onStart: () -> Unit,
     onCancel: () -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    idle: @Composable () -> Unit
 ) {
     val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
         when (state) {
-            BackupState.Idle -> StoreButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    onStart()
-                },
-                enabled = canStart,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(stringResource(startLabel))
-            }
+            BackupState.Idle -> idle()
             is BackupState.Running -> {
                 if (state.bytesTotal > 0) {
                     val fraction = (state.bytesDone.toFloat() / state.bytesTotal).coerceIn(0f, 1f)
@@ -398,16 +474,19 @@ private fun JobFooter(
             }
             is BackupState.Done -> {
                 Text(
-                    text = if (state.restoring) {
-                        stringResource(R.string.restore_done, state.saved, state.failed.size)
-                    } else {
-                        stringResource(R.string.backup_done, state.saved, state.skipped, state.failed.size)
+                    text = when {
+                        state.restoring -> stringResource(R.string.restore_done, state.saved, state.failed.size)
+                        state.zip -> pluralStringResource(R.plurals.backup_zip_done, state.saved, state.saved)
+                        else -> stringResource(R.string.backup_done, state.saved, state.skipped, state.failed.size)
                     },
                     style = MaterialTheme.typography.bodyLarge
                 )
                 if (state.failed.isNotEmpty()) {
                     Text(
-                        text = stringResource(R.string.backup_failed_apps, state.failed.joinToString(", ")),
+                        text = stringResource(
+                            if (state.zip && !state.restoring) R.string.backup_zip_left_out else R.string.backup_failed_apps,
+                            state.failed.joinToString(", ")
+                        ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                         modifier = Modifier.padding(top = 4.dp)
@@ -427,7 +506,15 @@ private fun JobFooter(
             is BackupState.Failed -> {
                 val cancelled = state.reason == BackupError.CANCELLED
                 Text(
-                    text = stringResource(if (cancelled) R.string.backup_cancelled else R.string.backup_folder_unavailable),
+                    text = stringResource(
+                        when {
+                            state.zip && !state.restoring && cancelled -> R.string.backup_zip_cancelled
+                            state.zip && !state.restoring -> R.string.backup_zip_failed
+                            state.zip && !cancelled -> R.string.backup_zip_unreadable
+                            cancelled -> R.string.backup_cancelled
+                            else -> R.string.backup_folder_unavailable
+                        }
+                    ),
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (cancelled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
                 )

@@ -228,13 +228,13 @@
     <string name="transfer_failed">无法读取或写入该文件。</string>
     <string name="action_back">返回</string>
     <string name="backup_title">应用备份</string>
-    <string name="backup_description">将从 Google Play 以外的渠道安装的应用以 APK 文件的形式复制到您选择的文件夹，之后可在此设备或其他设备上从该文件夹重新安装。不包括应用自身的数据。再次备份到同一文件夹时，只会复制有变化的内容；已卸载的应用会一直保留在文件夹中，直到您在那里将其删除。</string>
+    <string name="backup_description">将从 Google Play 以外的渠道安装的应用以 APK 文件的形式复制到文件夹或 ZIP 文件中，之后可在此设备或其他设备上重新安装。不包括应用自身的数据。</string>
     <string name="action_backup_apps">备份应用</string>
     <string name="action_restore_apps">恢复应用</string>
     <string name="backup_notification_saving">正在备份：%1$s</string>
     <string name="backup_notification_restoring">正在恢复：%1$s</string>
     <string name="backup_folder">文件夹：%1$s</string>
-    <string name="backup_no_folder">请选择用于存放备份的文件夹：可以在此设备上、存储卡上，或文件选择器中显示的云服务中。</string>
+    <string name="backup_no_folder">尚未选择文件夹。保存到文件夹时会请您选择。</string>
     <string name="backup_no_picker">找不到可用于选择文件夹的应用。</string>
     <string name="action_choose_folder">选择文件夹</string>
     <string name="action_change_folder">更改文件夹</string>
@@ -268,4 +268,17 @@
     <string name="restore_installing">正在安装…</string>
     <string name="restore_fail_invalid">文件夹中的文件不是有效的应用安装包。</string>
     <string name="backup_index_not_written">无法写入文件夹的索引和商店的设置文件。已复制的应用仍可从各自的文件夹恢复。</string>
+    <string name="backup_ways">文件夹会保持最新：下次备份只复制有变化的内容，从设备上移除的应用会一直保留在文件夹中，直到您在那里将其删除。ZIP 文件是单个文件，便于转移到另一部手机或 Google Drive 等云服务，每次都会完整重写。</string>
+    <string name="action_save_zip">保存到 ZIP 文件</string>
+    <string name="action_choose_zip">选择 ZIP 文件</string>
+    <string name="backup_zip_file">ZIP 文件：%1$s</string>
+    <string name="restore_choose_source">请选择保存备份的文件夹或 ZIP 文件。</string>
+    <string name="restore_zip_nothing">此 ZIP 文件中没有 ARK-Store 备份的应用。</string>
+    <string name="backup_zip_unreadable">无法读取该 ZIP 文件。</string>
+    <string name="backup_zip_failed">无法写入该 ZIP 文件，因此已将其删除。</string>
+    <string name="backup_zip_cancelled">已取消。未完成的 ZIP 文件已删除。</string>
+    <plurals name="backup_zip_done">
+        <item quantity="other">已将 %1$d 个应用保存到 ZIP 文件。</item>
+    </plurals>
+    <string name="backup_zip_left_out">以下应用在读取列表后发生了变化，因此未包含在内：%1$s</string>
 </resources>

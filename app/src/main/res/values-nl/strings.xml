@@ -236,13 +236,13 @@
     <string name="transfer_failed">Het bestand kan niet worden gelezen of geschreven.</string>
     <string name="action_back">Terug</string>
     <string name="backup_title">Back-up van apps</string>
-    <string name="backup_description">Kopieer de apps die niet via Google Play zijn geïnstalleerd als APK-bestanden naar een map naar keuze, en installeer ze daaruit terug op dit of een ander apparaat. De gegevens van de apps zelf gaan niet mee. Een volgende back-up naar dezelfde map kopieert alleen wat er is veranderd; een app die je hebt verwijderd, blijft in de map staan totdat je deze daar verwijdert.</string>
+    <string name="backup_description">Kopieer de apps die niet via Google Play zijn geïnstalleerd als APK-bestanden naar een map of een zip-bestand, en installeer ze terug op dit of een ander apparaat. De gegevens van de apps zelf gaan niet mee.</string>
     <string name="action_backup_apps">Back-up van apps maken</string>
     <string name="action_restore_apps">Apps terugzetten</string>
     <string name="backup_notification_saving">Back-up van %1$s wordt gemaakt</string>
     <string name="backup_notification_restoring">%1$s wordt teruggezet</string>
     <string name="backup_folder">Map: %1$s</string>
-    <string name="backup_no_folder">Kies een map voor de back-up: op dit apparaat, op een geheugenkaart of in een clouddienst die de bestandskiezer toont.</string>
+    <string name="backup_no_folder">Nog geen map gekozen. Daar wordt om gevraagd wanneer je in een map opslaat.</string>
     <string name="backup_no_picker">Er is geen app gevonden waarmee je een map kunt kiezen.</string>
     <string name="action_choose_folder">Map kiezen</string>
     <string name="action_change_folder">Map wijzigen</string>
@@ -277,4 +277,18 @@
     <string name="restore_installing">Bezig met installeren…</string>
     <string name="restore_fail_invalid">Het bestand in de map is geen geldig app-pakket.</string>
     <string name="backup_index_not_written">De index in de map en het instellingenbestand van de store konden niet worden geschreven. De gekopieerde apps kunnen nog steeds uit hun eigen mappen worden teruggezet.</string>
+    <string name="backup_ways">Een map blijft actueel: de volgende back-up kopieert alleen wat er is veranderd, en een app die van het apparaat is verwijderd, blijft erin staan totdat je deze daar verwijdert. Een zip-bestand is één bestand om naar een andere telefoon of een clouddienst zoals Google Drive over te zetten, en wordt elke keer helemaal opnieuw geschreven.</string>
+    <string name="action_save_zip">Opslaan in zip-bestand</string>
+    <string name="action_choose_zip">Zip-bestand kiezen</string>
+    <string name="backup_zip_file">Zip-bestand: %1$s</string>
+    <string name="restore_choose_source">Kies de map of het zip-bestand waarin de back-up is opgeslagen.</string>
+    <string name="restore_zip_nothing">Het zip-bestand bevat geen apps waarvan ARK-Store een back-up heeft gemaakt.</string>
+    <string name="backup_zip_unreadable">Het zip-bestand kon niet worden gelezen.</string>
+    <string name="backup_zip_failed">Het zip-bestand kon niet worden geschreven en is daarom verwijderd.</string>
+    <string name="backup_zip_cancelled">Geannuleerd. Het onvoltooide zip-bestand is verwijderd.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d app opgeslagen in het zip-bestand.</item>
+        <item quantity="other">%1$d apps opgeslagen in het zip-bestand.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Weggelaten, omdat ze zijn veranderd nadat de lijst was gelezen: %1$s</string>
 </resources>

@@ -47,6 +47,10 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** The folder chosen, when the right to it is held. */
     val tree: StateFlow<Uri?> = _tree.asStateFlow()
 
+    private val _zip = MutableStateFlow<Uri?>(null)
+    /** The zip file chosen to restore from, which stands before the folder while it is chosen. */
+    val zip: StateFlow<Uri?> = _zip.asStateFlow()
+
     private val _candidates = MutableStateFlow<List<BackupCandidate>?>(null)
     /** The apps a backup may take, or null until they have been read. */
     val candidates: StateFlow<List<BackupCandidate>?> = _candidates.asStateFlow()
@@ -102,12 +106,23 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun chooseTree(uri: Uri) {
         BackupManager.rememberTree(context, uri)
+        forgetRead()
+        _zip.value = null
+        _tree.value = uri
+    }
+
+    /** Takes [uri] as the zip file to restore from; the restore page reads it when shown. */
+    fun chooseZip(uri: Uri) {
+        forgetRead()
+        _zip.value = uri
+    }
+
+    private fun forgetRead() {
         readJob?.cancel()
         _reading.value = false
         _folder.value = null
         _folderError.value = false
         restoreSaid = Selection()
-        _tree.value = uri
     }
 
     /**
@@ -149,22 +164,32 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Begins the backup of the chosen apps, with [settingsJson] alongside; false when nothing was begun. */
     fun startBackup(settingsJson: String): Boolean {
         val tree = _tree.value ?: return false
-        val chosen = _candidates.value.orEmpty().filter { it.readable && it.entry.packageName in _selected.value }
-        if (chosen.isEmpty()) return false
+        val chosen = chosenForBackup().ifEmpty { return false }
         return BackupManager.backup(context, tree, chosen, settingsJson)
     }
 
+    /** Begins writing the chosen apps to the zip file [uri], made for it; false when nothing was begun. */
+    fun startZipBackup(uri: Uri, settingsJson: String): Boolean {
+        val chosen = chosenForBackup().ifEmpty { return false }
+        return BackupManager.backupZip(context, uri, chosen, settingsJson)
+    }
+
+    private fun chosenForBackup(): List<BackupCandidate> =
+        _candidates.value.orEmpty().filter { it.readable && it.entry.packageName in _selected.value }
+
     /**
-     * Reads the folder for a restore, afresh each time. What is read is kept only if the
-     * folder is still the one chosen: a folder chosen meanwhile has a read of its own.
+     * Reads the backup for a restore, the zip file when one is chosen and the folder otherwise,
+     * afresh each time. What is read is kept only if it is still the one chosen: one chosen
+     * meanwhile has a read of its own.
      */
     fun loadFolder() {
-        val tree = _tree.value ?: return
+        val zip = _zip.value
+        val source = zip ?: _tree.value ?: return
         readJob?.cancel()
         _reading.value = true
         readJob = viewModelScope.launch {
-            val read = BackupManager.read(context, tree)
-            if (_tree.value != tree) return@launch
+            val read = if (zip != null) BackupManager.readZip(context, zip) else BackupManager.read(context, source)
+            if ((_zip.value ?: _tree.value) != source) return@launch
             _folderError.value = read == null
             _folder.value = read
             if (read != null) chooseForRestore(read)

@@ -236,13 +236,13 @@
     <string name="transfer_failed">Tiedostoa ei voitu lukea tai kirjoittaa.</string>
     <string name="action_back">Takaisin</string>
     <string name="backup_title">Sovellusten varmuuskopio</string>
-    <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina valitsemaasi kansioon ja asenna ne sieltä takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot eivät sisälly. Toinen varmuuskopio samaan kansioon kopioi vain muuttuneet; puhelimesta poistettu sovellus jää kansioon, kunnes poistat sen sieltä.</string>
+    <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina kansioon tai zip-tiedostoon ja asenna ne takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot eivät sisälly.</string>
     <string name="action_backup_apps">Varmuuskopioi sovellukset</string>
     <string name="action_restore_apps">Palauta sovellukset</string>
     <string name="backup_notification_saving">Varmuuskopioidaan: %1$s</string>
     <string name="backup_notification_restoring">Palautetaan: %1$s</string>
     <string name="backup_folder">Kansio: %1$s</string>
-    <string name="backup_no_folder">Valitse kansio varmuuskopiolle: tältä laitteelta, kortilta tai pilvipalvelusta, jonka tiedostovalitsin näyttää.</string>
+    <string name="backup_no_folder">Kansiota ei ole vielä valittu. Se kysytään, kun tallennat kansioon.</string>
     <string name="backup_no_picker">Kansion valintaan ei löytynyt sovellusta.</string>
     <string name="action_choose_folder">Valitse kansio</string>
     <string name="action_change_folder">Vaihda kansio</string>
@@ -277,4 +277,18 @@
     <string name="restore_installing">Asennetaan…</string>
     <string name="restore_fail_invalid">Kansion tiedosto ei ole kelvollinen sovelluspaketti.</string>
     <string name="backup_index_not_written">Kansion luetteloa ja kaupan asetustiedostoa ei voitu kirjoittaa. Kopioidut sovellukset voi silti palauttaa niiden kansioista.</string>
+    <string name="backup_ways">Kansio pysyy ajan tasalla: seuraava varmuuskopio kopioi vain muuttuneet, ja puhelimesta poistettu sovellus jää kansioon, kunnes poistat sen sieltä. Zip-tiedosto on yksi tiedosto siirtoon toiseen puhelimeen tai pilveen, kuten Google Driveen, ja se kirjoitetaan joka kerta kokonaan.</string>
+    <string name="action_save_zip">Tallenna zip-tiedostoon</string>
+    <string name="action_choose_zip">Valitse zip-tiedosto</string>
+    <string name="backup_zip_file">Zip-tiedosto: %1$s</string>
+    <string name="restore_choose_source">Valitse kansio tai zip-tiedosto, johon varmuuskopio on tallennettu.</string>
+    <string name="restore_zip_nothing">Zip-tiedostossa ei ole ARK-Storen varmuuskopioimia sovelluksia.</string>
+    <string name="backup_zip_unreadable">Zip-tiedostoa ei voitu lukea.</string>
+    <string name="backup_zip_failed">Zip-tiedostoa ei voitu kirjoittaa, joten se poistettiin.</string>
+    <string name="backup_zip_cancelled">Keskeytetty. Keskeneräinen zip-tiedosto poistettiin.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">Zip-tiedostoon tallennettiin %1$d sovellus.</item>
+        <item quantity="other">Zip-tiedostoon tallennettiin %1$d sovellusta.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Jätettiin pois, koska ne muuttuivat listan lukemisen jälkeen: %1$s</string>
 </resources>

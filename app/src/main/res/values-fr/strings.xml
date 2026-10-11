@@ -244,13 +244,13 @@
     <string name="transfer_failed">Impossible de lire ou d\'écrire le fichier.</string>
     <string name="action_back">Retour</string>
     <string name="backup_title">Sauvegarde des applications</string>
-    <string name="backup_description">Copiez les applications installées en dehors de Google Play, sous forme de fichiers APK, dans le dossier de votre choix, puis réinstallez-les à partir de celui-ci sur cet appareil ou sur un autre. Les données des applications ne sont pas incluses. Une nouvelle sauvegarde dans le même dossier ne copie que ce qui a changé ; une application que vous avez désinstallée reste dans le dossier tant que vous ne l\'en supprimez pas.</string>
+    <string name="backup_description">Copiez les applications installées en dehors de Google Play, sous forme de fichiers APK, dans un dossier ou un fichier ZIP, puis réinstallez-les sur cet appareil ou sur un autre. Les données des applications ne sont pas incluses.</string>
     <string name="action_backup_apps">Sauvegarder les applications</string>
     <string name="action_restore_apps">Restaurer les applications</string>
     <string name="backup_notification_saving">Sauvegarde : %1$s</string>
     <string name="backup_notification_restoring">Restauration : %1$s</string>
     <string name="backup_folder">Dossier : %1$s</string>
-    <string name="backup_no_folder">Choisissez un dossier où conserver la sauvegarde : sur cet appareil, sur une carte mémoire ou dans un service cloud proposé par le sélecteur de fichiers.</string>
+    <string name="backup_no_folder">Aucun dossier choisi pour l\'instant. Il vous sera demandé lorsque vous enregistrerez dans un dossier.</string>
     <string name="backup_no_picker">Aucune application permettant de choisir un dossier n\'a été trouvée.</string>
     <string name="action_choose_folder">Choisir un dossier</string>
     <string name="action_change_folder">Changer de dossier</string>
@@ -286,4 +286,19 @@
     <string name="restore_installing">Installation…</string>
     <string name="restore_fail_invalid">Le fichier du dossier n\'est pas un package d\'application valide.</string>
     <string name="backup_index_not_written">L\'index du dossier et le fichier de paramètres de la boutique n\'ont pas pu être écrits. Les applications copiées peuvent tout de même être restaurées à partir de leurs dossiers.</string>
+    <string name="backup_ways">Un dossier reste à jour : la sauvegarde suivante ne copie que ce qui a changé, et une application retirée de l\'appareil y reste tant que vous ne l\'en supprimez pas. Un fichier ZIP est un fichier unique pour passer sur un autre téléphone ou vers un service cloud comme Google Drive ; il est entièrement réécrit à chaque fois.</string>
+    <string name="action_save_zip">Enregistrer dans un fichier ZIP</string>
+    <string name="action_choose_zip">Choisir un fichier ZIP</string>
+    <string name="backup_zip_file">Fichier ZIP : %1$s</string>
+    <string name="restore_choose_source">Choisissez le dossier ou le fichier ZIP dans lequel la sauvegarde a été enregistrée.</string>
+    <string name="restore_zip_nothing">Ce fichier ZIP ne contient aucune application sauvegardée par ARK-Store.</string>
+    <string name="backup_zip_unreadable">Impossible de lire le fichier ZIP.</string>
+    <string name="backup_zip_failed">Impossible d\'écrire le fichier ZIP ; il a donc été supprimé.</string>
+    <string name="backup_zip_cancelled">Annulé. Le fichier ZIP inachevé a été supprimé.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d application enregistrée dans le fichier ZIP.</item>
+        <item quantity="many">%1$d applications enregistrées dans le fichier ZIP.</item>
+        <item quantity="other">%1$d applications enregistrées dans le fichier ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Laissées de côté, car elles ont changé après la lecture de la liste : %1$s</string>
 </resources>

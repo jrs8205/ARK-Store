@@ -252,13 +252,13 @@
     <string name="transfer_failed">Не вдалося прочитати або записати файл.</string>
     <string name="action_back">Назад</string>
     <string name="backup_title">Резервне копіювання додатків</string>
-    <string name="backup_description">Скопіюйте додатки, установлені не з Google Play, у вигляді файлів APK у вибрану вами папку, щоб потім знову встановити їх звідти на цьому чи іншому пристрої. Дані самих додатків не копіюються. Під час повторного резервного копіювання в ту саму папку копіюється лише те, що змінилося; додаток, який ви видалили з пристрою, залишається в папці, доки ви не видалите його й звідти.</string>
+    <string name="backup_description">Скопіюйте додатки, установлені не з Google Play, у вигляді файлів APK у папку або ZIP-файл, щоб потім знову встановити їх на цьому чи іншому пристрої. Дані самих додатків не копіюються.</string>
     <string name="action_backup_apps">Створити резервну копію</string>
     <string name="action_restore_apps">Відновити додатки</string>
     <string name="backup_notification_saving">Резервне копіювання: %1$s</string>
     <string name="backup_notification_restoring">Відновлення: %1$s</string>
     <string name="backup_folder">Папка: %1$s</string>
-    <string name="backup_no_folder">Виберіть папку для зберігання резервної копії: на цьому пристрої, на карті пам\'яті або в хмарному сервісі, доступному у вікні вибору файлів.</string>
+    <string name="backup_no_folder">Папку ще не вибрано. Її потрібно буде вибрати під час збереження в папку.</string>
     <string name="backup_no_picker">Не знайдено додатка для вибору папки.</string>
     <string name="action_choose_folder">Вибрати папку</string>
     <string name="action_change_folder">Змінити папку</string>
@@ -295,4 +295,20 @@
     <string name="restore_installing">Установлення…</string>
     <string name="restore_fail_invalid">Файл у папці не є дійсним пакетом додатка.</string>
     <string name="backup_index_not_written">Не вдалося записати індекс у папці й файл налаштувань магазину. Скопійовані додатки все одно можна відновити з їхніх папок.</string>
+    <string name="backup_ways">Папка залишається актуальною: наступне резервне копіювання копіює лише те, що змінилося, а додаток, видалений із пристрою, залишається в ній, доки ви не видалите його звідти. ZIP-файл — це один файл для перенесення на інший телефон або в хмарний сервіс, як-от Google Drive; щоразу він записується повністю заново.</string>
+    <string name="action_save_zip">Зберегти в ZIP-файл</string>
+    <string name="action_choose_zip">Вибрати ZIP-файл</string>
+    <string name="backup_zip_file">ZIP-файл: %1$s</string>
+    <string name="restore_choose_source">Виберіть папку або ZIP-файл, куди було збережено резервну копію.</string>
+    <string name="restore_zip_nothing">У ZIP-файлі немає резервних копій додатків, створених ARK-Store.</string>
+    <string name="backup_zip_unreadable">Не вдалося прочитати ZIP-файл.</string>
+    <string name="backup_zip_failed">Не вдалося записати ZIP-файл, тому його видалено.</string>
+    <string name="backup_zip_cancelled">Скасовано. Незавершений ZIP-файл видалено.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">У ZIP-файл збережено %1$d додаток.</item>
+        <item quantity="few">У ZIP-файл збережено %1$d додатки.</item>
+        <item quantity="many">У ZIP-файл збережено %1$d додатків.</item>
+        <item quantity="other">У ZIP-файл збережено %1$d додатка.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Пропущено, бо вони змінилися після читання списку: %1$s</string>
 </resources>

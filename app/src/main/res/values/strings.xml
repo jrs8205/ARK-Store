@@ -251,13 +251,13 @@
     <string name="transfer_failed">The file could not be read or written.</string>
     <string name="action_back">Back</string>
     <string name="backup_title">App backup</string>
-    <string name="backup_description">Copy the apps installed from outside Google Play, as their APK files, to a folder of your choosing, and install them back from it on this or another device. The apps\' own data is not included. A second backup to the same folder copies only what has changed; an app you have removed stays in the folder until you delete it there.</string>
+    <string name="backup_description">Copy the apps installed from outside Google Play as their APK files, to a folder or a zip file, and install them back on this or another device. The apps\' own data is not included.</string>
     <string name="action_backup_apps">Back up apps</string>
     <string name="action_restore_apps">Restore apps</string>
     <string name="backup_notification_saving">Backing up %1$s</string>
     <string name="backup_notification_restoring">Restoring %1$s</string>
     <string name="backup_folder">Folder: %1$s</string>
-    <string name="backup_no_folder">Choose a folder to keep the backup in: on this device, on a card, or in a cloud service that the file picker shows.</string>
+    <string name="backup_no_folder">No folder chosen yet. It is asked for when you save to a folder.</string>
     <string name="backup_no_picker">No app was found to choose a folder with.</string>
     <string name="action_choose_folder">Choose folder</string>
     <string name="action_change_folder">Change folder</string>
@@ -292,4 +292,18 @@
     <string name="restore_installing">Installing…</string>
     <string name="restore_fail_invalid">The file in the folder is not a valid app package.</string>
     <string name="backup_index_not_written">The folder\'s index and the store\'s settings file could not be written. The apps copied can still be restored from their folders.</string>
+    <string name="backup_ways">A folder stays up to date: the next backup copies only what has changed, and an app removed from the device stays in it until you delete it there. A zip file is one file for moving to another phone or to a cloud service such as Google Drive, written whole each time.</string>
+    <string name="action_save_zip">Save to zip file</string>
+    <string name="action_choose_zip">Choose zip file</string>
+    <string name="backup_zip_file">Zip file: %1$s</string>
+    <string name="restore_choose_source">Choose the folder or the zip file the backup was saved to.</string>
+    <string name="restore_zip_nothing">The zip file holds no apps backed up by ARK-Store.</string>
+    <string name="backup_zip_unreadable">The zip file could not be read.</string>
+    <string name="backup_zip_failed">The zip file could not be written, so it was removed.</string>
+    <string name="backup_zip_cancelled">Cancelled. The unfinished zip file was removed.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">Saved %1$d app to the zip file.</item>
+        <item quantity="other">Saved %1$d apps to the zip file.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Left out, as they changed after the list was read: %1$s</string>
 </resources>

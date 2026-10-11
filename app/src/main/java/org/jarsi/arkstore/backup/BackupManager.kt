@@ -6,9 +6,12 @@ import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.util.Log
 import androidx.core.content.edit
 import androidx.core.content.pm.PackageInfoCompat
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -67,10 +70,17 @@ sealed interface BackupState {
         val saved: Int,
         val skipped: Int,
         val failed: List<String>,
-        val indexWritten: Boolean = true
+        val indexWritten: Boolean = true,
+        /** The backup was a zip file rather than a folder; [failed] are then the apps left out of it. */
+        val zip: Boolean = false
     ) : BackupState
 
-    data class Failed(val restoring: Boolean, val reason: BackupError, val indexWritten: Boolean = true) : BackupState
+    data class Failed(
+        val restoring: Boolean,
+        val reason: BackupError,
+        val indexWritten: Boolean = true,
+        val zip: Boolean = false
+    ) : BackupState
 }
 
 enum class BackupError { FOLDER_UNAVAILABLE, CANCELLED }
@@ -83,17 +93,22 @@ data class RestoreEntry(
     val files: Map<String, Doc>?
 )
 
-/** A backup folder as read: its apps, and the store's settings file when it has one. */
+/**
+ * A backup as read: its apps, and the store's settings file when it has one. [tree] is the
+ * folder, or the zip file when [zip]; the files of a zip's apps are named by their place in it.
+ */
 data class BackupFolder(
     val tree: Uri,
     val name: String,
     val entries: List<RestoreEntry>,
-    val settings: Uri?
+    val settings: Uri?,
+    val zip: Boolean = false
 )
 
 /**
- * Copies the installed apps' files to a folder of the user's choosing, and installs them back
- * from one; see [AppBackup] for the folder's form. One job at a time, watched through [state],
+ * Copies the installed apps' files to a folder of the user's choosing or to a zip file, and
+ * installs them back from either; see [AppBackup] for the folder's form and [ZipBackup] for the
+ * zip's. One job at a time, watched through [state],
  * kept alive by [BackupService] while the user is elsewhere.
  */
 object BackupManager {
@@ -102,6 +117,8 @@ object BackupManager {
     private const val PREF_TREE = "tree"
     private const val APK_MIME = "application/vnd.android.package-archive"
     private const val JSON_MIME = "application/json"
+    /** Where the settings of a zip read for a restore are kept for their import. */
+    private const val ZIP_SETTINGS = "backup-settings.json"
     private const val BUFFER_BYTES = 64 * 1024
     /** The progress is told again after this much more has been copied. */
     private const val PROGRESS_STEP_BYTES = 1024 * 1024L
@@ -186,6 +203,48 @@ object BackupManager {
         )
     }
 
+    /**
+     * Reads the zip file [uri]: the apps its head tells, seen against what is installed here, and
+     * its settings, kept in the cache for an import. Null when the file cannot be read at all.
+     */
+    suspend fun readZip(context: Context, uri: Uri): BackupFolder? = withContext(Dispatchers.IO) {
+        val resolver = context.contentResolver
+        val head = try {
+            resolver.openInputStream(uri)?.use { ZipBackup.readHead(BufferedInputStream(it)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not read a zip file", e)
+            null
+        } ?: return@withContext null
+        val settings = head.settings?.let { text ->
+            File(context.cacheDir, ZIP_SETTINGS).apply { writeText(text) }.let(Uri::fromFile)
+        }
+        val installed = InstalledApps.snapshot(context)
+        val rows = head.entries.map { entry ->
+            val files = zipFiles(entry)
+            RestoreEntry(entry, status(context, entry, files, installed), files)
+        }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
+        BackupFolder(uri, displayName(context, uri) ?: uri.lastPathSegment.orEmpty(), rows, settings, zip = true)
+    }
+
+    /**
+     * The files of [entry] in a zip, as its head tells them: a zip written whole holds them all,
+     * and one that does not is found out when its files are taken out.
+     */
+    private fun zipFiles(entry: BackupEntry): Map<String, Doc> =
+        (entry.files.map { Doc("${entry.packageName}/${it.name}", it.name, APK_MIME, it.size) } +
+            Doc("${entry.packageName}/${AppBackup.ENTRY_NAME}", AppBackup.ENTRY_NAME, JSON_MIME, RestoreRules.UNKNOWN_SIZE))
+            .associateBy { it.name }
+
+    private fun displayName(context: Context, uri: Uri): String? = try {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     /** [folder] seen against what is installed now; the folder itself is not read again. */
     suspend fun refresh(context: Context, folder: BackupFolder): BackupFolder = withContext(Dispatchers.IO) {
         val installed = InstalledApps.snapshot(context)
@@ -221,11 +280,26 @@ object BackupManager {
         }
     }
 
+    /**
+     * Writes [selected] to the zip file [uri], made for it, along with the store's settings as
+     * [settingsJson]; returns whether the job was begun. A zip that cannot be finished is removed.
+     */
+    fun backupZip(context: Context, uri: Uri, selected: List<BackupCandidate>, settingsJson: String): Boolean {
+        val appContext = context.applicationContext
+        return start(appContext, restoring = false, zip = true) {
+            writeZip(appContext, uri, selected, settingsJson)
+        }
+    }
+
     /** Installs [selected] from [folder], one after the other; returns whether the job was begun. */
     fun restore(context: Context, folder: BackupFolder, selected: List<RestoreEntry>): Boolean {
         val appContext = context.applicationContext
-        return start(appContext, restoring = true) {
-            install(appContext, Documents(appContext.contentResolver, folder.tree), selected)
+        return start(appContext, restoring = true, zip = folder.zip) {
+            if (folder.zip) {
+                installZip(appContext, folder.tree, selected)
+            } else {
+                install(appContext, Documents(appContext.contentResolver, folder.tree), selected)
+            }
         }
     }
 
@@ -262,7 +336,7 @@ object BackupManager {
     }
 
     @Synchronized
-    private fun start(context: Context, restoring: Boolean, work: suspend () -> BackupState): Boolean {
+    private fun start(context: Context, restoring: Boolean, zip: Boolean = false, work: suspend () -> BackupState): Boolean {
         if (job?.isActive == true) return false
         _state.value = BackupState.Running(restoring, 0, 0, "", 0, 0)
         BackupService.start(context)
@@ -270,15 +344,117 @@ object BackupManager {
             _state.value = try {
                 work()
             } catch (e: CancelledWith) {
-                BackupState.Failed(restoring, BackupError.CANCELLED, e.indexWritten)
+                BackupState.Failed(restoring, BackupError.CANCELLED, e.indexWritten, zip)
             } catch (_: CancellationException) {
-                BackupState.Failed(restoring, BackupError.CANCELLED)
+                BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip)
             } catch (e: Exception) {
                 Log.w(TAG, if (restoring) "Restore failed" else "Backup failed", e)
-                BackupState.Failed(restoring, BackupError.FOLDER_UNAVAILABLE)
+                BackupState.Failed(restoring, BackupError.FOLDER_UNAVAILABLE, zip = zip)
             }
         }
         return true
+    }
+
+    /**
+     * Writes the zip: the apps whose files are still those of the list, the rest left out and
+     * named, since an app updated since the list was read has other files than its entry says.
+     */
+    private suspend fun writeZip(
+        context: Context,
+        uri: Uri,
+        selected: List<BackupCandidate>,
+        settingsJson: String
+    ): BackupState {
+        val (whole, changed) = selected.partition { candidate ->
+            candidate.readable && candidate.sources.size == candidate.entry.files.size &&
+                candidate.sources.zip(candidate.entry.files).all { (file, said) -> file.canRead() && file.length() == said.size }
+        }
+        if (whole.isEmpty()) throw IOException("None of the apps chosen can be written as they are")
+        val byPackage = whole.associateBy { it.entry.packageName }
+        val total = whole.sumOf { it.entry.size }
+        var index = 0
+        var label = ""
+        try {
+            val out = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("Nothing to write to")
+            out.use { stream ->
+                ZipBackup.write(
+                    BufferedOutputStream(stream, BUFFER_BYTES),
+                    whole.map { it.entry },
+                    settingsJson,
+                    Instant.now().toString(),
+                    open = { entry, i ->
+                        if (i == 0) {
+                            index++
+                            label = entry.label
+                        }
+                        byPackage.getValue(entry.packageName).sources[i].inputStream()
+                    },
+                    onBytes = { bytes -> _state.value = BackupState.Running(false, index, whole.size, label, bytes, total) }
+                )
+            }
+        } catch (e: Throwable) {
+            // A zip cut short would tell of apps it does not hold; it goes.
+            withContext(NonCancellable) {
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
+                    .onFailure { Log.w(TAG, "Could not remove the unfinished zip file", it) }
+            }
+            throw e
+        }
+        return BackupState.Done(false, whole.size, 0, changed.map { it.entry.label }, zip = true)
+    }
+
+    /**
+     * Installs [selected] from the zip file [uri], taking each app's files out as the zip comes
+     * to them, and handing them to the system as [install] does for a folder.
+     */
+    private suspend fun installZip(context: Context, uri: Uri, selected: List<RestoreEntry>): BackupState {
+        val total = selected.sumOf { it.entry.size }
+        var index = 0
+        var label = ""
+        var saved = 0
+        val failed = ArrayList<String>()
+        val input = context.contentResolver.openInputStream(uri) ?: throw IOException("The zip file cannot be read")
+        input.use { stream ->
+            ZipBackup.extract(
+                BufferedInputStream(stream, BUFFER_BYTES),
+                selected.map { it.entry },
+                dirFor = { entry ->
+                    index++
+                    label = entry.label
+                    File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}")
+                },
+                onBytes = { bytes -> _state.value = BackupState.Running(true, index, selected.size, label, bytes, total) },
+                onApp = { entry, files ->
+                    if (files == null) {
+                        Log.w(TAG, "The zip file does not hold the files of ${entry.packageName} whole")
+                        failed += entry.label
+                    } else {
+                        // The files are in a folder of their own, which the install takes over.
+                        val dir = files.first().parentFile ?: throw IOException("No folder for the files")
+                        val key = localKey(entry.packageName)
+                        var attempt: Int? = null
+                        try {
+                            val outcome = InstallManager.installLocalAndAwait(
+                                context, key, entry.label, entry.packageName, dir, files, INSTALL_TIMEOUT_MS
+                            ) { attempt = it }
+                            when (outcome) {
+                                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
+                                Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
+                                null -> if (attempt == null) failed += entry.label
+                            }
+                        } catch (e: CancellationException) {
+                            attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not restore ${entry.packageName}", e)
+                            failed += entry.label
+                            if (attempt == null) dir.deleteRecursively()
+                        }
+                    }
+                }
+            )
+        }
+        return BackupState.Done(true, saved, 0, failed, zip = true)
     }
 
     private suspend fun write(docs: Documents, selected: List<BackupCandidate>, settingsJson: String): BackupState {

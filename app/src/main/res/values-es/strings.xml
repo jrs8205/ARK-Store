@@ -244,13 +244,13 @@
     <string name="transfer_failed">No se ha podido leer o escribir el archivo.</string>
     <string name="action_back">Atrás</string>
     <string name="backup_title">Copia de seguridad de aplicaciones</string>
-    <string name="backup_description">Copia las aplicaciones instaladas desde fuera de Google Play, como archivos APK, en la carpeta que elijas y vuelve a instalarlas desde ella en este dispositivo o en otro. Los datos de las propias aplicaciones no se incluyen. Una segunda copia en la misma carpeta solo copia lo que ha cambiado; una aplicación que hayas desinstalado se queda en la carpeta hasta que la borres de allí.</string>
+    <string name="backup_description">Copia las aplicaciones instaladas desde fuera de Google Play, como archivos APK, en una carpeta o en un archivo ZIP, y vuelve a instalarlas en este dispositivo o en otro. Los datos de las propias aplicaciones no se incluyen.</string>
     <string name="action_backup_apps">Crear copia de seguridad</string>
     <string name="action_restore_apps">Restaurar aplicaciones</string>
     <string name="backup_notification_saving">Copiando %1$s</string>
     <string name="backup_notification_restoring">Restaurando %1$s</string>
     <string name="backup_folder">Carpeta: %1$s</string>
-    <string name="backup_no_folder">Elige una carpeta para guardar la copia de seguridad: en este dispositivo, en una tarjeta o en un servicio en la nube que muestre el selector de archivos.</string>
+    <string name="backup_no_folder">Todavía no has elegido ninguna carpeta. Se te pedirá cuando guardes en una carpeta.</string>
     <string name="backup_no_picker">No se ha encontrado ninguna aplicación para elegir una carpeta.</string>
     <string name="action_choose_folder">Elegir carpeta</string>
     <string name="action_change_folder">Cambiar carpeta</string>
@@ -286,4 +286,19 @@
     <string name="restore_installing">Instalando…</string>
     <string name="restore_fail_invalid">El archivo de la carpeta no es un paquete de aplicación válido.</string>
     <string name="backup_index_not_written">No se han podido escribir el índice de la carpeta ni el archivo de ajustes de la tienda. Aun así, las aplicaciones copiadas se pueden restaurar desde sus carpetas.</string>
+    <string name="backup_ways">Una carpeta se mantiene al día: la siguiente copia de seguridad solo copia lo que ha cambiado, y una aplicación quitada del dispositivo se queda en ella hasta que la borres de allí. Un archivo ZIP es un único archivo para pasar a otro teléfono o a un servicio en la nube como Google Drive, y se escribe entero cada vez.</string>
+    <string name="action_save_zip">Guardar en un archivo ZIP</string>
+    <string name="action_choose_zip">Elegir archivo ZIP</string>
+    <string name="backup_zip_file">Archivo ZIP: %1$s</string>
+    <string name="restore_choose_source">Elige la carpeta o el archivo ZIP en el que se guardó la copia de seguridad.</string>
+    <string name="restore_zip_nothing">El archivo ZIP no contiene aplicaciones guardadas por ARK-Store.</string>
+    <string name="backup_zip_unreadable">No se ha podido leer el archivo ZIP.</string>
+    <string name="backup_zip_failed">No se ha podido escribir el archivo ZIP, así que se ha eliminado.</string>
+    <string name="backup_zip_cancelled">Cancelado. Se ha eliminado el archivo ZIP sin terminar.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">Se ha guardado %1$d aplicación en el archivo ZIP.</item>
+        <item quantity="many">Se han guardado %1$d aplicaciones en el archivo ZIP.</item>
+        <item quantity="other">Se han guardado %1$d aplicaciones en el archivo ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Se han dejado fuera porque cambiaron después de leer la lista: %1$s</string>
 </resources>

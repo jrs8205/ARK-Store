@@ -268,13 +268,13 @@
     <string name="transfer_failed">تعذّرت قراءة الملف أو الكتابة فيه.</string>
     <string name="action_back">رجوع</string>
     <string name="backup_title">النسخ الاحتياطي للتطبيقات</string>
-    <string name="backup_description">انسخ التطبيقات المثبّتة من خارج Google Play، بملفات APK الخاصة بها، إلى مجلد تختاره، ثم ثبّتها منه من جديد على هذا الجهاز أو على جهاز آخر. لا تُضمَّن بيانات التطبيقات نفسها. وعند النسخ الاحتياطي مرة ثانية إلى المجلد نفسه، لا يُنسخ إلا ما تغيّر؛ ويبقى التطبيق الذي ألغيت تثبيته في المجلد إلى أن تحذفه منه.</string>
+    <string name="backup_description">انسخ التطبيقات المثبّتة من خارج Google Play، بملفات APK الخاصة بها، إلى مجلد أو ملف ZIP، ثم ثبّتها من جديد على هذا الجهاز أو على جهاز آخر. لا تُضمَّن بيانات التطبيقات نفسها.</string>
     <string name="action_backup_apps">نسخ التطبيقات احتياطيًا</string>
     <string name="action_restore_apps">استعادة التطبيقات</string>
     <string name="backup_notification_saving">جارٍ نسخ %1$s احتياطيًا</string>
     <string name="backup_notification_restoring">جارٍ استعادة %1$s</string>
     <string name="backup_folder">المجلد: %1$s</string>
-    <string name="backup_no_folder">اختر مجلدًا لحفظ النسخة الاحتياطية فيه: على هذا الجهاز، أو على بطاقة ذاكرة، أو في خدمة سحابية يعرضها منتقي الملفات.</string>
+    <string name="backup_no_folder">لم يُختر أي مجلد بعد. سيُطلب منك اختياره عند الحفظ في مجلد.</string>
     <string name="backup_no_picker">لم يُعثر على تطبيق لاختيار المجلد.</string>
     <string name="action_choose_folder">اختيار مجلد</string>
     <string name="action_change_folder">تغيير المجلد</string>
@@ -313,4 +313,22 @@
     <string name="restore_installing">جارٍ التثبيت…</string>
     <string name="restore_fail_invalid">الملف الموجود في المجلد ليس حزمة تطبيق صالحة.</string>
     <string name="backup_index_not_written">تعذّرت كتابة فهرس المجلد وملف إعدادات المتجر. لا يزال بالإمكان استعادة التطبيقات المنسوخة من مجلداتها.</string>
+    <string name="backup_ways">يبقى المجلد محدّثًا: لا يُنسخ في النسخ الاحتياطي التالي إلا ما تغيّر، ويبقى التطبيق الذي أُزيل من الجهاز فيه إلى أن تحذفه منه. أما ملف ZIP فهو ملف واحد للنقل إلى هاتف آخر أو إلى خدمة سحابية مثل Google Drive، ويُكتب كاملًا من جديد في كل مرة.</string>
+    <string name="action_save_zip">حفظ في ملف ZIP</string>
+    <string name="action_choose_zip">اختيار ملف ZIP</string>
+    <string name="backup_zip_file">ملف ZIP: %1$s</string>
+    <string name="restore_choose_source">اختر المجلد أو ملف ZIP الذي حُفظت فيه النسخة الاحتياطية.</string>
+    <string name="restore_zip_nothing">لا يحتوي ملف ZIP على أي تطبيقات نسخها ARK-Store احتياطيًا.</string>
+    <string name="backup_zip_unreadable">تعذّرت قراءة ملف ZIP.</string>
+    <string name="backup_zip_failed">تعذّرت كتابة ملف ZIP، لذا حُذف.</string>
+    <string name="backup_zip_cancelled">تم الإلغاء. حُذف ملف ZIP غير المكتمل.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="zero">تم حفظ %1$d تطبيق في ملف ZIP.</item>
+        <item quantity="one">تم حفظ تطبيق واحد في ملف ZIP.</item>
+        <item quantity="two">تم حفظ تطبيقين في ملف ZIP.</item>
+        <item quantity="few">تم حفظ %1$d تطبيقات في ملف ZIP.</item>
+        <item quantity="many">تم حفظ %1$d تطبيقًا في ملف ZIP.</item>
+        <item quantity="other">تم حفظ %1$d تطبيق في ملف ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">استُبعدت لأنها تغيّرت بعد قراءة القائمة: %1$s</string>
 </resources>

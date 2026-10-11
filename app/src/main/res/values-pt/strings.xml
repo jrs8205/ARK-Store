@@ -244,13 +244,13 @@
     <string name="transfer_failed">Não foi possível ler ou gravar o arquivo.</string>
     <string name="action_back">Voltar</string>
     <string name="backup_title">Backup de apps</string>
-    <string name="backup_description">Copie os apps instalados de fora do Google Play, como arquivos APK, para uma pasta de sua escolha e instale-os de volta a partir dela, neste ou em outro dispositivo. Os dados dos próprios apps não são incluídos. Um segundo backup na mesma pasta copia só o que mudou; um app que você desinstalou continua na pasta até que você o apague de lá.</string>
+    <string name="backup_description">Copie os apps instalados de fora do Google Play, como arquivos APK, para uma pasta ou um arquivo ZIP e instale-os de volta neste ou em outro dispositivo. Os dados dos próprios apps não são incluídos.</string>
     <string name="action_backup_apps">Fazer backup dos apps</string>
     <string name="action_restore_apps">Restaurar apps</string>
     <string name="backup_notification_saving">Fazendo backup de %1$s</string>
     <string name="backup_notification_restoring">Restaurando %1$s</string>
     <string name="backup_folder">Pasta: %1$s</string>
-    <string name="backup_no_folder">Escolha uma pasta para guardar o backup: neste dispositivo, em um cartão ou em um serviço de nuvem que apareça no seletor de arquivos.</string>
+    <string name="backup_no_folder">Nenhuma pasta escolhida ainda. Ela será pedida quando você salvar em uma pasta.</string>
     <string name="backup_no_picker">Nenhum app foi encontrado para escolher uma pasta.</string>
     <string name="action_choose_folder">Escolher pasta</string>
     <string name="action_change_folder">Alterar pasta</string>
@@ -286,4 +286,19 @@
     <string name="restore_installing">Instalando…</string>
     <string name="restore_fail_invalid">O arquivo na pasta não é um pacote de app válido.</string>
     <string name="backup_index_not_written">Não foi possível gravar o índice da pasta e o arquivo de configurações da loja. Os apps copiados ainda podem ser restaurados a partir das respectivas pastas.</string>
+    <string name="backup_ways">Uma pasta fica em dia: o próximo backup copia só o que mudou, e um app removido do dispositivo continua nela até você apagá-lo de lá. Um arquivo ZIP é um único arquivo para levar a outro celular ou a um serviço de nuvem como o Google Drive, gravado por inteiro a cada vez.</string>
+    <string name="action_save_zip">Salvar em arquivo ZIP</string>
+    <string name="action_choose_zip">Escolher arquivo ZIP</string>
+    <string name="backup_zip_file">Arquivo ZIP: %1$s</string>
+    <string name="restore_choose_source">Escolha a pasta ou o arquivo ZIP em que o backup foi salvo.</string>
+    <string name="restore_zip_nothing">O arquivo ZIP não contém apps com backup feito pela ARK-Store.</string>
+    <string name="backup_zip_unreadable">Não foi possível ler o arquivo ZIP.</string>
+    <string name="backup_zip_failed">Não foi possível gravar o arquivo ZIP, então ele foi removido.</string>
+    <string name="backup_zip_cancelled">Cancelado. O arquivo ZIP incompleto foi removido.</string>
+    <plurals name="backup_zip_done">
+        <item quantity="one">%1$d app salvo no arquivo ZIP.</item>
+        <item quantity="many">%1$d apps salvos no arquivo ZIP.</item>
+        <item quantity="other">%1$d apps salvos no arquivo ZIP.</item>
+    </plurals>
+    <string name="backup_zip_left_out">Deixados de fora porque mudaram depois que a lista foi lida: %1$s</string>
 </resources>
