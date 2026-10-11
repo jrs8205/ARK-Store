@@ -1,0 +1,1 @@
+The text on the settings, backup and restore pages can be read on a dark theme again: with the metal surfaces on, it was drawn black.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.0-beta.3
+
+- The text on the settings, backup and restore pages is in the theme's own colour again. With
+  the metal surfaces on, the text that had no colour of its own was drawn black, and on a dark
+  theme it could not be seen
+
 ## 1.9.0-beta.2
 
 - The backup can be saved to one zip file as well as to a folder: a single file for moving
