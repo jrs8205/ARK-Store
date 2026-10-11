@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.9.0-beta.2
+
+- The backup can be saved to one zip file as well as to a folder: a single file for moving
+  to another phone or to a cloud service such as Google Drive, which lets an app save a file
+  but not choose a folder. The zip is written whole each time; a folder stays up to date and
+  copies only what has changed. The settings and the backup page say so in a few words
+- Restore from a zip file as from a folder, a folder zipped by hand too: the list of what it
+  holds is read from the head of a zip the store wrote, and each app's files are taken out
+  in turn while it is installed
+- The settings tell of the recent backups and restores: when, to or from where, how many
+  apps of what size, and how each went
+- The folder is asked for when a backup is saved to one, not as soon as the page opens
+
 ## 1.9.0-beta.1
 
 - The installed apps can be backed up to a folder: in the settings, under App backup, choose

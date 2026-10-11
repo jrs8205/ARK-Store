@@ -1,0 +1,1 @@
+Tallenna sovellusten varmuuskopio myös yhdeksi zip-tiedostoksi siirtoa varten toiseen puhelimeen tai Google Driveen, ja palauta kummasta tahansa. Asetukset kertovat viimeisimmistä varmuuskopioista ja palautuksista: milloin, minne, montako sovellusta ja miten kävi.

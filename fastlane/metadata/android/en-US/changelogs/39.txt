@@ -1,0 +1,1 @@
+Save the app backup to one zip file as well as to a folder, for moving to another phone or to Google Drive, and restore from either. The settings tell of the recent backups and restores: when, where, how many apps of what size, and how each went.
