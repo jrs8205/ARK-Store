@@ -85,11 +85,12 @@ internal fun StorePage(
     scrolling: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val background = MaterialTheme.colorScheme.background
     val metal = LocalMaterial.current
+    val page = Surfaces.page(MaterialTheme.colorScheme, metal)
     val haptics = LocalHapticFeedback.current
     Scaffold(
-        containerColor = if (metal && Surfaces.takes(background)) Color.Transparent else background,
+        containerColor = page.container,
+        contentColor = page.content,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -35,4 +35,21 @@ class SurfacesTest {
             assertTrue("$palette sheets", Surfaces.takes(scheme.surfaceContainerLow))
         }
     }
+
+    @Test
+    fun aPageOnMetalKeepsTheTextColourOfItsBackground() {
+        // The metal is drawn below a clear page, and a clear container names no colour for the
+        // text on it: the text fell back to black, unseen on a dark theme.
+        for (palette in Palette.entries) for (dark in listOf(false, true)) for (black in listOf(false, true)) {
+            val tones = TonalPalettes.of(if (palette == Palette.WALLPAPER) Palette.ARK else palette)
+            val scheme = Palettes.colorScheme(palette, tones, dark, black)
+            for (metal in listOf(false, true)) {
+                val page = Surfaces.page(scheme, metal)
+                val name = "$palette dark=$dark black=$black metal=$metal"
+                assertEquals(name, scheme.onBackground, page.content)
+                val clear = metal && Surfaces.takes(scheme.background)
+                assertEquals(name, if (clear) Color.Transparent else scheme.background, page.container)
+            }
+        }
+    }
 }

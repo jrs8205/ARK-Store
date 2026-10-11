@@ -232,8 +232,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
     pages.SaveableStateProvider(shown) {
     when (shown) {
     Screen.STORE -> {
+    val page = Surfaces.page(MaterialTheme.colorScheme, LocalMaterial.current)
     Scaffold(
-        containerColor = if (LocalMaterial.current && Surfaces.takes(background)) Color.Transparent else background,
+        containerColor = page.container,
+        contentColor = page.content,
         // The search field gives up the keyboard as soon as the user touches anything else.
         // Watching every touch from here covers each button, chip and list without their
         // having to know about it, and leaves navigation with a keyboard alone.
