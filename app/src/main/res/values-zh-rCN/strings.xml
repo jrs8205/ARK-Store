@@ -267,4 +267,5 @@
     <string name="restore_status_files_missing">文件夹中缺少文件</string>
     <string name="restore_installing">正在安装…</string>
     <string name="restore_fail_invalid">文件夹中的文件不是有效的应用安装包。</string>
+    <string name="backup_index_not_written">应用已复制，但无法写入文件夹的索引和设置文件；恢复时将改为读取每个应用各自的文件夹。</string>
 </resources>

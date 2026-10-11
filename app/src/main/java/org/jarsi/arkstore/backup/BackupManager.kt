@@ -57,10 +57,20 @@ sealed interface BackupState {
         val bytesTotal: Long
     ) : BackupState
 
-    /** Finished: [saved] apps copied or handed to the system, [skipped] found up to date, [failed] by name. */
-    data class Done(val restoring: Boolean, val saved: Int, val skipped: Int, val failed: List<String>) : BackupState
+    /**
+     * Finished: [saved] apps copied or handed to the system, [skipped] found up to date, [failed]
+     * by name; [indexWritten] false when the apps were copied but the folder's index and the
+     * settings file could not be written, so that a restore has to read each app's folder.
+     */
+    data class Done(
+        val restoring: Boolean,
+        val saved: Int,
+        val skipped: Int,
+        val failed: List<String>,
+        val indexWritten: Boolean = true
+    ) : BackupState
 
-    data class Failed(val restoring: Boolean, val reason: BackupError) : BackupState
+    data class Failed(val restoring: Boolean, val reason: BackupError, val indexWritten: Boolean = true) : BackupState
 }
 
 enum class BackupError { FOLDER_UNAVAILABLE, CANCELLED }
@@ -199,7 +209,8 @@ object BackupManager {
             entry,
             installedVersion = info?.let(PackageInfoCompat::getLongVersionCode),
             keysHeld = if (info != null) InstalledApps.keysHeld(context.packageManager, entry.packageName) else null,
-            present = files?.mapValues { it.value.size },
+            // A folder without its entry is a copy cut short, whatever the index says of it.
+            present = files?.takeIf { AppBackup.ENTRY_NAME in it }?.mapValues { it.value.size },
             sdk = Build.VERSION.SDK_INT
         )
     }
@@ -264,6 +275,8 @@ object BackupManager {
         job = scope.launch {
             _state.value = try {
                 work()
+            } catch (e: CancelledWith) {
+                BackupState.Failed(restoring, BackupError.CANCELLED, e.indexWritten)
             } catch (_: CancellationException) {
                 BackupState.Failed(restoring, BackupError.CANCELLED)
             } catch (e: Exception) {
@@ -277,16 +290,14 @@ object BackupManager {
     private suspend fun write(docs: Documents, selected: List<BackupCandidate>, settingsJson: String): BackupState {
         val root = docs.children(docs.rootId) ?: throw IOException("The folder cannot be listed")
         val rootByName = root.associateBy { it.name }.toMutableMap()
-        val old = rootByName[AppBackup.INDEX_NAME]
-            ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
-            ?.let(AppBackup::indexFromText)
-            .orEmpty()
         val total = selected.sumOf { it.entry.size }
         var done = 0L
         var saved = 0
         var skipped = 0
         val failed = ArrayList<String>()
-        val written = ArrayList<BackupEntry>()
+        val written = HashMap<String, BackupEntry>()
+        var cancelled: CancellationException? = null
+        var indexWritten = false
         try {
             selected.forEachIndexed { i, candidate ->
                 coroutineContext.ensureActive()
@@ -304,7 +315,7 @@ object BackupManager {
                         ?.let(AppBackup::entryFromText)
                     if (AppBackup.isUpToDate(stored, byName.mapValues { it.value.size }, entry)) {
                         skipped++
-                        written += entry
+                        written[entry.packageName] = entry
                         done += entry.size
                         return@forEachIndexed
                     }
@@ -329,7 +340,7 @@ object BackupManager {
                     }
                     docs.writeText(docs.create(folderId, JSON_MIME, AppBackup.ENTRY_NAME), entry.toJson().toString(2))
                     saved++
-                    written += entry
+                    written[entry.packageName] = entry
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -337,20 +348,50 @@ object BackupManager {
                     failed += entry.label
                 }
             }
-            return BackupState.Done(false, saved, skipped, failed)
+        } catch (e: CancellationException) {
+            cancelled = e
         } finally {
             // What the folder holds now is written down even after a cancel, so that a restore
-            // finds every app that was copied whole.
+            // finds every app that was copied whole: the index is made of the apps' own entries,
+            // which a copy cut short has none of, whether or not an index was there before.
             withContext(NonCancellable) {
-                try {
-                    val folders = (docs.children(docs.rootId) ?: root).filter { it.isDirectory }.mapTo(HashSet()) { it.name }
-                    val index = AppBackup.mergedIndex(old, folders, written)
+                indexWritten = try {
+                    val index = AppBackup.indexOrder(entries(docs, written))
                     writeRoot(docs, rootByName, AppBackup.INDEX_NAME, AppBackup.indexToJson(index, Instant.now().toString()).toString(2))
                     writeRoot(docs, rootByName, AppBackup.SETTINGS_NAME, settingsJson)
+                    true
                 } catch (e: Exception) {
                     Log.w(TAG, "Could not write the folder's index", e)
+                    false
                 }
             }
+        }
+        cancelled?.let { throw CancelledWith(indexWritten, it) }
+        return BackupState.Done(false, saved, skipped, failed, indexWritten)
+    }
+
+    /** A cancel, carrying whether the folder's index was still written. */
+    private class CancelledWith(val indexWritten: Boolean, cause: CancellationException) :
+        CancellationException(cause.message) {
+        init {
+            initCause(cause)
+        }
+    }
+
+    /**
+     * The entries of every app folder in the tree: those [written] or found up to date in this
+     * run as they are, the rest read from the folders' own entries. A folder without an entry,
+     * or with one of another package, is a copy cut short, and is left out.
+     */
+    private fun entries(docs: Documents, written: Map<String, BackupEntry>): List<BackupEntry> {
+        val folders = docs.children(docs.rootId)?.filter { it.isDirectory && AppBackup.isPackageName(it.name) }
+            ?: throw IOException("The folder cannot be listed")
+        return folders.mapNotNull { folder ->
+            written[folder.name] ?: docs.children(folder.id)
+                ?.firstOrNull { it.name == AppBackup.ENTRY_NAME }
+                ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
+                ?.let(AppBackup::entryFromText)
+                ?.takeIf { it.packageName == folder.name }
         }
     }
 
@@ -368,41 +409,50 @@ object BackupManager {
             coroutineContext.ensureActive()
             val entry = row.entry
             _state.value = BackupState.Running(true, i + 1, selected.size, entry.label, done, total)
-            // A folder of this app's own in the cache; the install deletes it once it is settled.
+            // A folder of this app's own in the cache. It is ours until the install is asked to
+            // take it: from then on it is the attempt's, which deletes it once it is settled,
+            // or the install's to delete at once when no attempt begins.
             val dir = File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}")
+            val key = localKey(entry.packageName)
+            var attempt: Int? = null
             try {
                 val files = row.files ?: throw IOException("The app's folder is gone")
                 if (!dir.mkdirs() && !dir.isDirectory) throw IOException("Could not make room for the files")
                 val copied = entry.files.map { file ->
                     val doc = files[file.name] ?: throw IOException("${file.name} is gone")
                     val target = File(dir, file.name)
-                    docs.openRead(doc.id).use { input ->
+                    val bytes = docs.openRead(doc.id).use { input ->
                         target.outputStream().use { output ->
-                            done += copy(input, output) { bytes ->
-                                _state.value = BackupState.Running(true, i + 1, selected.size, entry.label, done + bytes, total)
+                            copy(input, output) { sofar ->
+                                _state.value = BackupState.Running(true, i + 1, selected.size, entry.label, done + sofar, total)
                             }
                         }
                     }
+                    // The entry says what the file is; one of another size is another file.
+                    if (bytes != file.size) throw IOException("${file.name} is $bytes bytes, not ${file.size}")
+                    done += bytes
                     target
                 }
-                val key = localKey(entry.packageName)
                 val outcome = InstallManager.installLocalAndAwait(
                     context, key, entry.label, entry.packageName, dir, copied, INSTALL_TIMEOUT_MS
-                )
+                ) { attempt = it }
                 when (outcome) {
                     Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
                     Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                     // Nothing settled: an install of the package was already on its way, which
                     // never took these files, or the system has not answered in all this time.
-                    null -> if (!InstallManager.isBusy(key)) dir.deleteRecursively()
+                    // Either way the files are no longer ours.
+                    null -> if (attempt == null) failed += entry.label
                 }
             } catch (e: CancellationException) {
-                dir.deleteRecursively()
+                // The attempt begun is given up, when it is still ours to give up; its own
+                // cleanup takes the files. Files no attempt has taken are ours to remove.
+                attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Could not restore ${entry.packageName}", e)
                 failed += entry.label
-                dir.deleteRecursively()
+                if (attempt == null) dir.deleteRecursively()
             }
         }
         return BackupState.Done(true, saved, 0, failed)

@@ -267,4 +267,5 @@
     <string name="restore_status_files_missing">폴더에 파일이 없음</string>
     <string name="restore_installing">설치 중…</string>
     <string name="restore_fail_invalid">폴더의 파일이 올바른 앱 패키지가 아닙니다.</string>
+    <string name="backup_index_not_written">앱은 복사되었지만 폴더의 색인과 설정 파일을 쓸 수 없었습니다. 복원할 때는 대신 각 앱의 폴더를 읽습니다.</string>
 </resources>

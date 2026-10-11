@@ -4,11 +4,12 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.backup.BackupCandidate
@@ -16,11 +17,16 @@ import org.jarsi.arkstore.backup.BackupFolder
 import org.jarsi.arkstore.backup.BackupManager
 import org.jarsi.arkstore.backup.BackupState
 import org.jarsi.arkstore.backup.Installers
+import org.jarsi.arkstore.backup.Selection
 
 /**
  * What the pages of the backup show and hold across their recreation: the folder, the apps
  * found on the device and chosen for a backup, and the apps found in the folder and chosen
  * for a restore. The work itself is [BackupManager]'s, whose [state] the pages watch.
+ *
+ * Each list is chosen by a rule (not from Google Play; missing or behind on the device) unless
+ * the user has said otherwise about an app, see [Selection]: a list read again keeps what the
+ * user chose and dropped, and applies the rule to the rest.
  */
 class BackupViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -33,17 +39,20 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     val tree: StateFlow<Uri?> = _tree.asStateFlow()
 
     private val _candidates = MutableStateFlow<List<BackupCandidate>?>(null)
-    /** The apps a backup may take, or null while they are being read. */
+    /** The apps a backup may take, or null until they have been read. */
     val candidates: StateFlow<List<BackupCandidate>?> = _candidates.asStateFlow()
+    private var candidatesJob: Job? = null
+    private var backupSaid = Selection()
 
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
     /** The packages chosen for the backup. */
     val selected: StateFlow<Set<String>> = _selected.asStateFlow()
-    private var preselected = false
 
     private val _folder = MutableStateFlow<BackupFolder?>(null)
     /** The folder as read for a restore, or null while it is being read or has not been. */
     val folder: StateFlow<BackupFolder?> = _folder.asStateFlow()
+    private var readJob: Job? = null
+    private val refreshes = AtomicInteger(0)
 
     private val _reading = MutableStateFlow(false)
     val reading: StateFlow<Boolean> = _reading.asStateFlow()
@@ -52,63 +61,74 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Whether the folder could not be listed at all. */
     val folderError: StateFlow<Boolean> = _folderError.asStateFlow()
 
+    private var restoreSaid = Selection()
+
     private val _restoreSelected = MutableStateFlow<Set<String>>(emptySet())
     /** The packages chosen for the restore. */
     val restoreSelected: StateFlow<Set<String>> = _restoreSelected.asStateFlow()
-    private var restorePreselected = false
 
     private val _importSettings = MutableStateFlow(true)
     /** Whether the store's settings file in the folder is brought back too. */
     val importSettings: StateFlow<Boolean> = _importSettings.asStateFlow()
 
     init {
-        // Once a restore is over, what is still missing is chosen afresh: an app just brought
-        // back is not chosen again for the next try.
+        // Once a restore is over, the rule chooses afresh: an app just brought back is not
+        // chosen again for the next try, whatever was said before.
         viewModelScope.launch {
             BackupManager.state.collect {
                 if (it is BackupState.Done && it.restoring) {
-                    restorePreselected = false
+                    restoreSaid = Selection()
                     refreshStatuses()
                 }
             }
         }
     }
 
-    /** Takes [uri] as the folder, for this time and the next; the restore page reads it when shown. */
+    /**
+     * Takes [uri] as the folder, for this time and the next. A read of the folder before is
+     * given up; the restore page reads the new one when shown.
+     */
     fun chooseTree(uri: Uri) {
         BackupManager.rememberTree(context, uri)
+        readJob?.cancel()
+        _reading.value = false
         _folder.value = null
         _folderError.value = false
-        restorePreselected = false
+        restoreSaid = Selection()
         _tree.value = uri
     }
 
-    /** Reads the installed apps, once; those not from Google Play are chosen to begin with. */
+    /**
+     * Reads the installed apps afresh: the versions and files change with every install. The
+     * user's choices stand; an app new to the list follows the rule.
+     */
     fun loadCandidates() {
-        if (_candidates.value != null) return
-        viewModelScope.launch {
+        if (candidatesJob?.isActive == true) return
+        candidatesJob = viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { BackupManager.candidates(context) }
             _candidates.value = list
-            if (!preselected) {
-                preselected = true
-                _selected.value = list
-                    .filter { it.readable && Installers.preselected(it.entry.installer) }
-                    .mapTo(HashSet()) { it.entry.packageName }
-            }
+            chooseForBackup(list)
         }
     }
 
+    private fun chooseForBackup(list: List<BackupCandidate>) {
+        _selected.value = Selection.chosen(
+            list.map { it.entry.packageName to Installers.preselected(it.entry.installer) },
+            list.filter { it.readable }.mapTo(HashSet()) { it.entry.packageName },
+            backupSaid
+        )
+    }
+
     fun toggle(packageName: String) {
-        _selected.update { if (packageName in it) it - packageName else it + packageName }
+        backupSaid = backupSaid.toggled(packageName, packageName !in _selected.value)
+        _candidates.value?.let(::chooseForBackup)
     }
 
     /** Chooses every app whose files can be read, or none. */
     fun selectAll(all: Boolean) {
-        _selected.value = if (all) {
-            _candidates.value.orEmpty().filter { it.readable }.mapTo(HashSet()) { it.entry.packageName }
-        } else {
-            emptySet()
-        }
+        val list = _candidates.value ?: return
+        backupSaid = backupSaid.all(list.filter { it.readable }.map { it.entry.packageName }, all)
+        chooseForBackup(list)
     }
 
     /** Begins the backup of the chosen apps, with [settingsJson] alongside; false when nothing was begun. */
@@ -120,17 +140,16 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Reads the folder for a restore, unless it has been read ([force] reads it again). What is
-     * missing or behind on the device is chosen the first time; later reads keep the choice,
-     * less what can no longer be chosen.
+     * Reads the folder for a restore, afresh each time. What is read is kept only if the
+     * folder is still the one chosen: a folder chosen meanwhile has a read of its own.
      */
-    fun loadFolder(force: Boolean = false) {
+    fun loadFolder() {
         val tree = _tree.value ?: return
-        if (_folder.value != null && !force) return
-        if (_reading.value) return
+        readJob?.cancel()
         _reading.value = true
-        viewModelScope.launch {
+        readJob = viewModelScope.launch {
             val read = BackupManager.read(context, tree)
+            if (_tree.value != tree) return@launch
             _folderError.value = read == null
             _folder.value = read
             if (read != null) chooseForRestore(read)
@@ -141,35 +160,33 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Sees the folder read against what is installed now, after an install has finished. */
     fun refreshStatuses() {
         val folder = _folder.value ?: return
+        val turn = refreshes.incrementAndGet()
         viewModelScope.launch {
             val seen = BackupManager.refresh(context, folder)
+            // Only the latest look is kept, and only for the folder still chosen.
+            if (turn != refreshes.get() || _tree.value != seen.tree || _folder.value?.tree != seen.tree) return@launch
             _folder.value = seen
             chooseForRestore(seen)
         }
     }
 
     private fun chooseForRestore(folder: BackupFolder) {
-        if (!restorePreselected) {
-            restorePreselected = true
-            _restoreSelected.value = folder.entries
-                .filter { it.status.preselected }
-                .mapTo(HashSet()) { it.entry.packageName }
-        } else {
-            val selectable = folder.entries.filter { it.status.selectable }.mapTo(HashSet()) { it.entry.packageName }
-            _restoreSelected.update { it.filterTo(HashSet()) { name -> name in selectable } }
-        }
+        _restoreSelected.value = Selection.chosen(
+            folder.entries.map { it.entry.packageName to it.status.preselected },
+            folder.entries.filter { it.status.selectable }.mapTo(HashSet()) { it.entry.packageName },
+            restoreSaid
+        )
     }
 
     fun toggleRestore(packageName: String) {
-        _restoreSelected.update { if (packageName in it) it - packageName else it + packageName }
+        restoreSaid = restoreSaid.toggled(packageName, packageName !in _restoreSelected.value)
+        _folder.value?.let(::chooseForRestore)
     }
 
     fun selectAllRestore(all: Boolean) {
-        _restoreSelected.value = if (all) {
-            _folder.value?.entries.orEmpty().filter { it.status.selectable }.mapTo(HashSet()) { it.entry.packageName }
-        } else {
-            emptySet()
-        }
+        val folder = _folder.value ?: return
+        restoreSaid = restoreSaid.all(folder.entries.filter { it.status.selectable }.map { it.entry.packageName }, all)
+        chooseForRestore(folder)
     }
 
     fun setImportSettings(import: Boolean) {

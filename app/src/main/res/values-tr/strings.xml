@@ -276,4 +276,5 @@
     <string name="restore_status_files_missing">Dosyalar klasörde yok</string>
     <string name="restore_installing">Yükleniyor…</string>
     <string name="restore_fail_invalid">Klasördeki dosya geçerli bir uygulama paketi değil.</string>
+    <string name="backup_index_not_written">Uygulamalar kopyalandı, ancak klasörün dizini ve ayar dosyası yazılamadı; geri yükleme bunun yerine her uygulamanın klasörünü okur.</string>
 </resources>

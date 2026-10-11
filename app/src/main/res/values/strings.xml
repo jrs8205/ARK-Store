@@ -291,4 +291,5 @@
     <string name="restore_status_files_missing">The files are missing from the folder</string>
     <string name="restore_installing">Installing…</string>
     <string name="restore_fail_invalid">The file in the folder is not a valid app package.</string>
+    <string name="backup_index_not_written">The apps were copied, but the folder\'s index and settings file could not be written; a restore reads each app\'s folder instead.</string>
 </resources>

@@ -156,7 +156,8 @@ object AppBackup {
      * Whether the copy in an app's folder is the app as it is on the device now: the folder's
      * entry [stored] names the same version, installed at the same time, with the same files,
      * and the files [present] in the folder (by name, with their sizes) are all there at those
-     * sizes. The name and the installer may differ: they are not what was copied.
+     * sizes. A file whose size the folder does not tell (-1) is copied again, to be sure of it.
+     * The name and the installer may differ: they are not what was copied.
      */
     fun isUpToDate(stored: BackupEntry?, present: Map<String, Long>, current: BackupEntry): Boolean =
         stored != null &&
@@ -165,17 +166,9 @@ object AppBackup {
             stored.files == current.files &&
             current.files.all { present[it.name] == it.size }
 
-    /**
-     * The index of a folder after a backup: the entries of [old] whose folders are still among
-     * [folders] (the names of the folder's own folders), with those [written] now in their
-     * place or added, sorted by name. An entry of a folder the user has deleted goes with it.
-     */
-    fun mergedIndex(old: List<BackupEntry>, folders: Set<String>, written: List<BackupEntry>): List<BackupEntry> {
-        val byPackage = LinkedHashMap<String, BackupEntry>()
-        old.filter { it.packageName in folders }.forEach { byPackage[it.packageName] = it }
-        written.forEach { byPackage[it.packageName] = it }
-        return byPackage.values.sortedWith(compareBy({ it.label.lowercase() }, { it.packageName }))
-    }
+    /** [entries] in the order of the index and the lists: by name, then by package. */
+    fun indexOrder(entries: Collection<BackupEntry>): List<BackupEntry> =
+        entries.sortedWith(compareBy({ it.label.lowercase() }, { it.packageName }))
 
     /**
      * Whether an installed app, with the [flags] of its ApplicationInfo, is one a backup may
@@ -256,11 +249,15 @@ enum class RestoreStatus {
 }
 
 object RestoreRules {
+    /** The size of a file whose size the folder does not tell; the file is there all the same. */
+    const val UNKNOWN_SIZE = -1L
+
     /**
      * How [entry] stands against a device running Android API [sdk], where the package is
      * installed as [installedVersion] (null when it is not), signed with [keysHeld] (null when they
      * could not be read, which is not taken for a difference), and where the entry's folder holds
-     * the files [present], by name and size (null when there is no folder).
+     * the files [present], by name and size (null when there is no folder; [UNKNOWN_SIZE] for a
+     * file listed without one, which counts as there, its size checked when it is read).
      */
     fun status(
         entry: BackupEntry,
@@ -269,12 +266,38 @@ object RestoreRules {
         present: Map<String, Long>?,
         sdk: Int
     ): RestoreStatus = when {
-        present == null || entry.files.any { present[it.name] != it.size } -> RestoreStatus.FILES_MISSING
+        present == null || entry.files.any { present[it.name].let { size -> size == null || (size != UNKNOWN_SIZE && size != it.size) } } -> RestoreStatus.FILES_MISSING
         entry.minSdk != null && entry.minSdk > sdk -> RestoreStatus.NEEDS_NEWER_ANDROID
         installedVersion == null -> RestoreStatus.NOT_INSTALLED
         keysHeld != null && entry.signers.isNotEmpty() && keysHeld.none { it in entry.signers } -> RestoreStatus.OTHER_SIGNER
         installedVersion > entry.versionCode -> RestoreStatus.NEWER_INSTALLED
         installedVersion == entry.versionCode -> RestoreStatus.SAME_INSTALLED
         else -> RestoreStatus.OLDER_INSTALLED
+    }
+}
+
+/**
+ * What the user has said about a list's choices, the later word standing: the keys they
+ * chose by hand and those they dropped by hand. The rest of a list follows its rule, so that
+ * a list read again, with apps come and gone, keeps the user's choices and nothing else.
+ */
+data class Selection(val chosen: Set<String> = emptySet(), val dropped: Set<String> = emptySet()) {
+
+    fun toggled(key: String, on: Boolean): Selection =
+        if (on) Selection(chosen + key, dropped - key) else Selection(chosen - key, dropped + key)
+
+    /** The user's word on every one of [keys] at once, which stands in for whatever was said before. */
+    fun all(keys: Collection<String>, on: Boolean): Selection =
+        if (on) Selection(keys.toSet(), emptySet()) else Selection(emptySet(), keys.toSet())
+
+    companion object {
+        /**
+         * The keys chosen among [rows], each given with whether its rule chooses it, among those
+         * [selectable]: the rule's choice unless the user [said] otherwise.
+         */
+        fun chosen(rows: List<Pair<String, Boolean>>, selectable: Set<String>, said: Selection): Set<String> =
+            rows.filter { (key, byRule) ->
+                key in selectable && ((byRule && key !in said.dropped) || key in said.chosen)
+            }.mapTo(HashSet()) { it.first }
     }
 }

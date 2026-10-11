@@ -285,4 +285,5 @@
     <string name="restore_status_files_missing">Faltan los archivos en la carpeta</string>
     <string name="restore_installing">Instalando…</string>
     <string name="restore_fail_invalid">El archivo de la carpeta no es un paquete de aplicación válido.</string>
+    <string name="backup_index_not_written">Las aplicaciones se han copiado, pero no se han podido escribir el índice ni el archivo de ajustes de la carpeta; una restauración lee en su lugar la carpeta de cada aplicación.</string>
 </resources>

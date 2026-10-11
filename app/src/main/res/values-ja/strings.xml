@@ -267,4 +267,5 @@
     <string name="restore_status_files_missing">フォルダにファイルがありません</string>
     <string name="restore_installing">インストール中…</string>
     <string name="restore_fail_invalid">フォルダ内のファイルは有効なアプリパッケージではありません。</string>
+    <string name="backup_index_not_written">アプリはコピーされましたが、フォルダのインデックスと設定ファイルを書き込めませんでした。復元時は、代わりに各アプリのフォルダを読み込みます。</string>
 </resources>

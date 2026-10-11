@@ -365,9 +365,10 @@ object InstallManager {
     /**
      * Installs [packageName] from [files] in [dir], the base file first, as the attempt of
      * [key] (see [localKey]), shown under [label], and waits for the outcome as
-     * [installAndAwait] does. The files are the caller's until this returns; the directory
-     * and everything in it are deleted when the attempt settles. The store itself is not
-     * installed this way, so nothing waits for other installs here.
+     * [installAndAwait] does. The directory and everything in it are taken over here: the
+     * attempt begun deletes them when it settles, and when none begins, as when an attempt
+     * of [key] is already on its way, they are deleted before this returns. The store itself
+     * is not installed this way, so nothing waits for other installs here.
      */
     suspend fun installLocalAndAwait(
         context: Context,
@@ -380,11 +381,17 @@ object InstallManager {
         onBegun: (attempt: Int) -> Unit = {}
     ): Outcome? {
         labels[key] = label
-        return await(key, timeoutMillis, onBegun) { begun ->
-            begin(context, key, foreground = false, target = dir, onBegun = begun) { appContext, install ->
+        var begun = false
+        val outcome = await(key, timeoutMillis, { attempt ->
+            begun = true
+            onBegun(attempt)
+        }) { onBegunHere ->
+            begin(context, key, foreground = false, target = dir, onBegun = onBegunHere) { appContext, install ->
                 installLocal(appContext, key, packageName, files, install)
             }
         }
+        if (!begun) dir.deleteRecursively()
+        return outcome
     }
 
     /**

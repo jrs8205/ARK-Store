@@ -55,9 +55,11 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     val candidates by viewModel.candidates.collectAsStateWithLifecycle()
     val selected by viewModel.selected.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val running = state is BackupState.Running
-    LaunchedEffect(Unit) { viewModel.loadCandidates() }
+    // Read on coming here and again after every install: the versions and files change with them.
+    LaunchedEffect(installedChanged) { viewModel.loadCandidates() }
     StorePage(title = stringResource(R.string.action_backup_apps), onBack = onBack, scrolling = false) {
         FolderChooser(tree, name = null, enabled = !running, onChosen = viewModel::chooseTree)
         val list = candidates
@@ -122,7 +124,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val context = LocalContext.current
     val running = state is BackupState.Running
     // Read afresh each time the page is opened: a backup may have been written since.
-    LaunchedEffect(tree) { viewModel.loadFolder(force = true) }
+    LaunchedEffect(tree) { viewModel.loadFolder() }
     // An install that has gone through changes what the folder has to offer this device.
     LaunchedEffect(installedChanged) { if (installedChanged > 0) viewModel.refreshStatuses() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
@@ -411,6 +413,7 @@ private fun JobFooter(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+                if (!state.indexWritten) IndexNotWritten()
                 StoreOutlinedButton(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
@@ -428,6 +431,7 @@ private fun JobFooter(
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (cancelled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error
                 )
+                if (!state.indexWritten) IndexNotWritten()
                 StoreOutlinedButton(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
@@ -440,6 +444,17 @@ private fun JobFooter(
             }
         }
     }
+}
+
+/** The apps were copied, but not the folder's index: said in the colour of an error, since a restore then reads more slowly. */
+@Composable
+private fun IndexNotWritten() {
+    Text(
+        text = stringResource(R.string.backup_index_not_written),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+        modifier = Modifier.padding(top = 4.dp)
+    )
 }
 
 private fun version(entry: BackupEntry): String = entry.versionName ?: entry.versionCode.toString()

@@ -312,4 +312,5 @@
     <string name="restore_status_files_missing">الملفات غير موجودة في المجلد</string>
     <string name="restore_installing">جارٍ التثبيت…</string>
     <string name="restore_fail_invalid">الملف الموجود في المجلد ليس حزمة تطبيق صالحة.</string>
+    <string name="backup_index_not_written">نُسخت التطبيقات، لكن تعذّرت كتابة فهرس المجلد وملف الإعدادات؛ لذا تقرأ الاستعادة مجلد كل تطبيق بدلًا من ذلك.</string>
 </resources>

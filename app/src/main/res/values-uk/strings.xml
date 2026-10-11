@@ -294,4 +294,5 @@
     <string name="restore_status_files_missing">Файли відсутні в папці</string>
     <string name="restore_installing">Установлення…</string>
     <string name="restore_fail_invalid">Файл у папці не є дійсним пакетом додатка.</string>
+    <string name="backup_index_not_written">Додатки скопійовано, але не вдалося записати індекс і файл налаштувань у папці; під час відновлення натомість читається папка кожного додатка.</string>
 </resources>

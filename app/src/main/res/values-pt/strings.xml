@@ -285,4 +285,5 @@
     <string name="restore_status_files_missing">Os arquivos não estão na pasta</string>
     <string name="restore_installing">Instalando…</string>
     <string name="restore_fail_invalid">O arquivo na pasta não é um pacote de app válido.</string>
+    <string name="backup_index_not_written">Os apps foram copiados, mas não foi possível gravar o índice e o arquivo de configurações da pasta; uma restauração lê, em vez disso, a pasta de cada app.</string>
 </resources>

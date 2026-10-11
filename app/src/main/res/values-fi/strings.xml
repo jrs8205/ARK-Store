@@ -276,4 +276,5 @@
     <string name="restore_status_files_missing">Tiedostot puuttuvat kansiosta</string>
     <string name="restore_installing">Asennetaan…</string>
     <string name="restore_fail_invalid">Kansion tiedosto ei ole kelvollinen sovelluspaketti.</string>
+    <string name="backup_index_not_written">Sovellukset kopioitiin, mutta kansion luetteloa ja asetustiedostoa ei voitu kirjoittaa; palautus lukee silti jokaisen sovelluksen kansion.</string>
 </resources>

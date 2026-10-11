@@ -44,6 +44,30 @@ class RestoreRulesTest {
     }
 
     @Test
+    fun unknownSizeCountsAsPresentButAWrongSizeDoesNot() {
+        // A provider may list a file without telling its size; the file is there all the same.
+        assertEquals(RestoreStatus.NOT_INSTALLED, status(present = mapOf("base.apk" to -1L, "split_x.apk" to 10L)))
+        assertEquals(RestoreStatus.NOT_INSTALLED, status(present = mapOf("base.apk" to -1L, "split_x.apk" to -1L)))
+        assertEquals(RestoreStatus.FILES_MISSING, status(present = mapOf("base.apk" to 99L, "split_x.apk" to 10L)))
+    }
+
+    @Test
+    fun selectionFollowsTheRuleUnlessTheUserSaidOtherwise() {
+        val rows = listOf("a" to true, "b" to false, "c" to true, "d" to false)
+        val selectable = setOf("a", "b", "c")
+        // The rule alone: what it chooses, among what can be chosen.
+        assertEquals(setOf("a", "c"), Selection.chosen(rows, selectable, Selection()))
+        // The user's own choices, either way, stand over the rule.
+        val said = Selection(chosen = setOf("b", "d"), dropped = setOf("c"))
+        assertEquals(setOf("a", "b"), Selection.chosen(rows, selectable, said))
+        // A choice is remembered by what the user did last.
+        assertEquals(Selection(chosen = setOf("c"), dropped = setOf("b")), Selection().toggled("c", true).toggled("b", false))
+        assertEquals(Selection(chosen = emptySet(), dropped = setOf("c")), Selection().toggled("c", true).toggled("c", false))
+        assertEquals(Selection(chosen = setOf("a", "c"), dropped = emptySet()), said.all(listOf("a", "c"), true))
+        assertEquals(Selection(chosen = emptySet(), dropped = setOf("a", "c")), said.all(listOf("a", "c"), false))
+    }
+
+    @Test
     fun needsNewerAndroid() {
         assertEquals(RestoreStatus.NEEDS_NEWER_ANDROID, status(sdk = 25))
         assertEquals(RestoreStatus.NOT_INSTALLED, status(sdk = 26))

@@ -138,6 +138,12 @@ class AppBackupTest {
     }
 
     @Test
+    fun unknownSizeIsNotUpToDate() {
+        // A copy whose size the provider does not tell is copied again, to be sure of it.
+        assertFalse(AppBackup.isUpToDate(entry, mapOf("base.apk" to -1L, "split_config.arm64_v8a.apk" to 2_345L), entry))
+    }
+
+    @Test
     fun partialFolderIsNotUpToDate() {
         assertFalse(AppBackup.isUpToDate(null, mapOf("base.apk" to 123_456L), entry))
         assertFalse(AppBackup.isUpToDate(entry, mapOf("split_config.arm64_v8a.apk" to 2_345L), entry))
@@ -156,18 +162,10 @@ class AppBackupTest {
     }
 
     @Test
-    fun mergedIndexKeepsFoldersStillThereAndTakesWhatWasWritten() {
-        val other = entry.copy(packageName = "org.other.app", label = "Other")
-        val gone = entry.copy(packageName = "org.gone.app", label = "Gone")
-        val third = entry.copy(packageName = "org.third.app", label = "Third")
-        val newer = entry.copy(versionCode = 13)
-        val merged = AppBackup.mergedIndex(
-            old = listOf(gone, other, entry),
-            folders = setOf("org.example.app", "org.other.app", "org.third.app", "not-a-package"),
-            written = listOf(third, newer)
-        )
-        // Sorted by name; the folder of the gone app is no longer there, so its entry goes too.
-        assertEquals(listOf(newer, other, third), merged)
+    fun indexOrderIsByNameThenPackage() {
+        val other = entry.copy(packageName = "org.other.app", label = "other")
+        val same = entry.copy(packageName = "org.another.app", label = "Example")
+        assertEquals(listOf(same, entry, other), AppBackup.indexOrder(listOf(other, entry, same)))
     }
 
     @Test
