@@ -146,4 +146,15 @@ class InstallStatesTest {
         assertEquals(listOf("bob/app"), stale(states, sessions, alive = setOf(11)))
         assertEquals(emptyList<String>(), stale(states, sessions, alive = setOf(11, 12)))
     }
+
+    @Test
+    fun localKeysDoNotCollideWithCatalogueNames() {
+        assertEquals("backup:org.example", localKey("org.example"))
+        assertTrue(isLocal(localKey("org.example")))
+        assertFalse(isLocal("owner/repo"))
+        assertFalse(isLocal("fdroid:org.example"))
+        assertFalse(isLocal("codeberg:owner/repo"))
+        // Haptics for the list's rows: a local install of a package the list offers is not that row's.
+        assertFalse(isLocal("org.example"))
+    }
 }
