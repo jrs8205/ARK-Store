@@ -224,6 +224,13 @@ object Installers {
      * installer, which is the user installing a file by hand.
      */
     fun knownName(installer: String?): String? = installer?.let(NAMES::get)
+
+    /**
+     * Whether [installer] stands for the user installing a file by hand: no installer at all,
+     * the system's own installer, or the shell, which is a file installed over a cable.
+     */
+    fun byHand(installer: String?): Boolean =
+        installer == null || installer.endsWith(".packageinstaller") || installer == "com.android.shell"
 }
 
 /** How a backed-up app stands against the device it would be restored to. */

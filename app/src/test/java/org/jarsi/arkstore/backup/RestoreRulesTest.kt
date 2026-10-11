@@ -99,6 +99,16 @@ class RestoreRulesTest {
     }
 
     @Test
+    fun byHandCoversTheSystemInstallerAndAdb() {
+        assertTrue(Installers.byHand(null))
+        assertTrue(Installers.byHand("com.google.android.packageinstaller"))
+        assertTrue(Installers.byHand("com.android.packageinstaller"))
+        assertTrue(Installers.byHand("com.android.shell"))
+        assertFalse(Installers.byHand("org.fdroid.fdroid"))
+        assertFalse(Installers.byHand(Installers.PLAY))
+    }
+
+    @Test
     fun knownNames() {
         assertEquals("Google Play", Installers.knownName(Installers.PLAY))
         assertEquals("F-Droid", Installers.knownName("org.fdroid.fdroid"))

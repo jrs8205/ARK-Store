@@ -61,14 +61,26 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Whether the store's settings file in the folder is brought back too. */
     val importSettings: StateFlow<Boolean> = _importSettings.asStateFlow()
 
-    /** Takes [uri] as the folder, for this time and the next, and reads it afresh. */
+    init {
+        // Once a restore is over, what is still missing is chosen afresh: an app just brought
+        // back is not chosen again for the next try.
+        viewModelScope.launch {
+            BackupManager.state.collect {
+                if (it is BackupState.Done && it.restoring) {
+                    restorePreselected = false
+                    refreshStatuses()
+                }
+            }
+        }
+    }
+
+    /** Takes [uri] as the folder, for this time and the next; the restore page reads it when shown. */
     fun chooseTree(uri: Uri) {
         BackupManager.rememberTree(context, uri)
-        _tree.value = uri
         _folder.value = null
         _folderError.value = false
         restorePreselected = false
-        loadFolder()
+        _tree.value = uri
     }
 
     /** Reads the installed apps, once; those not from Google Play are chosen to begin with. */

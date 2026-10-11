@@ -121,7 +121,8 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val running = state is BackupState.Running
-    LaunchedEffect(tree) { viewModel.loadFolder() }
+    // Read afresh each time the page is opened: a backup may have been written since.
+    LaunchedEffect(tree) { viewModel.loadFolder(force = true) }
     // An install that has gone through changes what the folder has to offer this device.
     LaunchedEffect(installedChanged) { if (installedChanged > 0) viewModel.refreshStatuses() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
@@ -446,11 +447,7 @@ private fun version(entry: BackupEntry): String = entry.versionName ?: entry.ver
 @Composable
 private fun installerName(installer: String?): String =
     Installers.knownName(installer)
-        ?: if (installer == null || installer.endsWith(".packageinstaller")) {
-            stringResource(R.string.backup_installer_by_hand)
-        } else {
-            installer
-        }
+        ?: if (Installers.byHand(installer)) stringResource(R.string.backup_installer_by_hand) else installer.orEmpty()
 
 @Composable
 private fun statusText(status: RestoreStatus): String = stringResource(
