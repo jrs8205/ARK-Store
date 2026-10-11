@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.backup
 
+import android.content.pm.ApplicationInfo
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -152,6 +153,32 @@ class AppBackupTest {
         assertFalse(AppBackup.isPackageName("org.9x"))
         assertFalse(AppBackup.isPackageName("org.x-y"))
         assertFalse(AppBackup.isPackageName("org/x.y"))
+    }
+
+    @Test
+    fun mergedIndexKeepsFoldersStillThereAndTakesWhatWasWritten() {
+        val other = entry.copy(packageName = "org.other.app", label = "Other")
+        val gone = entry.copy(packageName = "org.gone.app", label = "Gone")
+        val third = entry.copy(packageName = "org.third.app", label = "Third")
+        val newer = entry.copy(versionCode = 13)
+        val merged = AppBackup.mergedIndex(
+            old = listOf(gone, other, entry),
+            folders = setOf("org.example.app", "org.other.app", "org.third.app", "not-a-package"),
+            written = listOf(third, newer)
+        )
+        // Sorted by name; the folder of the gone app is no longer there, so its entry goes too.
+        assertEquals(listOf(newer, other, third), merged)
+    }
+
+    @Test
+    fun candidatesAreUserAppsOtherThanTheStore() {
+        val self = "org.jarsi.arkstore"
+        assertTrue(AppBackup.isCandidate(0, "org.example.app", self))
+        assertFalse(AppBackup.isCandidate(ApplicationInfo.FLAG_SYSTEM, "com.android.settings", self))
+        assertFalse(AppBackup.isCandidate(ApplicationInfo.FLAG_UPDATED_SYSTEM_APP, "com.android.chrome", self))
+        assertFalse(AppBackup.isCandidate(ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP, "com.android.chrome", self))
+        assertFalse(AppBackup.isCandidate(0, self, self))
+        assertFalse(AppBackup.isCandidate(0, "bad name", self))
     }
 
     private fun files(vararg entries: Pair<String, Long>): JSONArray =

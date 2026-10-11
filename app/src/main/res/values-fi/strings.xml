@@ -239,4 +239,6 @@
     <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina valitsemaasi kansioon ja asenna ne sieltä takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot eivät sisälly. Toinen varmuuskopio samaan kansioon kopioi vain muuttuneet; puhelimesta poistettu sovellus jää kansioon, kunnes poistat sen sieltä.</string>
     <string name="action_backup_apps">Varmuuskopioi sovellukset</string>
     <string name="action_restore_apps">Palauta sovellukset</string>
+    <string name="backup_notification_saving">Varmuuskopioidaan: %1$s</string>
+    <string name="backup_notification_restoring">Palautetaan: %1$s</string>
 </resources>

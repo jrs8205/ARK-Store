@@ -157,7 +157,8 @@ class InstallService : Service() {
 
     companion object {
         private const val TAG = "InstallService"
-        private const val CHANNEL_ID = "downloads"
+        /** The quiet channel of progress, shared with the backup's own progress. */
+        internal const val CHANNEL_ID = "downloads"
         private const val READY_CHANNEL_ID = "installs"
         private const val NOTIFICATION_ID = 2
         private const val READY_NOTIFICATION_ID = 3

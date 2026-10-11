@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.backup
 
+import android.content.pm.ApplicationInfo
 import org.jarsi.arkstore.data.Backup
 import org.json.JSONArray
 import org.json.JSONException
@@ -163,6 +164,28 @@ object AppBackup {
             stored.updatedAt == current.updatedAt &&
             stored.files == current.files &&
             current.files.all { present[it.name] == it.size }
+
+    /**
+     * The index of a folder after a backup: the entries of [old] whose folders are still among
+     * [folders] (the names of the folder's own folders), with those [written] now in their
+     * place or added, sorted by name. An entry of a folder the user has deleted goes with it.
+     */
+    fun mergedIndex(old: List<BackupEntry>, folders: Set<String>, written: List<BackupEntry>): List<BackupEntry> {
+        val byPackage = LinkedHashMap<String, BackupEntry>()
+        old.filter { it.packageName in folders }.forEach { byPackage[it.packageName] = it }
+        written.forEach { byPackage[it.packageName] = it }
+        return byPackage.values.sortedWith(compareBy({ it.label.lowercase() }, { it.packageName }))
+    }
+
+    /**
+     * Whether an installed app, with the [flags] of its ApplicationInfo, is one a backup may
+     * take: not the system's, not an update of the system's, and not the store itself ([self]),
+     * which is installed before the backup is brought back.
+     */
+    fun isCandidate(flags: Int, packageName: String, self: String): Boolean =
+        flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0 &&
+            packageName != self &&
+            isPackageName(packageName)
 
     private fun parse(text: String): JSONObject? = try {
         JSONObject(text)

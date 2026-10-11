@@ -254,4 +254,6 @@
     <string name="backup_description">Copy the apps installed from outside Google Play, as their APK files, to a folder of your choosing, and install them back from it on this or another device. The apps\' own data is not included. A second backup to the same folder copies only what has changed; an app you have removed stays in the folder until you delete it there.</string>
     <string name="action_backup_apps">Back up apps</string>
     <string name="action_restore_apps">Restore apps</string>
+    <string name="backup_notification_saving">Backing up %1$s</string>
+    <string name="backup_notification_restoring">Restoring %1$s</string>
 </resources>

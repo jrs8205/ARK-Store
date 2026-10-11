@@ -56,5 +56,11 @@
             android:name=".install.InstallService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Keeps a backup or a restore of the apps going after the user leaves the app. -->
+        <service
+            android:name=".backup.BackupService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
