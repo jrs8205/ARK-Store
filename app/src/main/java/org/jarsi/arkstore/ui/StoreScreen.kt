@@ -138,6 +138,7 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -172,6 +173,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var screen by rememberSaveable { mutableStateOf(Screen.STORE) }
+    val backupViewModel: BackupViewModel = viewModel()
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
     var place by rememberSaveable { mutableStateOf<String?>(null) }
@@ -618,14 +620,16 @@ fun StoreScreen(viewModel: StoreViewModel) {
         onBackup = { screen = Screen.BACKUP },
         onRestore = { screen = Screen.RESTORE }
     )
-    Screen.BACKUP -> StorePage(
-        title = stringResource(R.string.action_backup_apps),
+    Screen.BACKUP -> BackupScreen(
+        viewModel = backupViewModel,
+        settingsJson = viewModel::settingsJson,
         onBack = { screen = screen.back }
-    ) {}
-    Screen.RESTORE -> StorePage(
-        title = stringResource(R.string.action_restore_apps),
+    )
+    Screen.RESTORE -> RestoreScreen(
+        viewModel = backupViewModel,
+        onImportSettings = viewModel::importFrom,
         onBack = { screen = screen.back }
-    ) {}
+    )
     }
     }
     }
@@ -1453,15 +1457,17 @@ private fun Badge(text: String) {
  * adds around it stays clear.
  */
 @Composable
-private fun StoreButton(
+internal fun StoreButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     content: @Composable RowScope.() -> Unit
 ) {
     val metal = LocalMaterial.current
     Button(
         onClick = onClick,
         modifier = modifier,
+        enabled = enabled,
         colors = if (metal) {
             ButtonDefaults.buttonColors(containerColor = Color.Transparent)
         } else {
@@ -1469,7 +1475,12 @@ private fun StoreButton(
         },
         contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
     ) {
-        ButtonFace(MaterialTheme.colorScheme.primary, metal, content)
+        // A button that cannot be pressed is dull metal, not the bright colour of one that can.
+        ButtonFace(
+            if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh,
+            metal,
+            content
+        )
     }
 }
 

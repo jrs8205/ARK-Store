@@ -2,6 +2,7 @@ package org.jarsi.arkstore.backup
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -166,27 +167,40 @@ object BackupManager {
                 ?.takeIf { it.packageName == folder.name }
         }
         val installed = InstalledApps.snapshot(context)
-        val packages = context.packageManager
         val rows = entries.map { entry ->
             val files = folders[entry.packageName]
                 ?.let { docs.children(it.id) }
                 ?.filter { !it.isDirectory }
                 ?.associateBy { it.name }
-            val info = installed[entry.packageName]
-            val status = RestoreRules.status(
-                entry,
-                installedVersion = info?.let(PackageInfoCompat::getLongVersionCode),
-                keysHeld = if (info != null) InstalledApps.keysHeld(packages, entry.packageName) else null,
-                present = files?.mapValues { it.value.size },
-                sdk = Build.VERSION.SDK_INT
-            )
-            RestoreEntry(entry, status, files)
+            RestoreEntry(entry, status(context, entry, files, installed), files)
         }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
         BackupFolder(
             tree,
             docs.name() ?: tree.lastPathSegment.orEmpty(),
             rows,
             byName[AppBackup.SETTINGS_NAME]?.takeIf { !it.isDirectory }?.let { docs.uri(it.id) }
+        )
+    }
+
+    /** [folder] seen against what is installed now; the folder itself is not read again. */
+    suspend fun refresh(context: Context, folder: BackupFolder): BackupFolder = withContext(Dispatchers.IO) {
+        val installed = InstalledApps.snapshot(context)
+        folder.copy(entries = folder.entries.map { it.copy(status = status(context, it.entry, it.files, installed)) })
+    }
+
+    private fun status(
+        context: Context,
+        entry: BackupEntry,
+        files: Map<String, Doc>?,
+        installed: Map<String, PackageInfo>
+    ): RestoreStatus {
+        val info = installed[entry.packageName]
+        return RestoreRules.status(
+            entry,
+            installedVersion = info?.let(PackageInfoCompat::getLongVersionCode),
+            keysHeld = if (info != null) InstalledApps.keysHeld(context.packageManager, entry.packageName) else null,
+            present = files?.mapValues { it.value.size },
+            sdk = Build.VERSION.SDK_INT
         )
     }
 

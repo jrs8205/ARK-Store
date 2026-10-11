@@ -76,6 +76,8 @@ internal fun StorePage(
     title: String,
     onBack: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
+    /** Whether the content scrolls as a whole; a page with a list of its own scrolls that instead. */
+    scrolling: Boolean = true,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val background = MaterialTheme.colorScheme.background
@@ -110,7 +112,7 @@ internal fun StorePage(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .then(if (scrolling) Modifier.verticalScroll(rememberScrollState()) else Modifier)
                 .padding(start = 24.dp, end = 24.dp, bottom = 24.dp)
                 .navigationBarsPadding(),
             content = content

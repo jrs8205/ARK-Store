@@ -337,6 +337,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The settings as [exportTo] writes them, for a backup of the apps to keep alongside. */
+    fun settingsJson(): String = backup().toJson().toString(2)
+
     private fun backup(): Backup {
         val context = getApplication<Application>()
         val ui = context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
