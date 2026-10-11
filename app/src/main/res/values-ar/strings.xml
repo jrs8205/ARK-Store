@@ -300,7 +300,7 @@
     <string name="restore_done">سُلِّم إلى النظام: %1$d، فشل: %2$d.</string>
     <string name="backup_failed_apps">فشل: %1$s</string>
     <string name="backup_folder_unavailable">تعذّرت قراءة المجلد أو الكتابة فيه.</string>
-    <string name="backup_cancelled">تم الإلغاء. فهرس المجلد يطابق ما نُسخ.</string>
+    <string name="backup_cancelled">تم الإلغاء. يمكن استعادة التطبيقات التي نُسخت كاملةً؛ أما البقية فستُنسخ من جديد في المرة القادمة.</string>
     <string name="restore_import_settings">استعادة المصادر والإشارات المرجعية والإعدادات أيضًا</string>
     <string name="restore_nothing">لا يحتوي المجلد على أي تطبيقات نسخها ARK-Store احتياطيًا.</string>
     <string name="restore_status_not_installed">غير مثبّت</string>
@@ -312,5 +312,5 @@
     <string name="restore_status_files_missing">الملفات غير موجودة في المجلد</string>
     <string name="restore_installing">جارٍ التثبيت…</string>
     <string name="restore_fail_invalid">الملف الموجود في المجلد ليس حزمة تطبيق صالحة.</string>
-    <string name="backup_index_not_written">نُسخت التطبيقات، لكن تعذّرت كتابة فهرس المجلد وملف الإعدادات؛ لذا تقرأ الاستعادة مجلد كل تطبيق بدلًا من ذلك.</string>
+    <string name="backup_index_not_written">تعذّرت كتابة فهرس المجلد وملف إعدادات المتجر. لا يزال بالإمكان استعادة التطبيقات المنسوخة من مجلداتها.</string>
 </resources>

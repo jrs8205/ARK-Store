@@ -6,6 +6,17 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
+/** What an app's folder in a backup was found to hold when the folder's index is made. */
+sealed interface FolderRead {
+    /** The folder or its entry could not be read just now: what it holds is not known. */
+    data object Unreadable : FolderRead
+
+    /** No entry, or one that is not this folder's: a copy cut short, or none at all. */
+    data object NoEntry : FolderRead
+
+    data class Found(val entry: BackupEntry) : FolderRead
+}
+
 /** One file of a backed-up app, by the name it has in the app's folder. */
 data class BackupFile(val name: String, val size: Long)
 
@@ -165,6 +176,25 @@ object AppBackup {
             stored.updatedAt == current.updatedAt &&
             stored.files == current.files &&
             current.files.all { present[it.name] == it.size }
+
+    /**
+     * The entries of a folder's index: those [written] in this run, by package, and those the
+     * other app [folders] were found to hold, in [indexOrder]. Null when a folder not written in
+     * this run could not be read: it may hold a whole copy, and an index without it would hide
+     * it, so the index is better left as it was.
+     */
+    fun indexEntries(folders: Map<String, FolderRead>, written: Map<String, BackupEntry>): List<BackupEntry>? {
+        val entries = ArrayList<BackupEntry>(folders.size)
+        for ((name, read) in folders) {
+            val entry = written[name] ?: when (read) {
+                FolderRead.Unreadable -> return null
+                FolderRead.NoEntry -> null
+                is FolderRead.Found -> read.entry
+            }
+            if (entry != null) entries += entry
+        }
+        return indexOrder(entries)
+    }
 
     /** [entries] in the order of the index and the lists: by name, then by package. */
     fun indexOrder(entries: Collection<BackupEntry>): List<BackupEntry> =

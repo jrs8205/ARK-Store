@@ -28,6 +28,15 @@ import org.jarsi.arkstore.backup.Selection
  * the user has said otherwise about an app, see [Selection]: a list read again keeps what the
  * user chose and dropped, and applies the rule to the rest.
  */
+/** Numbers the reads of something, so that only the latest is taken when several overlap. */
+internal class Turns {
+    private val count = AtomicInteger(0)
+
+    fun next(): Int = count.incrementAndGet()
+
+    fun isLatest(turn: Int): Boolean = count.get() == turn
+}
+
 class BackupViewModel(application: Application) : AndroidViewModel(application) {
 
     private val context get() = getApplication<Application>()
@@ -42,6 +51,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** The apps a backup may take, or null until they have been read. */
     val candidates: StateFlow<List<BackupCandidate>?> = _candidates.asStateFlow()
     private var candidatesJob: Job? = null
+    private val candidateTurns = Turns()
     private var backupSaid = Selection()
 
     private val _selected = MutableStateFlow<Set<String>>(emptySet())
@@ -52,7 +62,9 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** The folder as read for a restore, or null while it is being read or has not been. */
     val folder: StateFlow<BackupFolder?> = _folder.asStateFlow()
     private var readJob: Job? = null
-    private val refreshes = AtomicInteger(0)
+    private val refreshes = Turns()
+    /** An install finished while the folder was being read; its statuses are looked at again after. */
+    private var refreshPending = false
 
     private val _reading = MutableStateFlow(false)
     val reading: StateFlow<Boolean> = _reading.asStateFlow()
@@ -99,13 +111,16 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Reads the installed apps afresh: the versions and files change with every install. The
-     * user's choices stand; an app new to the list follows the rule.
+     * Reads the installed apps afresh: the versions and files change with every install. A read
+     * still on its way is given up for this one, which sees the latest install. The user's
+     * choices stand; an app new to the list follows the rule.
      */
     fun loadCandidates() {
-        if (candidatesJob?.isActive == true) return
+        val turn = candidateTurns.next()
+        candidatesJob?.cancel()
         candidatesJob = viewModelScope.launch {
             val list = withContext(Dispatchers.IO) { BackupManager.candidates(context) }
+            if (!candidateTurns.isLatest(turn)) return@launch
             _candidates.value = list
             chooseForBackup(list)
         }
@@ -154,17 +169,28 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
             _folder.value = read
             if (read != null) chooseForRestore(read)
             _reading.value = false
+            if (refreshPending) {
+                refreshPending = false
+                refreshStatuses()
+            }
         }
     }
 
-    /** Sees the folder read against what is installed now, after an install has finished. */
+    /**
+     * Sees the folder read against what is installed now, after an install has finished. The
+     * look is kept only if it is the latest and the folder read is still the one it began from:
+     * a read of the folder since then has the newer content, and comes first.
+     */
     fun refreshStatuses() {
+        if (_reading.value) {
+            refreshPending = true
+            return
+        }
         val folder = _folder.value ?: return
-        val turn = refreshes.incrementAndGet()
+        val turn = refreshes.next()
         viewModelScope.launch {
             val seen = BackupManager.refresh(context, folder)
-            // Only the latest look is kept, and only for the folder still chosen.
-            if (turn != refreshes.get() || _tree.value != seen.tree || _folder.value?.tree != seen.tree) return@launch
+            if (!refreshes.isLatest(turn) || _folder.value !== folder) return@launch
             _folder.value = seen
             chooseForRestore(seen)
         }

@@ -157,31 +157,25 @@ object BackupManager {
     }
 
     /**
-     * Reads the folder [tree]: what its index lists, or failing an index, what its folders'
-     * own entries say, each seen against what is installed here. Null when the folder cannot
-     * be listed at all.
+     * Reads the folder [tree]: each app folder's own entry, which is written last and so
+     * stands for a whole copy, seen against what is installed here. The folder's index is not
+     * what is read: it may be older than the folders, as when it could not be written. Null
+     * when the folder cannot be listed at all.
      */
     suspend fun read(context: Context, tree: Uri): BackupFolder? = withContext(Dispatchers.IO) {
         val docs = Documents(context.contentResolver, tree)
         val root = docs.children(docs.rootId) ?: return@withContext null
         val byName = root.associateBy { it.name }
-        val folders = root.filter { it.isDirectory && AppBackup.isPackageName(it.name) }.associateBy { it.name }
-        val index = byName[AppBackup.INDEX_NAME]
-            ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
-            ?.let(AppBackup::indexFromText)
-        val entries = index ?: folders.values.mapNotNull { folder ->
-            docs.children(folder.id)
-                ?.firstOrNull { it.name == AppBackup.ENTRY_NAME }
+        val folders = root.filter { it.isDirectory && AppBackup.isPackageName(it.name) }.take(AppBackup.MAX_ENTRIES)
+        val installed = InstalledApps.snapshot(context)
+        val rows = folders.mapNotNull { folder ->
+            val files = docs.children(folder.id)?.filter { !it.isDirectory }?.associateBy { it.name }
+                ?: return@mapNotNull null
+            val entry = files[AppBackup.ENTRY_NAME]
                 ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
                 ?.let(AppBackup::entryFromText)
                 ?.takeIf { it.packageName == folder.name }
-        }
-        val installed = InstalledApps.snapshot(context)
-        val rows = entries.map { entry ->
-            val files = folders[entry.packageName]
-                ?.let { docs.children(it.id) }
-                ?.filter { !it.isDirectory }
-                ?.associateBy { it.name }
+                ?: return@mapNotNull null
             RestoreEntry(entry, status(context, entry, files, installed), files)
         }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
         BackupFolder(
@@ -322,7 +316,11 @@ object BackupManager {
                     // The entry goes first and comes back last: a folder without one is a copy
                     // cut short, and is copied again next time. Files of an earlier version that
                     // are not among this one's go too.
-                    byName.remove(AppBackup.ENTRY_NAME)?.let { docs.delete(it.id) }
+                    byName.remove(AppBackup.ENTRY_NAME)?.let {
+                        // While the old entry stands, the old copy is whole; it is not touched
+                        // until the entry is gone, so that it never stands for files it is not.
+                        if (!docs.delete(it.id)) throw IOException("The app's entry could not be removed")
+                    }
                     val names = entry.files.mapTo(HashSet()) { it.name }
                     byName.values.filter { it.name.endsWith(".apk") && it.name !in names }.forEach {
                         docs.delete(it.id)
@@ -356,7 +354,8 @@ object BackupManager {
             // which a copy cut short has none of, whether or not an index was there before.
             withContext(NonCancellable) {
                 indexWritten = try {
-                    val index = AppBackup.indexOrder(entries(docs, written))
+                    val index = AppBackup.indexEntries(folderReads(docs), written)
+                        ?: throw IOException("An app's folder could not be read; the index is left as it was")
                     writeRoot(docs, rootByName, AppBackup.INDEX_NAME, AppBackup.indexToJson(index, Instant.now().toString()).toString(2))
                     writeRoot(docs, rootByName, AppBackup.SETTINGS_NAME, settingsJson)
                     true
@@ -379,19 +378,26 @@ object BackupManager {
     }
 
     /**
-     * The entries of every app folder in the tree: those [written] or found up to date in this
-     * run as they are, the rest read from the folders' own entries. A folder without an entry,
-     * or with one of another package, is a copy cut short, and is left out.
+     * What every app folder in the tree holds, by package: its entry, none (a copy cut short, or
+     * an entry of another package), or not known, when the folder or its entry could not be read.
      */
-    private fun entries(docs: Documents, written: Map<String, BackupEntry>): List<BackupEntry> {
+    private fun folderReads(docs: Documents): Map<String, FolderRead> {
         val folders = docs.children(docs.rootId)?.filter { it.isDirectory && AppBackup.isPackageName(it.name) }
             ?: throw IOException("The folder cannot be listed")
-        return folders.mapNotNull { folder ->
-            written[folder.name] ?: docs.children(folder.id)
-                ?.firstOrNull { it.name == AppBackup.ENTRY_NAME }
-                ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
-                ?.let(AppBackup::entryFromText)
-                ?.takeIf { it.packageName == folder.name }
+        return folders.associate { folder ->
+            val children = docs.children(folder.id)
+            val entryDoc = children?.firstOrNull { it.name == AppBackup.ENTRY_NAME }
+            folder.name to when {
+                children == null -> FolderRead.Unreadable
+                entryDoc == null -> FolderRead.NoEntry
+                else -> when (val text = docs.readText(entryDoc.id, AppBackup.MAX_JSON_BYTES)) {
+                    null -> FolderRead.Unreadable
+                    else -> AppBackup.entryFromText(text)
+                        ?.takeIf { it.packageName == folder.name }
+                        ?.let { FolderRead.Found(it) }
+                        ?: FolderRead.NoEntry
+                }
+            }
         }
     }
 

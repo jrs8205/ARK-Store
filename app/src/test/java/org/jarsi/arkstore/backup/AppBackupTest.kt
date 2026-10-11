@@ -162,6 +162,24 @@ class AppBackupTest {
     }
 
     @Test
+    fun indexIsLeftAsItWasWhenAFolderCouldNotBeRead() {
+        val other = entry.copy(packageName = "org.other.app", label = "Other")
+        val third = entry.copy(packageName = "org.third.app", label = "Third")
+        val newer = entry.copy(versionCode = 13)
+        val folders = mapOf(
+            "org.example.app" to FolderRead.Unreadable,
+            "org.other.app" to FolderRead.Found(other),
+            "org.gone.app" to FolderRead.NoEntry,
+            "org.third.app" to FolderRead.Found(third)
+        )
+        // What was written in this run is known whatever its folder reads now; a folder without
+        // an entry is a copy cut short and is left out.
+        assertEquals(listOf(newer, other, third), AppBackup.indexEntries(folders, mapOf("org.example.app" to newer)))
+        // A folder neither written now nor readable could hold a whole copy: no index claims otherwise.
+        assertNull(AppBackup.indexEntries(folders, emptyMap()))
+    }
+
+    @Test
     fun indexOrderIsByNameThenPackage() {
         val other = entry.copy(packageName = "org.other.app", label = "other")
         val same = entry.copy(packageName = "org.another.app", label = "Example")
