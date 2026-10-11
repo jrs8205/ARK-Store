@@ -176,3 +176,75 @@ object AppBackup {
         else -> null
     }
 }
+
+/** The packages that install apps, as a backup tells them apart. */
+object Installers {
+    const val PLAY = "com.android.vending"
+
+    private val NAMES = mapOf(
+        PLAY to "Google Play",
+        "org.fdroid.fdroid" to "F-Droid",
+        "org.fdroid.basic" to "F-Droid",
+        "org.jarsi.arkstore" to "ARK-Store",
+        "com.aurora.store" to "Aurora Store",
+        "dev.imranr.obtainium" to "Obtainium",
+        "com.looker.droidify" to "Droid-ify",
+        "com.machiav3lli.fdroid" to "Neo Store",
+        "com.sec.android.app.samsungapps" to "Galaxy Store"
+    )
+
+    /** Whether an app installed by [installer] is taken into a backup unless the user says otherwise: one not from Google Play. */
+    fun preselected(installer: String?): Boolean = installer != PLAY
+
+    /**
+     * The name a known [installer] goes by, or null for one not known, or for the system's own
+     * installer, which is the user installing a file by hand.
+     */
+    fun knownName(installer: String?): String? = installer?.let(NAMES::get)
+}
+
+/** How a backed-up app stands against the device it would be restored to. */
+enum class RestoreStatus {
+    NOT_INSTALLED,
+    OLDER_INSTALLED,
+    SAME_INSTALLED,
+    /** The device has a newer version, which Android would not let the backup replace. */
+    NEWER_INSTALLED,
+    /** The installed app is signed with another key, so Android would refuse the backup's files. */
+    OTHER_SIGNER,
+    NEEDS_NEWER_ANDROID,
+    /** The folder no longer has the files the entry names, at the sizes it names. */
+    FILES_MISSING;
+
+    /** Whether the user may choose to restore it. */
+    val selectable: Boolean
+        get() = this == NOT_INSTALLED || this == OLDER_INSTALLED || this == SAME_INSTALLED
+
+    /** Whether it is chosen before the user says anything: what is missing or behind on the device. */
+    val preselected: Boolean
+        get() = this == NOT_INSTALLED || this == OLDER_INSTALLED
+}
+
+object RestoreRules {
+    /**
+     * How [entry] stands against a device running Android API [sdk], where the package is
+     * installed as [installedVersion] (null when it is not), signed with [keysHeld] (null when they
+     * could not be read, which is not taken for a difference), and where the entry's folder holds
+     * the files [present], by name and size (null when there is no folder).
+     */
+    fun status(
+        entry: BackupEntry,
+        installedVersion: Long?,
+        keysHeld: Set<String>?,
+        present: Map<String, Long>?,
+        sdk: Int
+    ): RestoreStatus = when {
+        present == null || entry.files.any { present[it.name] != it.size } -> RestoreStatus.FILES_MISSING
+        entry.minSdk != null && entry.minSdk > sdk -> RestoreStatus.NEEDS_NEWER_ANDROID
+        installedVersion == null -> RestoreStatus.NOT_INSTALLED
+        keysHeld != null && entry.signers.isNotEmpty() && keysHeld.none { it in entry.signers } -> RestoreStatus.OTHER_SIGNER
+        installedVersion > entry.versionCode -> RestoreStatus.NEWER_INSTALLED
+        installedVersion == entry.versionCode -> RestoreStatus.SAME_INSTALLED
+        else -> RestoreStatus.OLDER_INSTALLED
+    }
+}
