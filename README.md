@@ -16,6 +16,9 @@ ARK-Store is an Android app store for open-source apps published on GitHub. A de
 adds one topic to the repository and the app is in the store; new versions follow every
 release. No account, no submission form, no review queue, no fees.
 
+Download the latest APK from the [Releases](https://github.com/jrs8205/ARK-Store/releases/latest)
+page; every release is also mirrored on [SourceForge](https://sourceforge.net/projects/ark-store/).
+
 **Registered with Google.** The package name and signing key are registered in Google's
 Android Developer Console, so ARK-Store keeps installing as usual under Google's new
 [sideloading rules](https://developer.android.com/developer-verification).
