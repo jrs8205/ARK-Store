@@ -249,4 +249,9 @@
     <string name="transfer_imported">Imported: %1$d new sources and %2$d new bookmarks. The settings were applied.</string>
     <string name="transfer_not_backup">This is not a file exported by ARK-Store.</string>
     <string name="transfer_failed">The file could not be read or written.</string>
+    <string name="action_back">Back</string>
+    <string name="backup_title">App backup</string>
+    <string name="backup_description">Copy the apps installed from outside Google Play, as their APK files, to a folder of your choosing, and install them back from it on this or another device. The apps\' own data is not included. A second backup to the same folder copies only what has changed; an app you have removed stays in the folder until you delete it there.</string>
+    <string name="action_backup_apps">Back up apps</string>
+    <string name="action_restore_apps">Restore apps</string>
 </resources>

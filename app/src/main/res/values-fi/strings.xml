@@ -234,4 +234,9 @@
     <string name="transfer_imported">Tuotu: %1$d uutta lähdettä ja %2$d uutta kirjanmerkkiä. Asetukset otettiin käyttöön.</string>
     <string name="transfer_not_backup">Tämä ei ole ARK-Storen vientitiedosto.</string>
     <string name="transfer_failed">Tiedostoa ei voitu lukea tai kirjoittaa.</string>
+    <string name="action_back">Takaisin</string>
+    <string name="backup_title">Sovellusten varmuuskopio</string>
+    <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina valitsemaasi kansioon ja asenna ne sieltä takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot eivät sisälly. Toinen varmuuskopio samaan kansioon kopioi vain muuttuneet; puhelimesta poistettu sovellus jää kansioon, kunnes poistat sen sieltä.</string>
+    <string name="action_backup_apps">Varmuuskopioi sovellukset</string>
+    <string name="action_restore_apps">Palauta sovellukset</string>
 </resources>
