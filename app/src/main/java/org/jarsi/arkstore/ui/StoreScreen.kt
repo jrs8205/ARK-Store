@@ -90,6 +90,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -218,14 +219,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
             .material(background, Relief.PLATE, radius = 0.dp, grain = 0.3f, still = true)
     ) {
     // The settings and the pages of the backup take the place of the list, rather than lying
-    // over it: a reader of the screen then finds one page, not two. What the list keeps,
-    // from its search to its scroll, is held above the switch, and waits for it.
+    // over it: a reader of the screen then finds one page, not two. What a page remembers
+    // for saving, such as where the list was scrolled to, is kept under the page's own key
+    // while another page shows, and given back when the page returns.
     BackHandler(enabled = screen != Screen.STORE) { screen = screen.back }
+    val pages = rememberSaveableStateHolder()
     AnimatedContent(
         targetState = screen,
         transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(150)) },
         label = "screen"
     ) { shown ->
+    pages.SaveableStateProvider(shown) {
     when (shown) {
     Screen.STORE -> {
     Scaffold(
@@ -630,6 +634,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
         onImportSettings = viewModel::importFrom,
         onBack = { screen = screen.back }
     )
+    }
     }
     }
     }

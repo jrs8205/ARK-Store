@@ -103,7 +103,7 @@ internal fun StorePage(
                         )
                     }
                 },
-                title = { Text(title) },
+                title = { Text(title, modifier = Modifier.semantics { heading() }) },
                 actions = actions
             )
         }
@@ -618,4 +618,3 @@ private fun SettingSwitch(
         Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
-
