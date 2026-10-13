@@ -136,6 +136,12 @@ internal object RootDataCommands {
     /** Where the app's data as it was is kept while the restore [token] puts the new in place. */
     fun old(part: String, userId: Int, token: String): String = "${userDir(part, userId)}/.arkstore-old-${checkedToken(token)}"
 
+    /**
+     * A mark the restore [token] leaves when the app had no data folder of [part] at all, so
+     * that putting things back means removing what the restore made, not moving the old in.
+     */
+    fun none(part: String, userId: Int, token: String): String = "${userDir(part, userId)}/.arkstore-none-${checkedToken(token)}"
+
     /** Makes [staging] afresh and unpacks the tar on the input into it. */
     fun extract(tar: String, staging: String): String =
         "rm -rf $staging && mkdir $staging && chmod 700 $staging && $tar -x -p -f - -C $staging"
@@ -171,8 +177,9 @@ internal object RootDataCommands {
      * Puts the unpacked data of [packageName] in the staging folder of the restore [token]
      * in the place of the app's data, owned by the app ([uid]) and labelled as the system
      * labels an app's data, keeping the app's link to its native libraries. The old data is
-     * moved aside and kept, see [old]: a step that fails puts it back, and [finish] removes
-     * it once every part of the app's data is in place.
+     * moved aside and kept, see [old], or its absence is marked, see [none]: a step that
+     * fails puts things back as they were, and [finish] clears up once every part of the
+     * app's data is in place.
      */
     fun swap(part: String, userId: Int, packageName: String, uid: Int, token: String): String {
         require(uid >= 0) { "Not a uid" }
@@ -180,33 +187,36 @@ internal object RootDataCommands {
         val target = "${userDir(part, userId)}/$pkg"
         val fresh = "${staging(part, userId, token)}/$pkg"
         val old = old(part, userId, token)
+        val none = none(part, userId, token)
         return listOf(
             "chown -R -h $uid:$uid $fresh",
-            "rm -rf $old",
-            "{ [ ! -e $target ] || mv $target $old; }",
-            "{ mv $fresh $target || { [ ! -e $old ] || mv $old $target; false; }; }",
+            "rm -rf $old $none",
+            "{ [ ! -e $target ] && touch $none || mv $target $old; }",
+            "{ mv $fresh $target || { ${putBack(target, old, none)}; false; }; }",
             "{ [ ! -L $old/lib ] || [ -e $target/lib ] || mv $old/lib $target/lib; }",
-            "{ restorecon -R -F -D $target || { ${putBack(target, old)}; false; }; }"
+            "{ restorecon -R -F -D $target || { ${putBack(target, old, none)}; false; }; }"
         ).joinToString(" && ")
     }
 
-    /** Takes the data [swap] put in place out again and puts the old back, as far as it is there. */
+    /** Takes the data [swap] put in place out again and puts things back as they were, as far as [swap] got. */
     fun unswap(part: String, userId: Int, packageName: String, token: String): String {
         val target = "${userDir(part, userId)}/${checked(packageName)}"
-        return putBack(target, old(part, userId, token))
+        return putBack(target, old(part, userId, token), none(part, userId, token))
     }
 
     /**
-     * The old data at [old] back in the place of [target], with the link to the libraries.
-     * Without the old there is nothing to put back, and [target] is left as it is: it is then
-     * the app's own data, never moved, or the old put back already.
+     * Things back as they were: the old data at [old] in the place of [target], with the
+     * link to the libraries, or, where the mark [none] says the app had no folder, nothing
+     * in its place. With neither there is nothing to put back, and [target] is left as it
+     * is: it is then the app's own data, never moved, or put back already.
      */
-    private fun putBack(target: String, old: String): String =
-        "{ [ ! -e $old ] || { { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && rm -rf $target && mv $old $target; }; }"
+    private fun putBack(target: String, old: String, none: String): String =
+        "{ if [ -e $old ]; then { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && rm -rf $target && mv $old $target; " +
+            "elif [ -e $none ]; then rm -rf $target $none; fi; }"
 
-    /** Removes what the restore [token] of [part] left beside the apps' folders: the old data and the staging folder. */
+    /** Removes what the restore [token] of [part] left beside the apps' folders: the old data, the mark and the staging folder. */
     fun finish(part: String, userId: Int, token: String): String =
-        "rm -rf ${old(part, userId, token)} ${staging(part, userId, token)}"
+        "rm -rf ${old(part, userId, token)} ${none(part, userId, token)} ${staging(part, userId, token)}"
 
     fun forceStop(packageName: String, userId: Int): String {
         require(userId >= 0) { "Not a user" }
@@ -406,7 +416,7 @@ object RootData {
                 for (part in swapped.asReversed()) {
                     val back = Root.run(RootDataCommands.unswap(part.part, userId, packageName, part.token), CLEAR_TIMEOUT_MS, global = true)
                     if (back !is Root.Outcome.Ran || back.exit != 0) {
-                        // The old data stays where it was put aside, for whoever comes to look.
+                        // The old data, or the mark of there having been none, stays where it was put aside, for whoever comes to look.
                         Log.e(TAG, "The old ${part.part} of $packageName could not be put back; it is kept at ${RootDataCommands.old(part.part, userId, part.token)}")
                         part.finished = true
                     }

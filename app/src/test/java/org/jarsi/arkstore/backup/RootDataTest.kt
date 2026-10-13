@@ -58,7 +58,7 @@ class RootDataTest {
     }
 
     private fun swaps() = commands.filter { it.startsWith("chown -R -h 10123:10123 ") }
-    private fun unswaps() = commands.filter { it.startsWith("{ [ ! -e /data/user") && "rm -rf /data/user" in it }
+    private fun unswaps() = commands.filter { it.startsWith("{ if [ -e /data/user") && "rm -rf /data/user" in it }
     private fun finishes() = commands.filter { it.startsWith("rm -rf /data/user") && ".arkstore-old-" in it }
 
     @Test

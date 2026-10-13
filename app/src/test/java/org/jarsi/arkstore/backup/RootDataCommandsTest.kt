@@ -118,24 +118,27 @@ class RootDataCommandsTest {
         val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, token)
         val target = "/data/user/0/$pkg"
         val old = "/data/user/0/.arkstore-old-$token"
-        // Nothing is put back without the old: the data in place is then the app's own, never moved.
-        val putBack = "{ [ ! -e $old ] || { { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && " +
-            "rm -rf $target && mv $old $target; }; }"
+        val none = "/data/user/0/.arkstore-none-$token"
+        assertEquals(none, RootDataCommands.none(AppBackup.DATA_USER, 0, token))
+        // Things back as they were: the old data moved back, or, where the app had no folder,
+        // what the restore made removed. With neither, the data in place is the app's own, never moved.
+        val putBack = "{ if [ -e $old ]; then { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && " +
+            "rm -rf $target && mv $old $target; elif [ -e $none ]; then rm -rf $target $none; fi; }"
         assertEquals(
             listOf(
                 "chown -R -h 10234:10234 $staging/$pkg",
-                "rm -rf $old",
-                "{ [ ! -e $target ] || mv $target $old; }",
-                "{ mv $staging/$pkg $target || { [ ! -e $old ] || mv $old $target; false; }; }",
+                "rm -rf $old $none",
+                "{ [ ! -e $target ] && touch $none || mv $target $old; }",
+                "{ mv $staging/$pkg $target || { $putBack; false; }; }",
                 "{ [ ! -L $old/lib ] || [ -e $target/lib ] || mv $old/lib $target/lib; }",
                 "{ restorecon -R -F -D $target || { $putBack; false; }; }"
             ).joinToString(" && "),
             RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, 10234, token)
         )
         // Nothing of the swap removes the old data: that is for the finish, once every part is in place.
-        assertFalse(RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, 10234, token).contains("rm -rf $old $staging"))
+        assertFalse(RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, 10234, token).contains("rm -rf $old $none $staging"))
         assertEquals(putBack, RootDataCommands.unswap(AppBackup.DATA_USER, 0, pkg, token))
-        assertEquals("rm -rf $old $staging", RootDataCommands.finish(AppBackup.DATA_USER, 0, token))
+        assertEquals("rm -rf $old $none $staging", RootDataCommands.finish(AppBackup.DATA_USER, 0, token))
         assertThrows(IllegalArgumentException::class.java) { RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, -1, token) }
         assertThrows(IllegalArgumentException::class.java) { RootDataCommands.swap(AppBackup.DATA_USER, 0, "org.example app", 1, token) }
         assertThrows(IllegalArgumentException::class.java) { RootDataCommands.finish(AppBackup.DATA_USER, 0, "x") }
