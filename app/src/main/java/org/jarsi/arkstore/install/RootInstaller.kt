@@ -49,10 +49,12 @@ internal object PmOutput {
  * the checks of a backup, and numbers.
  */
 internal object RootCommands {
-    fun createSession(installer: String, bytes: Long): String {
+    /** A session for [packageName] alone: the system refuses files of any other package in it. */
+    fun createSession(installer: String, packageName: String, bytes: Long): String {
         require(AppBackup.isPackageName(installer)) { "Not a package name" }
+        require(AppBackup.isPackageName(packageName)) { "Not a package name" }
         require(bytes > 0) { "No size" }
-        return "pm install-create -r --user current -i $installer -S $bytes"
+        return "pm install-create -r --user current -i $installer --pkg $packageName -S $bytes"
     }
 
     fun writeSplit(sessionId: Int, name: String, bytes: Long): String {
@@ -89,17 +91,19 @@ internal object RootInstaller {
     }
 
     /**
-     * Installs [files] as one session, the base file first, [installer] named as the one who
-     * did; [onSession] is told the session's id before anything is written to it. Any file
-     * that cannot be given whole fails the session, which is then abandoned.
+     * Installs [files] of [packageName] as one session, the base file first, [installer]
+     * named as the one who did; [onSession] is told the session's id before anything is
+     * written to it. Any file that cannot be given whole fails the session, which is then
+     * abandoned.
      */
     suspend fun install(
         installer: String,
+        packageName: String,
         files: List<Pair<String, File>>,
         onSession: (Int) -> Unit
     ): Result {
         val total = files.sumOf { it.second.length() }
-        val created = Root.run(RootCommands.createSession(installer, total), PM_TIMEOUT_MS)
+        val created = Root.run(RootCommands.createSession(installer, packageName, total), PM_TIMEOUT_MS)
         if (created !is Root.Outcome.Ran) return Result.NoRoot
         val sessionId = PmOutput.sessionId(created.out) ?: return verdict(created, "install-create")
         onSession(sessionId)

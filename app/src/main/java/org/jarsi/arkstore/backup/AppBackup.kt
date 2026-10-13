@@ -270,6 +270,29 @@ object AppBackup {
     }
 }
 
+/**
+ * The text an encrypted data archive is bound to: the package and the signers of the app
+ * whose data it is, so that the data is never put back into an app signed by someone else,
+ * as when the files beside it in the backup have been swapped for another app's.
+ */
+object DataBinding {
+    private const val VERSION = "arkstore-data-binding/1"
+
+    fun text(packageName: String, signers: Collection<String>): String =
+        VERSION + "\n" + packageName + "\n" + signers.sorted().joinToString(",")
+
+    /** The package and the signers [text] names, or null when it is not a binding of this kind. */
+    fun parse(text: String): Pair<String, List<String>>? {
+        val lines = text.split('\n')
+        if (lines.size != 3 || lines[0] != VERSION || !AppBackup.isPackageName(lines[1])) return null
+        val signers = lines[2].split(',').filter { it.isNotEmpty() }
+        if (signers.any { !SIGNER.matches(it) }) return null
+        return lines[1] to signers
+    }
+
+    private val SIGNER = Regex("[0-9a-f]{64}")
+}
+
 /** The packages that install apps, as a backup tells them apart. */
 object Installers {
     const val PLAY = "com.android.vending"
@@ -328,6 +351,27 @@ enum class RestoreStatus {
 object RestoreRules {
     /** The size of a file whose size the folder does not tell; the file is there all the same. */
     const val UNKNOWN_SIZE = -1L
+
+    /**
+     * Whether a data archive of [packageName] may be put back into the app installed with
+     * [installedSigners]: an encrypted archive [bound] to a package and signers must name this
+     * package and a signer the installed app has; an archive in the clear ([bound] null) is
+     * held to the entry's [entrySigners] when it names any. Nothing is put back when the
+     * installed app's signers could not be read.
+     */
+    fun dataAllowed(
+        packageName: String,
+        bound: String?,
+        entrySigners: List<String>,
+        installedSigners: Set<String>?
+    ): Boolean {
+        if (installedSigners.isNullOrEmpty()) return false
+        if (bound != null) {
+            val (boundPackage, boundSigners) = DataBinding.parse(bound) ?: return false
+            return boundPackage == packageName && boundSigners.any { it in installedSigners }
+        }
+        return entrySigners.isEmpty() || entrySigners.any { it in installedSigners }
+    }
 
     /**
      * How [entry] stands against a device running Android API [sdk], where the package is

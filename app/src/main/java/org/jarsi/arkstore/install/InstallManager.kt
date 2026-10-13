@@ -821,7 +821,7 @@ object InstallManager {
         }
         Root.markLost(context, false)
         var sessionId: Int? = null
-        val result = RootInstaller.install(context.packageName, files) { id ->
+        val result = RootInstaller.install(context.packageName, packageName, files) { id ->
             sessionId = id
             committed[key] = Committed(app, packageName, id, attempt, root = true)
         }

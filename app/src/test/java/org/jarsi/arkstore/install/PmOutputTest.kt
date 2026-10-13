@@ -54,9 +54,10 @@ class PmOutputTest {
     @Test
     fun theCommandsAreMadeOfCheckedNamesAndNumbersOnly() {
         assertEquals(
-            "pm install-create -r --user current -i org.jarsi.arkstore -S 12345",
-            RootCommands.createSession("org.jarsi.arkstore", 12345)
+            "pm install-create -r --user current -i org.jarsi.arkstore --pkg org.example.app -S 12345",
+            RootCommands.createSession("org.jarsi.arkstore", "org.example.app", 12345)
         )
+        assertThrows(IllegalArgumentException::class.java) { RootCommands.createSession("org.jarsi.arkstore", "org.example app", 1) }
         assertEquals("pm install-write -S 100 42 base.apk -", RootCommands.writeSplit(42, "base.apk", 100))
         assertEquals(
             "pm install-write -S 7 42 split_config.arm64_v8a.apk -",
@@ -65,11 +66,11 @@ class PmOutputTest {
         assertEquals("pm install-commit 42", RootCommands.commit(42))
         assertEquals("pm install-abandon 42", RootCommands.abandon(42))
         assertEquals("pm uninstall --user current org.example.app", RootCommands.uninstall("org.example.app"))
-        assertThrows(IllegalArgumentException::class.java) { RootCommands.createSession("org.example; rm -rf /", 1) }
+        assertThrows(IllegalArgumentException::class.java) { RootCommands.createSession("org.example; rm -rf /", "org.example.app", 1) }
         assertThrows(IllegalArgumentException::class.java) { RootCommands.uninstall("org.example app") }
         assertThrows(IllegalArgumentException::class.java) { RootCommands.writeSplit(42, "base.apk; id", 1) }
         assertThrows(IllegalArgumentException::class.java) { RootCommands.writeSplit(42, "../x.apk", 1) }
         assertThrows(IllegalArgumentException::class.java) { RootCommands.writeSplit(42, "base.apk", -1) }
-        assertThrows(IllegalArgumentException::class.java) { RootCommands.createSession("org.jarsi.arkstore", 0) }
+        assertThrows(IllegalArgumentException::class.java) { RootCommands.createSession("org.jarsi.arkstore", "org.example.app", 0) }
     }
 }

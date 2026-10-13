@@ -28,10 +28,12 @@ class WrongPasswordException : IOException("The password is not the one the data
  * dropped or one moved is refused as a whole.
  *
  * The file begins with a header: [MAGIC], a version byte, the salt, the iterations, four
- * random bytes that begin every nonce of the file, and the chunk size. Then come the chunks,
- * each its ciphertext's length (with the tag) and the ciphertext. The nonce of chunk n is
- * the file's four bytes followed by n; the chunk's number and whether it is the last are
- * the associated data.
+ * random bytes that begin every nonce of the file, the chunk size, and a text the file is
+ * bound to (the package and the signers of the app whose data it is, see [DataBinding]).
+ * Then come the chunks, each its ciphertext's length (with the tag) and the ciphertext. The
+ * nonce of chunk n is the file's four bytes followed by n; the chunk's number, whether it is
+ * the last, and the bound text are the associated data, so that a bound text changed in the
+ * header opens no chunk.
  */
 object DataCrypt {
     private val MAGIC = "ARKSTORE-DATA".toByteArray(Charsets.US_ASCII)
@@ -45,9 +47,10 @@ object DataCrypt {
     private const val KEY_BITS = 256
     private const val NONCE_PREFIX_BYTES = 4
     private const val NONCE_BYTES = 12
+    private const val MAX_BOUND_BYTES = 4096
 
-    /** The header's length: the magic, the version, the salt, the iterations, the nonce's start and the chunk size. */
-    val HEADER_BYTES: Int = MAGIC.size + 1 + SALT_BYTES + 4 + NONCE_PREFIX_BYTES + 4
+    /** The header's length with an empty bound text: the magic, the version, the salt, the iterations, the nonce's start, the chunk size and the text's length. */
+    val HEADER_BYTES: Int = MAGIC.size + 1 + SALT_BYTES + 4 + NONCE_PREFIX_BYTES + 4 + 4
 
     private const val SUFFIX = ".aes"
     private const val ARCHIVE = ".tar.gz"
@@ -71,23 +74,30 @@ object DataCrypt {
         }
     }
 
-    /** What the header of an encrypted file says, which is what a key is derived from. */
-    class Header(val salt: ByteArray, val iterations: Int, val noncePrefix: ByteArray, val chunkBytes: Int)
+    /**
+     * What the header of an encrypted file says, which is what a key is derived from, and the
+     * text the file is [bound] to, which is not to be trusted until a chunk has opened.
+     */
+    class Header(val salt: ByteArray, val iterations: Int, val noncePrefix: ByteArray, val chunkBytes: Int, val bound: String)
 
     /**
      * A stream that encrypts what is written to it into [out] with [key], made of [salt] over
-     * [iterations], in chunks of [chunkBytes]. Closing it writes the last chunk and closes [out].
+     * [iterations], in chunks of [chunkBytes], [bound] to a text that every chunk is then
+     * authenticated with. Closing it writes the last chunk and closes [out].
      */
     fun encrypt(
         out: OutputStream,
         key: SecretKey,
         salt: ByteArray,
         iterations: Int = ITERATIONS,
-        chunkBytes: Int = CHUNK_BYTES
+        chunkBytes: Int = CHUNK_BYTES,
+        bound: String = ""
     ): OutputStream {
         require(salt.size == SALT_BYTES) { "Not a salt" }
         require(iterations in 1..MAX_ITERATIONS) { "Not a number of iterations" }
         require(chunkBytes in 1..MAX_CHUNK_BYTES) { "Not a chunk size" }
+        val boundBytes = bound.toByteArray(Charsets.UTF_8)
+        require(boundBytes.size <= MAX_BOUND_BYTES) { "The bound text is too long" }
         val prefix = ByteArray(NONCE_PREFIX_BYTES).also { SecureRandom().nextBytes(it) }
         val data = DataOutputStream(out)
         data.write(MAGIC)
@@ -96,7 +106,9 @@ object DataCrypt {
         data.writeInt(iterations)
         data.write(prefix)
         data.writeInt(chunkBytes)
-        return Encrypting(data, key, prefix, chunkBytes)
+        data.writeInt(boundBytes.size)
+        data.write(boundBytes)
+        return Encrypting(data, key, prefix, chunkBytes, boundBytes)
     }
 
     /** The header of the encrypted file [input] begins with; the stream is left after it. */
@@ -115,7 +127,10 @@ object DataCrypt {
             val prefix = ByteArray(NONCE_PREFIX_BYTES).also { data.readFully(it) }
             val chunkBytes = data.readInt()
             if (chunkBytes !in 1..MAX_CHUNK_BYTES) throw IOException("Not a chunk size: $chunkBytes")
-            return Header(salt, iterations, prefix, chunkBytes)
+            val boundLength = data.readInt()
+            if (boundLength !in 0..MAX_BOUND_BYTES) throw IOException("Not a length of a bound text: $boundLength")
+            val bound = ByteArray(boundLength).also { data.readFully(it) }
+            return Header(salt, iterations, prefix, chunkBytes, String(bound, Charsets.UTF_8))
         } catch (e: EOFException) {
             throw IOException("Not an encrypted data file: it ends within its header", e)
         }
@@ -123,20 +138,27 @@ object DataCrypt {
 
     /**
      * A stream that decrypts the encrypted file [input] with the key [keyFor] gives for the
-     * file's salt and iterations. Throws [WrongPasswordException] when the first chunk does
-     * not open, and an [IOException] when a later one does not, or the file is cut short.
+     * file's salt and iterations; its [Decrypted.bound] is the text the file says it is bound
+     * to, which the first chunk to open vouches for. Throws [WrongPasswordException] when the
+     * first chunk does not open (the password is wrong, or the header was altered), and an
+     * [IOException] when a later one does not, or the file is cut short.
      */
     @Throws(IOException::class)
-    fun decrypt(input: InputStream, keyFor: (salt: ByteArray, iterations: Int) -> SecretKey): InputStream {
+    fun decrypt(input: InputStream, keyFor: (salt: ByteArray, iterations: Int) -> SecretKey): Decrypted {
         val header = readHeader(input)
         return Decrypting(DataInputStream(input), keyFor(header.salt, header.iterations), header)
     }
 
-    private fun cipher(mode: Int, key: SecretKey, prefix: ByteArray, counter: Long, last: Boolean): Cipher {
+    /** The plain data of an encrypted file, and the text the file is bound to. */
+    abstract class Decrypted : InputStream() {
+        abstract val bound: String
+    }
+
+    private fun cipher(mode: Int, key: SecretKey, prefix: ByteArray, counter: Long, last: Boolean, bound: ByteArray): Cipher {
         val nonce = ByteBuffer.allocate(NONCE_BYTES).put(prefix).putLong(counter).array()
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(mode, key, GCMParameterSpec(TAG_BYTES * 8, nonce))
-        cipher.updateAAD(ByteBuffer.allocate(9).putLong(counter).put(if (last) 1 else 0).array())
+        cipher.updateAAD(ByteBuffer.allocate(9 + bound.size).putLong(counter).put(if (last) 1 else 0).put(bound).array())
         return cipher
     }
 
@@ -144,7 +166,8 @@ object DataCrypt {
         private val out: DataOutputStream,
         private val key: SecretKey,
         private val prefix: ByteArray,
-        chunkBytes: Int
+        chunkBytes: Int,
+        private val bound: ByteArray
     ) : OutputStream() {
         private val buffer = ByteArray(chunkBytes)
         private var count = 0
@@ -171,7 +194,7 @@ object DataCrypt {
 
         private fun flushChunk(last: Boolean) {
             val sealed = try {
-                cipher(Cipher.ENCRYPT_MODE, key, prefix, counter, last).doFinal(buffer, 0, count)
+                cipher(Cipher.ENCRYPT_MODE, key, prefix, counter, last, bound).doFinal(buffer, 0, count)
             } catch (e: GeneralSecurityException) {
                 throw IOException("Could not encrypt", e)
             }
@@ -200,7 +223,9 @@ object DataCrypt {
         private val input: DataInputStream,
         private val key: SecretKey,
         private val header: Header
-    ) : InputStream() {
+    ) : Decrypted() {
+        override val bound: String get() = header.bound
+        private val boundBytes = header.bound.toByteArray(Charsets.UTF_8)
         private var chunk = ByteArray(0)
         private var position = 0
         private var counter = 0L
@@ -247,7 +272,7 @@ object DataCrypt {
         }
 
         private fun open(size: Int, last: Boolean): ByteArray? = try {
-            cipher(Cipher.DECRYPT_MODE, key, header.noncePrefix, counter, last).doFinal(sealed, 0, size)
+            cipher(Cipher.DECRYPT_MODE, key, header.noncePrefix, counter, last, boundBytes).doFinal(sealed, 0, size)
                 .also { if (last) ended = true }
         } catch (_: AEADBadTagException) {
             null

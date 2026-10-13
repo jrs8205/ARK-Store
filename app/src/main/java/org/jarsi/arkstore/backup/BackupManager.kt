@@ -386,21 +386,29 @@ object BackupManager {
         private var writeKey: SecretKey? = null
         private val keys = HashMap<String, SecretKey>()
 
-        /** [sink] with the packing and, with a password, the encryption in front of it. */
-        fun wrap(sink: OutputStream): OutputStream {
+        /**
+         * [sink] with the packing and, with a password, the encryption in front of it, the
+         * archive bound to [entry]'s package and signers.
+         */
+        fun wrap(sink: OutputStream, entry: BackupEntry): OutputStream {
             val encrypted = if (encrypt) {
                 val key = writeKey ?: DataCrypt.deriveKey(password!!, salt, DataCrypt.ITERATIONS).also { writeKey = it }
-                DataCrypt.encrypt(sink, key, salt)
+                DataCrypt.encrypt(sink, key, salt, bound = DataBinding.text(entry.packageName, entry.signers))
             } else {
                 sink
             }
             return GZIPOutputStream(encrypted, BUFFER_BYTES)
         }
 
-        /** [input], an archive as written by [wrap], unpacked and, when [encrypted], decrypted. */
-        fun unwrap(input: InputStream, encrypted: Boolean): InputStream {
-            val plain = if (encrypted) DataCrypt.decrypt(input, ::keyFor) else input
-            return GZIPInputStream(plain, BUFFER_BYTES)
+        /**
+         * [input], an archive as written by [wrap], unpacked and, when [encrypted], decrypted:
+         * the plain data, and the text an encrypted archive is bound to (null for one in the
+         * clear). The text is checked before anything is read, and vouched for by the first chunk.
+         */
+        fun unwrap(input: InputStream, encrypted: Boolean): Pair<InputStream, String?> {
+            if (!encrypted) return GZIPInputStream(input, BUFFER_BYTES) to null
+            val decrypted = DataCrypt.decrypt(input, ::keyFor)
+            return GZIPInputStream(decrypted, BUFFER_BYTES) to decrypted.bound
         }
 
         private fun keyFor(salt: ByteArray, iterations: Int): SecretKey = synchronized(keys) {
@@ -449,6 +457,10 @@ object BackupManager {
             Log.w(TAG, "${entry.packageName} is not installed, so its data is not put back")
             return false
         }
+        // The data goes only into the app it was taken from: the one installed now must be
+        // signed by whom the archive says, so that files swapped beside it in the backup get
+        // nothing.
+        val installedSigners = InstalledApps.presentSigners(context.packageManager, entry.packageName)
         for (archive in entry.data) {
             val input = open(archive)
             if (input == null) {
@@ -456,8 +468,13 @@ object BackupManager {
                 return false
             }
             try {
-                run.unwrap(input, archive.encrypted).use { tar ->
-                    RootData.restore(run.tar, archive.part, entry.packageName, uid, tar)
+                val (tar, bound) = run.unwrap(input, archive.encrypted)
+                tar.use {
+                    if (!RestoreRules.dataAllowed(entry.packageName, bound, entry.signers, installedSigners)) {
+                        Log.w(TAG, "The archive ${archive.name} is not bound to the ${entry.packageName} installed now")
+                        return false
+                    }
+                    RootData.restore(run.tar, archive.part, entry.packageName, uid, it)
                 }
             } catch (e: WrongPasswordException) {
                 Log.w(TAG, "The password does not open ${archive.name} of ${entry.packageName}")
@@ -607,7 +624,7 @@ object BackupManager {
                     },
                     writeData = { entry, archive, item ->
                         try {
-                            val bytes = run!!.wrap(item).use { sink ->
+                            val bytes = run!!.wrap(item, entry).use { sink ->
                                 RootData.archive(run.tar, archive.part, entry.packageName, sink) { sofar ->
                                     _state.value = BackupState.Running(false, index, whole.size, label, filesDone + dataDone + sofar, total)
                                 }
@@ -869,7 +886,7 @@ object BackupManager {
             }
             val counting = Counting(docs.openWrite(id))
             try {
-                run.wrap(counting).use { sink ->
+                run.wrap(counting, entry).use { sink ->
                     RootData.archive(run.tar, part, entry.packageName, sink) { sofar -> onBytes(before + sofar) }
                 }
             } catch (e: Throwable) {

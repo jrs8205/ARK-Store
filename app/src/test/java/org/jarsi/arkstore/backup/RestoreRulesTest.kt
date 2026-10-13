@@ -8,6 +8,31 @@ import org.junit.Test
 
 class RestoreRulesTest {
 
+    @Test
+    fun theDataGoesOnlyIntoTheAppItIsBoundTo() {
+        val a = "a".repeat(64)
+        val b = "b".repeat(64)
+        val bound = DataBinding.text("org.example.app", listOf(a))
+        assertEquals("org.example.app" to listOf(a), DataBinding.parse(bound))
+        assertNull(DataBinding.parse("nonsense"))
+        assertNull(DataBinding.parse("arkstore-data-binding/1\norg.example.app\nnot-a-digest"))
+        assertTrue(RestoreRules.dataAllowed("org.example.app", bound, emptyList(), setOf(a)))
+        assertTrue(RestoreRules.dataAllowed("org.example.app", bound, emptyList(), setOf(a, b)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", bound, emptyList(), setOf(b)))
+        assertFalse(RestoreRules.dataAllowed("org.other.app", bound, emptyList(), setOf(a)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", "garbage", emptyList(), setOf(a)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", bound, emptyList(), null))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", bound, emptyList(), emptySet()))
+        // An archive with no signers bound to it names no app it belongs to.
+        assertFalse(RestoreRules.dataAllowed("org.example.app", DataBinding.text("org.example.app", emptyList()), emptyList(), setOf(a)))
+        // In the clear, the entry's own word is all there is.
+        assertTrue(RestoreRules.dataAllowed("org.example.app", null, listOf(a), setOf(a)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", null, listOf(b), setOf(a)))
+        assertTrue(RestoreRules.dataAllowed("org.example.app", null, emptyList(), setOf(a)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", null, emptyList(), null))
+    }
+
+
     private val key = "a".repeat(64)
     private val otherKey = "b".repeat(64)
 

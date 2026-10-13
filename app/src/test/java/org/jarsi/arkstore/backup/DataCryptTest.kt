@@ -83,6 +83,28 @@ class DataCryptTest {
     }
 
     @Test
+    fun theBoundTextIsReadBeforeTheDataAndVouchedForByTheFirstChunk() {
+        val salt = DataCrypt.newSalt()
+        val key = DataCrypt.deriveKey(password, salt, iterations)
+        val out = ByteArrayOutputStream()
+        val bound = DataBinding.text("org.example.app", listOf("b".repeat(64), "a".repeat(64)))
+        DataCrypt.encrypt(out, key, salt, iterations, chunk, bound).use { it.write(ByteArray(chunk * 2) { 3 }) }
+        val cipher = out.toByteArray()
+        val opened = DataCrypt.decrypt(ByteArrayInputStream(cipher), { s, i -> DataCrypt.deriveKey(password, s, i) })
+        assertEquals(bound, opened.bound)
+        assertEquals(chunk * 2, opened.readBytes().size)
+        // The text is in the header in the clear; one that was changed opens no chunk.
+        val at = String(cipher, Charsets.ISO_8859_1).indexOf("org.example.app")
+        val altered = cipher.copyOf().also { it[at] = 'x'.code.toByte() }
+        assertThrows(IOException::class.java) {
+            DataCrypt.decrypt(ByteArrayInputStream(altered), { s, i -> DataCrypt.deriveKey(password, s, i) }).use { it.readBytes() }
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            DataCrypt.encrypt(ByteArrayOutputStream(), key, salt, iterations, chunk, "x".repeat(5000))
+        }
+    }
+
+    @Test
     fun theHeaderIsReadBackAsWritten() {
         val salt = DataCrypt.newSalt()
         val key = DataCrypt.deriveKey(password, salt, iterations)
@@ -92,6 +114,7 @@ class DataCryptTest {
         assertArrayEquals(salt, header.salt)
         assertEquals(iterations, header.iterations)
         assertEquals(chunk, header.chunkBytes)
+        assertEquals("", header.bound)
         assertEquals(DataCrypt.SALT_BYTES, salt.size)
     }
 
