@@ -160,6 +160,7 @@ import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
+import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.work.AutoUpdate
 import org.jarsi.arkstore.work.UpdateCheckWorker
 
@@ -910,7 +911,7 @@ private fun AppCard(
             }
 
             if (install is InstallState.Failed) {
-                FailureRow(install, app.packageName, onRetry = startInstall, onDismiss = onDismissFailure)
+                FailureRow(install, app.packageName, app.title, onRetry = startInstall, onDismiss = onDismissFailure)
             }
         }
     }
@@ -920,10 +921,10 @@ private fun AppCard(
 private fun FailureRow(
     failure: InstallState.Failed,
     packageName: String?,
+    title: String,
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
     Column(modifier = Modifier.padding(top = 12.dp)) {
         Text(
             text = stringResource(
@@ -947,9 +948,7 @@ private fun FailureRow(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (failure.reason == FailReason.SIGNATURE_MISMATCH && packageName != null) {
-                TextButton(onClick = { uninstall(context, packageName) }) {
-                    Text(stringResource(R.string.action_uninstall))
-                }
+                UninstallButton(packageName, title)
             }
             TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_dismiss)) }
@@ -1242,9 +1241,7 @@ private fun DetailsSheet(
             }
             // Not for another app under this name: that would be the other app's removal.
             if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
-                TextButton(onClick = { uninstall(context, app.packageName) }) {
-                    Text(stringResource(R.string.action_uninstall))
-                }
+                UninstallButton(app.packageName, app.title)
             }
         }
 
@@ -2064,8 +2061,57 @@ private fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
 }
 
+/**
+ * Removes [packageName]: as root without a word to the user when root is turned on, and
+ * through the system's own dialog otherwise, or when root cannot be had just now.
+ */
 private fun uninstall(context: Context, packageName: String) {
+    if (Root.enabled(context)) {
+        InstallManager.uninstall(context, packageName) { uninstallWithSystem(context, packageName) }
+    } else {
+        uninstallWithSystem(context, packageName)
+    }
+}
+
+private fun uninstallWithSystem(context: Context, packageName: String) {
     runCatching {
         context.startActivity(Intent(Intent.ACTION_DELETE, "package:$packageName".toUri()))
+    }
+}
+
+/**
+ * A button that removes [packageName], shown as [title]. With root on, the removal would go
+ * without the system's question, so the store asks its own first.
+ */
+@Composable
+private fun UninstallButton(packageName: String, title: String) {
+    val context = LocalContext.current
+    var confirming by rememberSaveable { mutableStateOf(false) }
+    TextButton(
+        onClick = { if (Root.enabled(context)) confirming = true else uninstall(context, packageName) }
+    ) {
+        Text(stringResource(R.string.action_uninstall))
+    }
+    if (confirming) {
+        AlertDialog(
+            onDismissRequest = { confirming = false },
+            title = { Text(stringResource(R.string.uninstall_confirm_title, title)) },
+            text = { Text(stringResource(R.string.uninstall_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirming = false
+                        uninstall(context, packageName)
+                    }
+                ) {
+                    Text(stringResource(R.string.action_uninstall))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirming = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
     }
 }

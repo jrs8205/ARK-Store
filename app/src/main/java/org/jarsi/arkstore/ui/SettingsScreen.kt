@@ -52,7 +52,9 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -64,6 +66,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.backup.BackupEvent
 import org.jarsi.arkstore.backup.BackupManager
 import org.jarsi.arkstore.data.Backup
@@ -187,6 +190,7 @@ internal fun SettingsScreen(
             )
         }
         AutoUpdateSettings(viewModel)
+        RootSettings(viewModel)
         NotificationSetting()
         TransferSettings(viewModel)
         AppBackupSettings(onBackup, onRestore)
@@ -338,6 +342,57 @@ private fun AutoUpdateSettings(viewModel: StoreViewModel) {
         enabled = supported && settings.enabled,
         onCheckedChange = { change(settings.copy(chargingOnly = it)) }
     )
+}
+
+/**
+ * Whether installs and removals go through `su` as root, without the system's prompts, and
+ * whether a backup may take the apps' data; see [Root]. Turning it on asks the root app.
+ */
+@Composable
+private fun RootSettings(viewModel: StoreViewModel) {
+    val context = LocalContext.current
+    val root by viewModel.root.collectAsStateWithLifecycle()
+    // Asked again each time the settings open, so a permission taken away shows here.
+    LaunchedEffect(Unit) { viewModel.refreshRoot() }
+    val on = root is RootUiState.On || root is RootUiState.OnButRefused
+    SettingSwitch(
+        heading = stringResource(R.string.root_title),
+        label = stringResource(R.string.root_switch),
+        description = stringResource(R.string.root_description),
+        checked = on || root is RootUiState.Checking,
+        enabled = root !is RootUiState.Checking,
+        onCheckedChange = viewModel::setRootEnabled
+    )
+    val status = when (val state = root) {
+        RootUiState.Off -> null
+        RootUiState.Checking -> stringResource(R.string.root_checking)
+        is RootUiState.On -> if (state.provider != null) {
+            stringResource(R.string.root_granted, state.provider)
+        } else {
+            stringResource(R.string.root_granted_unknown)
+        }
+        RootUiState.OnButRefused, RootUiState.Denied -> stringResource(R.string.root_denied)
+        RootUiState.Missing -> stringResource(R.string.root_missing)
+    }
+    val refused = root is RootUiState.OnButRefused || root is RootUiState.Denied || root is RootUiState.Missing
+    if (status != null) {
+        Text(
+            text = status,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (refused) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .semantics { liveRegion = LiveRegionMode.Polite }
+        )
+    }
+    if (on && Root.lost(context)) {
+        Text(
+            text = stringResource(R.string.root_lost),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
 }
 
 /**

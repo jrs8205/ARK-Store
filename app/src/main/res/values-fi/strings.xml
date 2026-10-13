@@ -216,6 +216,18 @@
     <string name="auto_update_unmetered_description">Ei mobiilidatalla eikä muussa maksullisessa verkossa</string>
     <string name="auto_update_charging_switch">Vain latauksessa</string>
     <string name="auto_update_charging_description">Odottaa, kunnes laite on latauksessa</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Käytä root-oikeuksia</string>
+    <string name="root_description">Asennukset, päivitykset, poistot ja palautukset menevät läpi ilman Androidin kysymyksiä, ja varmuuskopioon voi ottaa sovellusten omat tiedot. Vaatii rootatun laitteen (Magisk, KernelSU tai APatch); päälle kytkeminen pyytää luvan root-sovellukselta.</string>
+    <string name="root_checking">Kysytään root-sovellukselta…</string>
+    <string name="root_granted">Root-oikeus saatu: %1$s.</string>
+    <string name="root_granted_unknown">Root-oikeus saatu.</string>
+    <string name="root_denied">Root-oikeus evättiin. Salli ARK-Store root-sovelluksessa ja yritä uudelleen; siihen asti asennukset menevät tavalliseen tapaan.</string>
+    <string name="root_missing">Ei käytettävissä: tätä laitetta ei ole rootattu.</string>
+    <string name="root_lost">Viimeisin asennus ei saanut root-oikeutta ja meni tavalliseen tapaan.</string>
+    <string name="uninstall_confirm_title">Poistetaanko %1$s?</string>
+    <string name="uninstall_confirm_message">Sovellus ja sen tiedot poistetaan heti ilman Androidin kysymystä.</string>
+    <string name="uninstall_failed">Poisto ei onnistunut: %1$s</string>
     <string name="error_token">GitHub hylkäsi asetuksissa annetun tunnisteen. Vaihda tai poista se asetuksista.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Tarvitaan vain, jos lisäät lähteitä: kauppa hakee lisäämäsi tilit ja repot suoraan GitHubista, ja ilman tunnistetta GitHub sallii sen samasta verkosta 60 kertaa tunnissa. Jos lista lakkaa päivittymästä ja kauppa kertoo GitHubin rajoittavan pyyntöjä, tunniste nostaa pyyntörajaa. Luo osoitteessa github.com/settings/personal-access-tokens hienojakoinen henkilökohtainen tunniste ilman oikeuksia; julkiset repot voi lukea ilman niitä. Tunniste pysyy tällä laitteella, varmuuskopioiden ja viennin ulkopuolella, ja lähetetään vain GitHubille.</string>
@@ -236,7 +248,7 @@
     <string name="transfer_failed">Tiedostoa ei voitu lukea tai kirjoittaa.</string>
     <string name="action_back">Takaisin</string>
     <string name="backup_title">Sovellusten varmuuskopio</string>
-    <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina kansioon tai zip-tiedostoon ja asenna ne takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot eivät sisälly.</string>
+    <string name="backup_description">Kopioi Google Playn ulkopuolelta asennetut sovellukset APK-tiedostoina kansioon tai zip-tiedostoon ja asenna ne takaisin tälle tai toiselle laitteelle. Sovellusten omat tiedot sisältyvät vain, kun root-oikeudet on kytketty päälle.</string>
     <string name="action_backup_apps">Varmuuskopioi sovellukset</string>
     <string name="action_restore_apps">Palauta sovellukset</string>
     <string name="backup_notification_saving">Varmuuskopioidaan: %1$s</string>

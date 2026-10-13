@@ -8,6 +8,7 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
@@ -33,8 +34,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.coroutineContext
+import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
@@ -179,6 +182,9 @@ object InstallManager {
     private const val PROMPT_GRACE_MS = 3 * 60 * 1000L
     private const val STALE_GRACE_MS = 3 * 1000L
 
+    /** The session id of a root install that got no session: `pm` refused to make one. */
+    private const val NO_SESSION = -1
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _states = MutableStateFlow<Map<String, InstallState>>(emptyMap())
@@ -197,7 +203,14 @@ object InstallManager {
      * What was committed for each repository, kept until the system reports the outcome,
      * with the number of the [attempt] it was, see [InstallJob.id].
      */
-    private data class Committed(val app: StoreApp?, val packageName: String, val sessionId: Int, val attempt: Int)
+    private data class Committed(
+        val app: StoreApp?,
+        val packageName: String,
+        val sessionId: Int,
+        val attempt: Int,
+        /** Made through `pm` as root: the system reports nothing of it, the command's own verdict settles it. */
+        val root: Boolean = false
+    )
 
     private val committed = ConcurrentHashMap<String, Committed>()
 
@@ -605,7 +618,8 @@ object InstallManager {
             Log.w(TAG, "Could not list install sessions", e)
             null
         }
-        val sessions = committed.mapValues { it.value.sessionId }
+        // A session made as root is not among the store's own, and settles on its own.
+        val sessions = committed.filterValues { !it.root }.mapValues { it.value.sessionId }
         val candidates = stale(_states.value, sessions, alive() ?: return)
         if (candidates.isEmpty()) return
         delay(STALE_GRACE_MS)
@@ -752,9 +766,11 @@ object InstallManager {
     /**
      * Hands [files] to the system in one session, each under the name given with it: the base
      * file as "base.apk", and the splits of a bundle under their own names, so that an app
-     * installed in parts is restored in parts.
+     * installed in parts is restored in parts. With root turned on, the session is made
+     * through `pm` as root instead, which asks the user nothing; when root cannot be had just
+     * now, the ordinary session is made after all.
      */
-    private fun commit(
+    private suspend fun commit(
         context: Context,
         key: String,
         app: StoreApp?,
@@ -762,6 +778,7 @@ object InstallManager {
         files: List<Pair<String, File>>,
         attempt: Int
     ) {
+        if (Root.enabled(context) && commitAsRoot(context, key, app, packageName, files, attempt)) return
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(packageName)
@@ -781,6 +798,81 @@ object InstallManager {
             // Closing a session keeps what was copied into it; only abandoning frees the space.
             runCatching { installer.abandonSession(sessionId) }
             throw e
+        }
+    }
+
+    /**
+     * [commit] as root; false when root could not be had, in which case nothing was
+     * committed and the ordinary way is open. The verdict of `pm` is taken as the system's
+     * would be, so that whoever waits for the install is told the same way.
+     */
+    private suspend fun commitAsRoot(
+        context: Context,
+        key: String,
+        app: StoreApp?,
+        packageName: String,
+        files: List<Pair<String, File>>,
+        attempt: Int
+    ): Boolean {
+        if (Root.check() !is RootCheck.Granted) {
+            Log.w(TAG, "Root was not given; $key is installed the ordinary way")
+            Root.markLost(context, true)
+            return false
+        }
+        Root.markLost(context, false)
+        var sessionId: Int? = null
+        val result = RootInstaller.install(context.packageName, files) { id ->
+            sessionId = id
+            committed[key] = Committed(app, packageName, id, attempt, root = true)
+        }
+        return when (result) {
+            RootInstaller.Result.NoRoot -> {
+                Log.w(TAG, "Root was lost during the install of $key, which goes the ordinary way")
+                sessionId?.let { committed.remove(key, Committed(app, packageName, it, attempt, root = true)) }
+                Root.markLost(context, true)
+                false
+            }
+            is RootInstaller.Result.Done -> {
+                if (sessionId == null) {
+                    // No session was made: the verdict is the install's all the same.
+                    committed[key] = Committed(app, packageName, NO_SESSION, attempt, root = true)
+                }
+                onSessionResult(context, key, result.status, result.message, sessionId ?: NO_SESSION)
+                true
+            }
+        }
+    }
+
+    /**
+     * Removes [packageName] as root, without a word to the user; [onNoRoot] is called, on the
+     * main thread, when root cannot be had, for the caller to ask the system instead. A
+     * failure of the removal is told as a toast, as the system's dialog would tell it.
+     */
+    fun uninstall(context: Context, packageName: String, onNoRoot: () -> Unit) {
+        val appContext = context.applicationContext
+        scope.launch {
+            val result = if (Root.check() is RootCheck.Granted) RootInstaller.uninstall(packageName) else RootInstaller.Result.NoRoot
+            when (result) {
+                RootInstaller.Result.NoRoot -> {
+                    Root.markLost(appContext, true)
+                    withContext(Dispatchers.Main) { onNoRoot() }
+                }
+                is RootInstaller.Result.Done -> {
+                    Root.markLost(appContext, false)
+                    if (result.status == PackageInstaller.STATUS_SUCCESS) {
+                        notifyInstalledChanged()
+                    } else {
+                        Log.w(TAG, "Could not uninstall $packageName as root: ${result.message}")
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                appContext,
+                                appContext.getString(R.string.uninstall_failed, result.message ?: ""),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            }
         }
     }
 

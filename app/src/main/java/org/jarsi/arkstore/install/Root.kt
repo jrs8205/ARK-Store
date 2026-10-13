@@ -1,0 +1,230 @@
+package org.jarsi.arkstore.install
+
+import android.content.Context
+import android.util.Log
+import androidx.core.content.edit
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.concurrent.thread
+
+/** What asking for root came to: granted, refused by the user or the root app, or no `su` at all. */
+sealed interface RootCheck {
+    /** Root was given; [provider] names the root app and its version when `su` tells it. */
+    data class Granted(val provider: String?) : RootCheck
+    data object Denied : RootCheck
+    data object Missing : RootCheck
+}
+
+/**
+ * Runs commands as root through the device's `su`, the one Magisk, KernelSU or APatch
+ * provides, when the user has turned root on in the settings. Nothing here reaches `su`
+ * unless the setting is on, and every command is put together from constants, numbers and
+ * names that have passed their checks: no path and no name of a file read from a backup
+ * ever reaches a command line as it is.
+ */
+object Root {
+    private const val TAG = "Root"
+    private const val PREFS = "root"
+    private const val PREF_ENABLED = "enabled"
+    private const val PREF_LOST = "lost"
+    private const val MAX_PROVIDER = 40
+
+    /** The most of a command's text that is kept; a result of pm's is a line or two. */
+    private const val MAX_TEXT = 64 * 1024
+
+    /** The root app asks the user before answering; its prompt waits a while for them. */
+    const val CHECK_TIMEOUT_MS = 30_000L
+
+    /** How the command came out: it ran, whatever its exit code, or `su` could not be run at all. */
+    sealed interface Outcome {
+        data class Ran(val exit: Int, val out: String, val err: String) : Outcome
+        data object NoRoot : Outcome
+    }
+
+    /** Whether the user has turned root on. */
+    fun enabled(context: Context): Boolean = prefs(context).getBoolean(PREF_ENABLED, false)
+
+    fun setEnabled(context: Context, on: Boolean) = prefs(context).edit {
+        putBoolean(PREF_ENABLED, on)
+        if (!on) remove(PREF_LOST)
+    }
+
+    /** Whether the last install that asked for root did not get it, and went the ordinary way. */
+    fun lost(context: Context): Boolean = prefs(context).getBoolean(PREF_LOST, false)
+
+    fun markLost(context: Context, lost: Boolean) = prefs(context).edit { putBoolean(PREF_LOST, lost) }
+
+    /** Asks `su` who it is, which makes the root app ask the user the first time. */
+    suspend fun check(): RootCheck {
+        val id = run("id", CHECK_TIMEOUT_MS)
+        return when {
+            id is Outcome.Ran && isRoot(id.out) -> RootCheck.Granted(version())
+            id is Outcome.Ran -> RootCheck.Denied
+            else -> if (hasSu()) RootCheck.Denied else RootCheck.Missing
+        }
+    }
+
+    /** Whether a `su` can be started at all, whatever it then says. */
+    private suspend fun hasSu(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val process = ProcessBuilder("su", "--help").redirectErrorStream(true).start()
+            process.outputStream.close()
+            process.inputStream.close()
+            process.destroy()
+            true
+        } catch (_: IOException) {
+            false
+        }
+    }
+
+    private suspend fun version(): String? = withContext(Dispatchers.IO) {
+        try {
+            val process = ProcessBuilder("su", "-v").redirectErrorStream(true).start()
+            process.outputStream.close()
+            val text = process.inputStream.bufferedReader().use { it.readText() }
+            process.waitFor()
+            providerName(text).ifEmpty { null }
+        } catch (_: IOException) {
+            null
+        }
+    }
+
+    /**
+     * Runs [command] as root. [stdin] may write to the command's input, which is closed after;
+     * [stdout] may read its output, which is otherwise gathered into [Outcome.Ran.out]. A cancel
+     * of the coroutine kills the command; so does [timeoutMs] running out, which counts as
+     * [Outcome.NoRoot] (null for no limit, for a stream that takes as long as it takes).
+     */
+    suspend fun run(
+        command: String,
+        timeoutMs: Long?,
+        stdin: ((OutputStream) -> Unit)? = null,
+        stdout: ((InputStream) -> Unit)? = null
+    ): Outcome = withContext(Dispatchers.IO) {
+        val process = try {
+            ProcessBuilder("su", "-c", command).start()
+        } catch (e: IOException) {
+            Log.i(TAG, "su could not be started: ${e.message}")
+            return@withContext Outcome.NoRoot
+        }
+        try {
+            val ran = if (timeoutMs == null) {
+                talk(process, stdin, stdout)
+            } else {
+                withTimeoutOrNull(timeoutMs) { talk(process, stdin, stdout) }
+            }
+            if (ran == null) {
+                Log.w(TAG, "su took too long and was killed: ${command.take(40)}")
+                Outcome.NoRoot
+            } else {
+                ran
+            }
+        } finally {
+            process.destroy()
+        }
+    }
+
+    /**
+     * Feeds [process] its input and takes its output and errors, each on a thread of its own,
+     * so that neither side fills up and blocks the other. A cancel kills the process, which
+     * ends the reads and writes with an error that is swallowed here.
+     */
+    private suspend fun talk(
+        process: Process,
+        stdin: ((OutputStream) -> Unit)?,
+        stdout: ((InputStream) -> Unit)?
+    ): Outcome.Ran = coroutineScope {
+        val killer = launch {
+            try {
+                awaitCancellation()
+            } finally {
+                process.destroy()
+            }
+        }
+        try {
+            runInterruptible {
+                val err = StringBuilder()
+                val errReader = thread(name = "su-err") { gather(process.errorStream, err) }
+                val out = StringBuilder()
+                var read: Throwable? = null
+                val outReader = thread(name = "su-out") {
+                    if (stdout == null) {
+                        gather(process.inputStream, out)
+                    } else {
+                        try {
+                            process.inputStream.use(stdout)
+                        } catch (e: Exception) {
+                            read = e
+                        }
+                    }
+                }
+                var fed: Throwable? = null
+                try {
+                    process.outputStream.use { input -> stdin?.invoke(input) }
+                } catch (e: IOException) {
+                    // The command may have ended before taking all of its input; its own
+                    // output says what happened.
+                    fed = e
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: RuntimeException) {
+                    fed = e
+                }
+                val exit = process.waitFor()
+                outReader.join()
+                errReader.join()
+                read?.let { throw IOException("The output could not be taken whole", it) }
+                fed?.let { if (exit == 0) throw IOException("The input could not be given whole", it) }
+                Outcome.Ran(exit, out.toString(), err.toString())
+            }
+        } finally {
+            killer.cancel()
+        }
+    }
+
+    private fun gather(stream: InputStream, into: StringBuilder) {
+        try {
+            stream.bufferedReader().use { reader ->
+                val buffer = CharArray(4096)
+                while (true) {
+                    val n = reader.read(buffer)
+                    if (n < 0) break
+                    if (into.length < MAX_TEXT) into.appendRange(buffer, 0, n)
+                }
+            }
+        } catch (_: IOException) {
+        }
+    }
+
+    /** Whether the output of `id` is root's: a user id of 0, whatever the groups. */
+    internal fun isRoot(idOutput: String): Boolean = idOutput.trimStart().startsWith("uid=0(")
+
+    /**
+     * The root app and its version as `su -v` tells them, "27.0:MAGISKSU" being Magisk 27.0;
+     * anything else is given as it is, cut to a length that fits a line of the settings.
+     */
+    internal fun providerName(version: String): String {
+        val text = version.trim().take(MAX_PROVIDER)
+        val colon = text.indexOf(':')
+        if (colon < 0) return text
+        val number = text.substring(0, colon)
+        val name = when (text.substring(colon + 1).uppercase()) {
+            "MAGISKSU" -> "Magisk"
+            "KERNELSU" -> "KernelSU"
+            "APATCH" -> "APatch"
+            else -> return text
+        }
+        return "$name $number"
+    }
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+}

@@ -231,6 +231,18 @@
     <string name="auto_update_unmetered_description">Not on mobile data or another metered network</string>
     <string name="auto_update_charging_switch">Only while charging</string>
     <string name="auto_update_charging_description">Waits until the device is plugged in</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Use root</string>
+    <string name="root_description">Installs, updates, removals and restores go through without Android asking, and a backup can include the apps\' own data. Needs a rooted device with Magisk, KernelSU or APatch; turning this on asks the root app for permission.</string>
+    <string name="root_checking">Asking the root app…</string>
+    <string name="root_granted">Root granted: %1$s.</string>
+    <string name="root_granted_unknown">Root granted.</string>
+    <string name="root_denied">Root was refused. Allow ARK-Store in the root app and try again; until then installs go the ordinary way.</string>
+    <string name="root_missing">Not available: this device is not rooted.</string>
+    <string name="root_lost">The last install did not get root and went the ordinary way.</string>
+    <string name="uninstall_confirm_title">Uninstall %1$s?</string>
+    <string name="uninstall_confirm_message">The app and its data are removed right away, without a question from Android.</string>
+    <string name="uninstall_failed">Could not uninstall: %1$s</string>
     <string name="error_token">GitHub rejected the token given in the settings. Replace or remove it there.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Only needed if you add sources: the store reads the accounts and repositories you have added straight from GitHub, and without a token GitHub lets a network do that 60 times an hour. If the list stops refreshing with a note that GitHub is limiting requests, a token raises the limit. Create a fine-grained personal access token with no permissions at github.com/settings/personal-access-tokens; public repositories can be read without any. The token stays on this device, outside backups and exports, and goes to GitHub alone.</string>
@@ -251,7 +263,7 @@
     <string name="transfer_failed">The file could not be read or written.</string>
     <string name="action_back">Back</string>
     <string name="backup_title">App backup</string>
-    <string name="backup_description">Copy the apps installed from outside Google Play as their APK files, to a folder or a zip file, and install them back on this or another device. The apps\' own data is not included.</string>
+    <string name="backup_description">Copy the apps installed from outside Google Play as their APK files, to a folder or a zip file, and install them back on this or another device. The apps\' own data is included only when root is turned on.</string>
     <string name="action_backup_apps">Back up apps</string>
     <string name="action_restore_apps">Restore apps</string>
     <string name="backup_notification_saving">Backing up %1$s</string>
