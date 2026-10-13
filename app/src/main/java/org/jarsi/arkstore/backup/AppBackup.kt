@@ -356,8 +356,8 @@ object RestoreRules {
      * Whether a data archive of [packageName] may be put back into the app installed with
      * [installedSigners]: an encrypted archive [bound] to a package and signers must name this
      * package and a signer the installed app has; an archive in the clear ([bound] null) is
-     * held to the entry's [entrySigners] when it names any. Nothing is put back when the
-     * installed app's signers could not be read.
+     * held to the entry's [entrySigners], which must name one the installed app has. Nothing
+     * is put back when either side names no signer, or the installed app's could not be read.
      */
     fun dataAllowed(
         packageName: String,
@@ -370,7 +370,7 @@ object RestoreRules {
             val (boundPackage, boundSigners) = DataBinding.parse(bound) ?: return false
             return boundPackage == packageName && boundSigners.any { it in installedSigners }
         }
-        return entrySigners.isEmpty() || entrySigners.any { it in installedSigners }
+        return entrySigners.isNotEmpty() && entrySigners.any { it in installedSigners }
     }
 
     /**

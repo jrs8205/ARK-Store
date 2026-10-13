@@ -28,8 +28,9 @@ class RestoreRulesTest {
         // In the clear, the entry's own word is all there is.
         assertTrue(RestoreRules.dataAllowed("org.example.app", null, listOf(a), setOf(a)))
         assertFalse(RestoreRules.dataAllowed("org.example.app", null, listOf(b), setOf(a)))
-        assertTrue(RestoreRules.dataAllowed("org.example.app", null, emptyList(), setOf(a)))
-        assertFalse(RestoreRules.dataAllowed("org.example.app", null, emptyList(), null))
+        // An entry that names no signer cannot be held to anything: nothing is put back.
+        assertFalse(RestoreRules.dataAllowed("org.example.app", null, emptyList(), setOf(a)))
+        assertFalse(RestoreRules.dataAllowed("org.example.app", null, listOf(a), null))
     }
 
 
