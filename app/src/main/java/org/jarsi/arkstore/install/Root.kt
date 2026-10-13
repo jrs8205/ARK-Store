@@ -38,17 +38,39 @@ object Root {
     private const val PREF_LOST = "lost"
     private const val MAX_PROVIDER = 40
 
-    /** The most of a command's text that is kept; a result of pm's is a line or two. */
-    private const val MAX_TEXT = 64 * 1024
+    /**
+     * The most of a command's text that is kept: a result of pm's is a line or two, and a
+     * listing of every app's data a few hundred kilobytes at most. What goes over is not
+     * read, and the outcome says so, see [Outcome.Ran.cut].
+     */
+    internal const val MAX_TEXT = 4 * 1024 * 1024
 
     /** The root app asks the user before answering; its prompt waits a while for them. */
     const val CHECK_TIMEOUT_MS = 30_000L
 
+    private const val PER_USER_RANGE = 100_000
+
+    /**
+     * The Android user the store runs as: the one whose apps its commands install, remove
+     * and stop, and under whose folders their data lives. A work or a private profile is a
+     * user of its own, and not the one the device shows as current.
+     */
+    val userId: Int get() = android.os.Process.myUid() / PER_USER_RANGE
+
     /** How the command came out: it ran, whatever its exit code, or `su` could not be run at all. */
     sealed interface Outcome {
-        data class Ran(val exit: Int, val out: String, val err: String) : Outcome
+        /**
+         * [out] and [err] are what the command printed, [cut] when [out] was more than is
+         * kept, so that it is not the whole of what the command said.
+         */
+        data class Ran(val exit: Int, val out: String, val err: String, val cut: Boolean = false) : Outcome
         data object NoRoot : Outcome
     }
+
+    /** Stands in for `su` in tests, given every command in place of a process; null outside them. */
+    internal var transport: (
+        suspend (command: String, stdin: ((OutputStream) -> Unit)?, stdout: ((InputStream) -> Unit)?, global: Boolean) -> Outcome
+    )? = null
 
     /** Whether the user has turned root on. */
     fun enabled(context: Context): Boolean = prefs(context).getBoolean(PREF_ENABLED, false)
@@ -112,7 +134,8 @@ object Root {
      * [Outcome.NoRoot] (null for no limit, for a stream that takes as long as it takes).
      * A [global] command runs in the system's own mount namespace rather than the store's,
      * where Android shows an app nothing of the other apps' data folders; Magisk, KernelSU
-     * and APatch all know `--mount-master` for it.
+     * and APatch all know `--mount-master` for it. Whatever the way out, [stdin] and [stdout]
+     * have returned by the time this has: nothing of theirs goes on in the background.
      */
     suspend fun run(
         command: String,
@@ -120,21 +143,40 @@ object Root {
         stdin: ((OutputStream) -> Unit)? = null,
         stdout: ((InputStream) -> Unit)? = null,
         global: Boolean = false
-    ): Outcome = withContext(Dispatchers.IO) {
-        val process = try {
-            val args = if (global) listOf("su", "--mount-master", "-c", command) else listOf("su", "-c", command)
-            ProcessBuilder(args).start()
-        } catch (e: IOException) {
-            Log.i(TAG, "su could not be started: ${e.message}")
-            return@withContext Outcome.NoRoot
+    ): Outcome {
+        transport?.let { return it(command, stdin, stdout, global) }
+        return withContext(Dispatchers.IO) {
+            val process = try {
+                val args = if (global) listOf("su", "--mount-master", "-c", command) else listOf("su", "-c", command)
+                ProcessBuilder(args).start()
+            } catch (e: IOException) {
+                Log.i(TAG, "su could not be started: ${e.message}")
+                return@withContext Outcome.NoRoot
+            }
+            converse(process, command, timeoutMs, stdin, stdout)
         }
+    }
+
+    /**
+     * Talks to [process], started for [command], as [run] says, and sees to it that the
+     * process and the threads that feed and read it are gone before returning, however the
+     * talk ended.
+     */
+    internal suspend fun converse(
+        process: Process,
+        command: String,
+        timeoutMs: Long?,
+        stdin: ((OutputStream) -> Unit)?,
+        stdout: ((InputStream) -> Unit)?
+    ): Outcome {
+        val readers = ArrayList<Thread>(2)
         try {
             val ran = if (timeoutMs == null) {
-                talk(process, stdin, stdout)
+                talk(process, stdin, stdout, readers)
             } else {
-                withTimeoutOrNull(timeoutMs) { talk(process, stdin, stdout) }
+                withTimeoutOrNull(timeoutMs) { talk(process, stdin, stdout, readers) }
             }
-            if (ran == null) {
+            return if (ran == null) {
                 Log.w(TAG, "su took too long and was killed: ${command.take(40)}")
                 Outcome.NoRoot
             } else {
@@ -143,18 +185,31 @@ object Root {
             }
         } finally {
             process.destroy()
+            // Once the process is gone its output ends, and the thread reading it, which may
+            // be in the middle of writing into the caller's stream, is waited for: the caller
+            // closes that stream next, and nothing may be writing into it then.
+            for (reader in readers) {
+                while (reader.isAlive) {
+                    try {
+                        reader.join()
+                    } catch (_: InterruptedException) {
+                    }
+                }
+            }
         }
     }
 
     /**
      * Feeds [process] its input and takes its output and errors, each on a thread of its own,
-     * so that neither side fills up and blocks the other. A cancel kills the process, which
-     * ends the reads and writes with an error that is swallowed here.
+     * so that neither side fills up and blocks the other; the threads are put in [readers]
+     * for the caller to wait for. A cancel kills the process, which ends the reads and writes
+     * with an error that is swallowed here.
      */
     private suspend fun talk(
         process: Process,
         stdin: ((OutputStream) -> Unit)?,
-        stdout: ((InputStream) -> Unit)?
+        stdout: ((InputStream) -> Unit)?,
+        readers: MutableList<Thread>
     ): Outcome.Ran = coroutineScope {
         val killer = launch {
             try {
@@ -165,9 +220,10 @@ object Root {
         }
         try {
             runInterruptible {
-                val err = StringBuilder()
+                val err = Gathered()
                 val errReader = thread(name = "su-err") { gather(process.errorStream, err) }
-                val out = StringBuilder()
+                readers += errReader
+                val out = Gathered()
                 var read: Throwable? = null
                 val outReader = thread(name = "su-out") {
                     if (stdout == null) {
@@ -180,6 +236,7 @@ object Root {
                         }
                     }
                 }
+                readers += outReader
                 var fed: Throwable? = null
                 try {
                     process.outputStream.use { input -> stdin?.invoke(input) }
@@ -197,21 +254,33 @@ object Root {
                 errReader.join()
                 read?.let { throw IOException("The output could not be taken whole", it) }
                 fed?.let { if (exit == 0) throw IOException("The input could not be given whole", it) }
-                Outcome.Ran(exit, out.toString(), err.toString())
+                Outcome.Ran(exit, out.text.toString(), err.text.toString(), cut = out.cut)
             }
         } finally {
             killer.cancel()
         }
     }
 
-    private fun gather(stream: InputStream, into: StringBuilder) {
+    /** The text of a stream as far as it is kept, and whether there was more. */
+    private class Gathered {
+        val text = StringBuilder()
+        @Volatile var cut = false
+    }
+
+    private fun gather(stream: InputStream, into: Gathered) {
         try {
             stream.bufferedReader().use { reader ->
                 val buffer = CharArray(4096)
                 while (true) {
                     val n = reader.read(buffer)
                     if (n < 0) break
-                    if (into.length < MAX_TEXT) into.appendRange(buffer, 0, n)
+                    val room = MAX_TEXT - into.text.length
+                    if (n <= room) {
+                        into.text.appendRange(buffer, 0, n)
+                    } else {
+                        if (room > 0) into.text.appendRange(buffer, 0, room)
+                        into.cut = true
+                    }
                 }
             }
         } catch (_: IOException) {

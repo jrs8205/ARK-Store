@@ -106,6 +106,11 @@ android {
         }
     }
 
+    testOptions {
+        // The root and data code logs as it goes; the log is a stub in a unit test.
+        unitTests.isReturnDefaultValues = true
+    }
+
     buildFeatures {
         buildConfig = true
         compose = true

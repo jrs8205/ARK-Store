@@ -11,11 +11,12 @@ internal data class PmResult(val success: Boolean, val message: String?)
 
 /** Reads what the package manager's shell commands print. */
 internal object PmOutput {
-    private val SESSION = Regex("""Success: created install session \[(\d{1,9})]""")
+    /** The system draws a session's id from the whole of the positive integers: up to ten digits. */
+    private val SESSION = Regex("""Success: created install session \[(\d{1,10})]""")
     private val FAILURE = Regex("""Failure \[([^\]]*)]""")
 
     /** The session `pm install-create` made, or null when it made none. */
-    fun sessionId(text: String): Int? = SESSION.find(text)?.groupValues?.get(1)?.toIntOrNull()
+    fun sessionId(text: String): Int? = SESSION.find(text)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 }
 
     /**
      * The verdict in [text]: a line beginning "Success", or a "Failure [reason]". Null when
@@ -46,30 +47,40 @@ internal object PmOutput {
 
 /**
  * The commands given to `pm`, made of nothing but package names and file names that pass
- * the checks of a backup, and numbers.
+ * the checks of a backup, and numbers. Each names the user the store runs as, [Root.userId]:
+ * `current` would be the user in the foreground, which a work or a private profile is not.
  */
 internal object RootCommands {
     /** A session for [packageName] alone: the system refuses files of any other package in it. */
-    fun createSession(installer: String, packageName: String, bytes: Long): String {
+    fun createSession(installer: String, packageName: String, bytes: Long, userId: Int): String {
         require(AppBackup.isPackageName(installer)) { "Not a package name" }
         require(AppBackup.isPackageName(packageName)) { "Not a package name" }
         require(bytes > 0) { "No size" }
-        return "pm install-create -r --user current -i $installer --pkg $packageName -S $bytes"
+        require(userId >= 0) { "Not a user" }
+        return "pm install-create -r --user $userId -i $installer --pkg $packageName -S $bytes"
     }
 
     fun writeSplit(sessionId: Int, name: String, bytes: Long): String {
         require(AppBackup.isFileName(name)) { "Not a file name" }
         require(bytes >= 0) { "No size" }
+        require(sessionId > 0) { "Not a session" }
         return "pm install-write -S $bytes $sessionId $name -"
     }
 
-    fun commit(sessionId: Int): String = "pm install-commit $sessionId"
+    fun commit(sessionId: Int): String {
+        require(sessionId > 0) { "Not a session" }
+        return "pm install-commit $sessionId"
+    }
 
-    fun abandon(sessionId: Int): String = "pm install-abandon $sessionId"
+    fun abandon(sessionId: Int): String {
+        require(sessionId > 0) { "Not a session" }
+        return "pm install-abandon $sessionId"
+    }
 
-    fun uninstall(packageName: String): String {
+    fun uninstall(packageName: String, userId: Int): String {
         require(AppBackup.isPackageName(packageName)) { "Not a package name" }
-        return "pm uninstall --user current $packageName"
+        require(userId >= 0) { "Not a user" }
+        return "pm uninstall --user $userId $packageName"
     }
 }
 
@@ -103,9 +114,9 @@ internal object RootInstaller {
         onSession: (Int) -> Unit
     ): Result {
         val total = files.sumOf { it.second.length() }
-        val created = Root.run(RootCommands.createSession(installer, packageName, total), PM_TIMEOUT_MS)
+        val created = Root.run(RootCommands.createSession(installer, packageName, total, Root.userId), PM_TIMEOUT_MS)
         if (created !is Root.Outcome.Ran) return Result.NoRoot
-        val sessionId = PmOutput.sessionId(created.out) ?: return verdict(created, "install-create")
+        val sessionId = PmOutput.sessionId(created.out) ?: return noSession(created)
         onSession(sessionId)
         try {
             for ((name, file) in files) {
@@ -132,7 +143,7 @@ internal object RootInstaller {
     }
 
     suspend fun uninstall(packageName: String): Result {
-        val ran = Root.run(RootCommands.uninstall(packageName), PM_TIMEOUT_MS)
+        val ran = Root.run(RootCommands.uninstall(packageName, Root.userId), PM_TIMEOUT_MS)
         if (ran !is Root.Outcome.Ran) return Result.NoRoot
         return verdict(ran, "uninstall")
     }
@@ -141,13 +152,23 @@ internal object RootInstaller {
         Root.run(RootCommands.abandon(sessionId), PM_TIMEOUT_MS)
     }
 
+    /**
+     * No session came of `install-create`, which [ran] says: nothing was installed, whatever
+     * else it said, since nothing could be written to a session that is not known.
+     */
+    private fun noSession(ran: Root.Outcome.Ran): Result.Done {
+        val result = PmOutput.result(ran.out)
+        if (result != null && !result.success) return Result.Done(PmOutput.status(result.message), result.message)
+        Log.w(TAG, "pm install-create made no session (exit ${ran.exit}): ${ran.out.take(200)} ${ran.err.take(200)}")
+        return Result.Done(PackageInstaller.STATUS_FAILURE, firstLine(ran) ?: "No install session was made")
+    }
+
     /** What [ran] came to; a command that said neither way failed, with whatever it did say. */
     private fun verdict(ran: Root.Outcome.Ran, step: String): Result.Done {
         val result = PmOutput.result(ran.out)
         if (result == null) {
             Log.w(TAG, "pm $step said nothing of its outcome (exit ${ran.exit}): ${ran.out.take(200)} ${ran.err.take(200)}")
-            val said = ran.err.ifBlank { ran.out }.trim().lines().firstOrNull()?.take(200)
-            return Result.Done(PackageInstaller.STATUS_FAILURE, said?.ifEmpty { null })
+            return Result.Done(PackageInstaller.STATUS_FAILURE, firstLine(ran))
         }
         return if (result.success) {
             Result.Done(PackageInstaller.STATUS_SUCCESS, null)
@@ -155,4 +176,7 @@ internal object RootInstaller {
             Result.Done(PmOutput.status(result.message), result.message)
         }
     }
+
+    private fun firstLine(ran: Root.Outcome.Ran): String? =
+        ran.err.ifBlank { ran.out }.trim().lines().firstOrNull()?.take(200)?.ifEmpty { null }
 }
