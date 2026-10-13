@@ -116,6 +116,20 @@ internal object RootDataCommands {
     /** Prints what [staging] holds at its top, one line each. */
     fun listStaging(staging: String): String = "find $staging -mindepth 1 -maxdepth 1"
 
+    /** Prints where every link under [staging] leads, as the device itself resolves it, one line each. */
+    fun listLinks(staging: String): String = "find $staging -type l -exec readlink -f {} \\;"
+
+    /**
+     * Whether every link [listLinks] printed leads into the folder of [packageName] under
+     * [staging], where a link checked against the archive alone could still have been led
+     * astray by another link.
+     */
+    fun linksStayIn(output: String, staging: String, packageName: String): Boolean {
+        val folder = "$staging/${checked(packageName)}"
+        return output.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }
+            .all { it == folder || it.startsWith("$folder/") }
+    }
+
     /** Whether what [listStaging] printed is nothing but the folder of [packageName]. */
     fun stagingHoldsOnly(output: String, staging: String, packageName: String): Boolean {
         val lines = output.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
@@ -262,6 +276,11 @@ object RootData {
                 ?: throw IOException("Root could not be had for the data of $packageName")
             if (!RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
                 throw IOException("The archive of $packageName does not hold the app's folder alone")
+            }
+            val links = Root.run(RootDataCommands.listLinks(staging), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran
+                ?: throw IOException("Root could not be had for the data of $packageName")
+            if (!RootDataCommands.linksStayIn(links.out, staging, packageName)) {
+                throw IOException("The archive of $packageName has a link that leads out of the app's folder")
             }
             forceStop(packageName)
             val swapped = Root.run(RootDataCommands.swap(part, userId, packageName, staging, uid, number), TOOL_TIMEOUT_MS)

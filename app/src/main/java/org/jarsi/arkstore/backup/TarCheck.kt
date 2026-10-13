@@ -105,9 +105,9 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
             }
         }
         val prefix = string(PREFIX, 155)
-        // A prefix is a ustar header's; one in another kind of header is read by some tars and
-        // not by others, and a name that is read two ways is not checked.
-        if (prefix.isNotEmpty() && !isUstar()) throw IOException("The archive has a prefix in a header that is not ustar")
+        // A prefix is a POSIX ustar header's; in a GNU header the same bytes are other things,
+        // and a name that is read two ways is not checked.
+        if (prefix.isNotEmpty() && !isPosixUstar()) throw IOException("The archive has a prefix in a header that is not ustar")
         val name = paxPath ?: longName ?: string(NAME, 100).let { base ->
             if (prefix.isEmpty()) base else "$prefix/$base"
         }
@@ -117,22 +117,30 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         paxPath = null
         paxLink = null
         val parts = checkName(name)
+        val path = parts.joinToString("/")
+        if (parts.size == 1 && type != '5') throw IOException("The archive has the app's folder as something other than a folder")
         when (type) {
             '0', '\u0000', '7' -> {
-                if (parts.size == 1) throw IOException("The archive has the app's folder as a file")
-                regularFiles += parts.joinToString("/")
+                regularFiles += path
+                symlinks -= path
             }
-            '5' -> Unit
+            '5' -> {
+                regularFiles -= path
+                symlinks -= path
+            }
             '2' -> {
                 // A link holds no data; a tar that read it as holding some would read the
                 // headers after it elsewhere than here.
                 if (size != 0L) throw IOException("The archive has a link with data: $name")
                 checkLink(parts, link, symbolic = true)
-                symlinks += parts.joinToString("/")
+                regularFiles -= path
+                symlinks += path
             }
             '1' -> {
                 if (size != 0L) throw IOException("The archive has a link with data: $name")
                 checkLink(parts, link, symbolic = false)
+                regularFiles += path
+                symlinks -= path
             }
             else -> throw IOException("The archive holds something that is not a file: type '$type' at $name")
         }
@@ -146,18 +154,22 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
             'K' -> longLink = text.trimEnd('\u0000')
             'x' -> {
                 for ((key, value) in paxRecords(text)) {
-                    when (key) {
-                        "path" -> paxPath = value
-                        "linkpath" -> paxLink = value
-                        // A size given here is read by some tars and not by others.
-                        "size" -> throw IOException("The archive gives a size in a pax header")
+                    when {
+                        key == "path" -> paxPath = value
+                        key == "linkpath" -> paxLink = value
+                        // A size given here is read by some tars and not by others, and a
+                        // sparse file names itself and lays itself out in ways of its own.
+                        key == "size" || key.startsWith("GNU.sparse") ->
+                            throw IOException("The archive has a pax record that is not read the same way by every tar: $key")
                     }
                 }
             }
             // A global header applies to everything after; one that names paths or sizes is
             // read differently by different tars.
             'g' -> for ((key, _) in paxRecords(text)) {
-                if (key == "path" || key == "linkpath" || key == "size") throw IOException("The archive names a path in a global header")
+                if (key == "path" || key == "linkpath" || key == "size" || key.startsWith("GNU.sparse")) {
+                    throw IOException("The archive names a path in a global header")
+                }
             }
         }
     }
@@ -238,8 +250,10 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         if (from.first() != root) throw IOException("The archive links outside its folder: $name -> $link")
     }
 
-    private fun isUstar(): Boolean = header[MAGIC] == 'u'.code.toByte() && header[MAGIC + 1] == 's'.code.toByte() &&
-        header[MAGIC + 2] == 't'.code.toByte() && header[MAGIC + 3] == 'a'.code.toByte() && header[MAGIC + 4] == 'r'.code.toByte()
+    /** Whether the header is POSIX ustar: "ustar" and a NUL, not GNU's "ustar" and a space. */
+    private fun isPosixUstar(): Boolean = header[MAGIC] == 'u'.code.toByte() && header[MAGIC + 1] == 's'.code.toByte() &&
+        header[MAGIC + 2] == 't'.code.toByte() && header[MAGIC + 3] == 'a'.code.toByte() && header[MAGIC + 4] == 'r'.code.toByte() &&
+        header[MAGIC + 5] == 0.toByte()
 
     private fun string(at: Int, length: Int): String {
         var end = at

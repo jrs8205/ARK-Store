@@ -194,15 +194,17 @@ object ZipBackup {
      * sizes its entry names, or null when they are not: missing, larger than said, or not
      * together. With them come the app's data archives found whole, by their part ([BackupData.part]);
      * one missing or of another size than said is left out, and the app's files stand without it.
-     * With the files the directory is [onApp]'s; without them it is removed here. [onBytes] is
-     * told the bytes taken out so far.
+     * With the files the directory is [onApp]'s; without them it is removed here. The data
+     * archives go to the directory [dataDirFor] gives, which is [onApp]'s either way. [onBytes]
+     * is told the bytes taken out so far.
      */
     suspend fun extract(
         input: InputStream,
         wanted: List<BackupEntry>,
         dirFor: (BackupEntry) -> File,
         onApp: suspend (BackupEntry, List<File>?, Map<String, File>) -> Unit,
-        onBytes: (Long) -> Unit = {}
+        onBytes: (Long) -> Unit = {},
+        dataDirFor: (BackupEntry) -> File = dirFor
     ) {
         val byPackage = wanted.associateBy { it.packageName }
         val done = HashSet<String>()
@@ -256,7 +258,7 @@ object ZipBackup {
                     taking.broken = true
                     continue
                 }
-                val target = File(taking.dir, fileName)
+                val target = File(if (isData) dataDirFor(entry).also { it.mkdirs() } else taking.dir, fileName)
                 var copied = 0L
                 var told = 0L
                 var overflow = false

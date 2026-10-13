@@ -105,6 +105,17 @@ class TarCheckTest {
                 Item("$root/files/link", '1', link = "$root/files/a")
             )
         )
+        // A file made into a link afterwards is a link.
+        refused(
+            tar(
+                Item("$root/files/a", content = "x".toByteArray()),
+                Item("$root/files/a", '2', link = "b"),
+                Item("$root/files/link", '1', link = "$root/files/a")
+            )
+        )
+        // The folder itself as a link, which the move into place would follow.
+        refused(tar(Item(root, '2', link = ".")))
+        refused(tar(Item("$root/", '2', link = "x")))
         // Up to the folder itself is as far as a link may climb.
         pass(tar(Item("$root/files/deep/link", '2', link = "../../databases/db")))
     }
@@ -179,10 +190,20 @@ class TarCheckTest {
         // A link with a size: some tars skip the bytes, some read them as the next header.
         refused(tar(Item("$root/link", '2', link = "x", size = 512)))
         refused(tar(Item("$root/link", '1', link = "$root/x", size = 512)))
-        // A prefix in a header that is not ustar.
+        // A prefix in a header that is not POSIX ustar: in a GNU header those bytes are other things.
         val notUstar = tar(Item("x", prefix = root))
         notUstar[257] = 0
         refused(fixChecksum(notUstar))
+        val gnu = tar(Item("x", prefix = root))
+        gnu[262] = ' '.code.toByte()
+        gnu[263] = ' '.code.toByte()
+        gnu[264] = 0
+        refused(fixChecksum(gnu))
+        val gnuNoPrefix = tar(Item("$root/x", content = ByteArray(10)))
+        gnuNoPrefix[262] = ' '.code.toByte()
+        gnuNoPrefix[263] = ' '.code.toByte()
+        gnuNoPrefix[264] = 0
+        pass(fixChecksum(gnuNoPrefix))
         // A size in base 256.
         val base256 = tar(Item("$root/x", content = ByteArray(10)))
         base256[124] = 0x80.toByte()
@@ -197,6 +218,7 @@ class TarCheckTest {
             "$length$body"
         }.toByteArray()
         refused(tar(Item("./PaxHeaders/x", 'x', content = pax("size" to "10")), Item("$root/x", content = ByteArray(10))))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("GNU.sparse.name" to "../x")), Item("$root/x", content = ByteArray(10))))
         refused(tar(Item("./PaxHeaders/g", 'g', content = pax("path" to "$root/x")), Item("$root/x", content = ByteArray(10))))
         pass(tar(Item("./PaxHeaders/g", 'g', content = pax("comment" to "hi")), Item("$root/x", content = ByteArray(10))))
         // Data after the end of the archive, which tar would not read.

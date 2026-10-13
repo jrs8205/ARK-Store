@@ -3,6 +3,7 @@ package org.jarsi.arkstore.backup
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
@@ -18,6 +19,9 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPInputStream
+import java.util.zip.GZIPOutputStream
+import javax.crypto.SecretKey
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +39,7 @@ import kotlin.coroutines.coroutineContext
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
+import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.localKey
 
 /** An installed app a backup may take: its entry as the device tells it, and its files there. */
@@ -43,8 +48,22 @@ data class BackupCandidate(
     /** Whether the files can be read; an archived app, for one, has none to copy. */
     val readable: Boolean,
     /** The files on the device, in the order of [BackupEntry.files]. */
-    val sources: List<File>
+    val sources: List<File>,
+    /** About how much the app's own data is, in bytes, when root has told; see [BackupManager.dataSizes]. */
+    val dataSize: Long? = null
 )
+
+/**
+ * Whether a backup takes the apps' own data as root, or a restore puts it back, and with
+ * what [password]: none, or an empty one, for data written in the clear.
+ */
+class DataChoice(val include: Boolean, val password: CharArray?) {
+    val encrypt: Boolean get() = include && password != null && password.isNotEmpty()
+
+    companion object {
+        val NONE = DataChoice(false, null)
+    }
+}
 
 /** What a backup or a restore is doing, for the screen and the notification. */
 sealed interface BackupState {
@@ -72,7 +91,11 @@ sealed interface BackupState {
         val failed: List<String>,
         val indexWritten: Boolean = true,
         /** The backup was a zip file rather than a folder; [failed] are then the apps left out of it. */
-        val zip: Boolean = false
+        val zip: Boolean = false,
+        /** The apps whose files went through but whose own data did not, by name. */
+        val dataFailed: List<String> = emptyList(),
+        /** Some data could not be put back because the password was not the one it was encrypted with. */
+        val wrongPassword: Boolean = false
     ) : BackupState
 
     data class Failed(
@@ -118,6 +141,7 @@ object BackupManager {
     private const val PREF_LOG = "log"
     private const val APK_MIME = "application/vnd.android.package-archive"
     private const val JSON_MIME = "application/json"
+    private const val DATA_MIME = "application/octet-stream"
     /** Where the settings of a zip read for a restore are kept for their import. */
     private const val ZIP_SETTINGS_DIR = "backup-settings"
     private const val BUFFER_BYTES = 64 * 1024
@@ -173,6 +197,12 @@ object BackupManager {
             BackupCandidate(entry, readable = sources.all { it.canRead() }, sources = sources)
         }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
     }
+
+    /** About how much data each of [packages] has, in bytes, as root tells it; nothing without root. */
+    suspend fun dataSizes(packages: List<String>): Map<String, Long> = RootData.sizes(packages)
+
+    /** Whether the apps' data can be taken: root is on and the device has a `tar`. */
+    suspend fun dataAvailable(context: Context): Boolean = Root.enabled(context) && RootData.tar() != null
 
     /**
      * Reads the folder [tree]: each app folder's own entry, which is written last and so
@@ -282,13 +312,19 @@ object BackupManager {
      * returns whether the job was begun, which it is not while another is running. The apps
      * whose copies are up to date are left as they are, see [AppBackup.isUpToDate].
      */
-    fun backup(context: Context, tree: Uri, selected: List<BackupCandidate>, settingsJson: String): Boolean {
+    fun backup(
+        context: Context,
+        tree: Uri,
+        selected: List<BackupCandidate>,
+        settingsJson: String,
+        data: DataChoice = DataChoice.NONE
+    ): Boolean {
         val appContext = context.applicationContext
-        val told = Told(BackupEvent.Kind.FOLDER, selected.size, selected.sumOf { it.entry.size }) {
+        val told = Told(BackupEvent.Kind.FOLDER, selected.size, candidateBytes(selected, data)) {
             Documents(appContext.contentResolver, tree).name()
         }
         return start(appContext, restoring = false, told = told) {
-            write(Documents(appContext.contentResolver, tree), selected, settingsJson)
+            write(Documents(appContext.contentResolver, tree), selected, settingsJson, data)
         }
     }
 
@@ -296,27 +332,144 @@ object BackupManager {
      * Writes [selected] to the zip file [uri], made for it, along with the store's settings as
      * [settingsJson]; returns whether the job was begun. A zip that cannot be finished is removed.
      */
-    fun backupZip(context: Context, uri: Uri, selected: List<BackupCandidate>, settingsJson: String): Boolean {
+    fun backupZip(
+        context: Context,
+        uri: Uri,
+        selected: List<BackupCandidate>,
+        settingsJson: String,
+        data: DataChoice = DataChoice.NONE
+    ): Boolean {
         val appContext = context.applicationContext
-        val told = Told(BackupEvent.Kind.ZIP, selected.size, selected.sumOf { it.entry.size }) {
+        val told = Told(BackupEvent.Kind.ZIP, selected.size, candidateBytes(selected, data)) {
             displayName(appContext, uri)
         }
         return start(appContext, restoring = false, zip = true, told = told) {
-            writeZip(appContext, uri, selected, settingsJson)
+            writeZip(appContext, uri, selected, settingsJson, data)
         }
     }
 
-    /** Installs [selected] from [folder], one after the other; returns whether the job was begun. */
-    fun restore(context: Context, folder: BackupFolder, selected: List<RestoreEntry>): Boolean {
+    /**
+     * Installs [selected] from [folder], one after the other, and puts their data back when
+     * [data] says so and the backup has it; returns whether the job was begun.
+     */
+    fun restore(
+        context: Context,
+        folder: BackupFolder,
+        selected: List<RestoreEntry>,
+        data: DataChoice = DataChoice.NONE
+    ): Boolean {
         val appContext = context.applicationContext
-        val told = Told(BackupEvent.Kind.RESTORE, selected.size, selected.sumOf { it.entry.size }) { folder.name }
+        val bytes = selected.sumOf { it.entry.size + if (data.include) it.entry.dataSize else 0 }
+        val told = Told(BackupEvent.Kind.RESTORE, selected.size, bytes) { folder.name }
         return start(appContext, restoring = true, zip = folder.zip, told = told) {
             if (folder.zip) {
-                installZip(appContext, folder.tree, selected)
+                installZip(appContext, folder.tree, selected, data)
             } else {
-                install(appContext, Documents(appContext.contentResolver, folder.tree), selected)
+                install(appContext, Documents(appContext.contentResolver, folder.tree), selected, data)
             }
         }
+    }
+
+    private fun candidateBytes(selected: List<BackupCandidate>, data: DataChoice): Long =
+        selected.sumOf { it.entry.size + if (data.include) it.dataSize ?: 0 else 0 }
+
+    /**
+     * What a run that takes or puts back the apps' data works with: the device's `tar`, and
+     * the keys, each derived once, since deriving one is slow by design. Null when the data
+     * is not asked for, or cannot be had.
+     */
+    private class DataRun(val tar: String, private val password: CharArray?) {
+        val encrypt: Boolean get() = password != null && password.isNotEmpty()
+
+        /** One salt for the run: every archive written in it is encrypted with the same key. */
+        private val salt = DataCrypt.newSalt()
+        private var writeKey: SecretKey? = null
+        private val keys = HashMap<String, SecretKey>()
+
+        /** [sink] with the packing and, with a password, the encryption in front of it. */
+        fun wrap(sink: OutputStream): OutputStream {
+            val encrypted = if (encrypt) {
+                val key = writeKey ?: DataCrypt.deriveKey(password!!, salt, DataCrypt.ITERATIONS).also { writeKey = it }
+                DataCrypt.encrypt(sink, key, salt)
+            } else {
+                sink
+            }
+            return GZIPOutputStream(encrypted, BUFFER_BYTES)
+        }
+
+        /** [input], an archive as written by [wrap], unpacked and, when [encrypted], decrypted. */
+        fun unwrap(input: InputStream, encrypted: Boolean): InputStream {
+            val plain = if (encrypted) DataCrypt.decrypt(input, ::keyFor) else input
+            return GZIPInputStream(plain, BUFFER_BYTES)
+        }
+
+        private fun keyFor(salt: ByteArray, iterations: Int): SecretKey = synchronized(keys) {
+            keys.getOrPut(salt.joinToString("") { "%02x".format(it) } + ":" + iterations) {
+                DataCrypt.deriveKey(password ?: CharArray(0), salt, iterations)
+            }
+        }
+    }
+
+    /** The run for [data], or null when the data is not asked for or there is no `tar` to take it with. */
+    private suspend fun dataRun(data: DataChoice): DataRun? {
+        if (!data.include) return null
+        val tar = RootData.tar() ?: return null
+        return DataRun(tar, data.password)
+    }
+
+    /** Counts what passes through to [out]. */
+    private class Counting(private val out: OutputStream) : OutputStream() {
+        var count = 0L
+        override fun write(b: Int) {
+            out.write(b)
+            count++
+        }
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            out.write(b, off, len)
+            count += len
+        }
+        override fun flush() = out.flush()
+        override fun close() = out.close()
+    }
+
+    /**
+     * Puts the data archives of [entry] back, each [open]ed by its description, into the app
+     * that is now installed. Returns null when all went through, otherwise whether it was the
+     * password that was wrong.
+     */
+    private suspend fun restoreData(
+        context: Context,
+        run: DataRun,
+        entry: BackupEntry,
+        open: (BackupData) -> InputStream?
+    ): Boolean? {
+        val uid = try {
+            context.packageManager.getApplicationInfo(entry.packageName, 0).uid
+        } catch (e: PackageManager.NameNotFoundException) {
+            Log.w(TAG, "${entry.packageName} is not installed, so its data is not put back")
+            return false
+        }
+        for (archive in entry.data) {
+            val input = open(archive)
+            if (input == null) {
+                Log.w(TAG, "The archive ${archive.name} of ${entry.packageName} is not there")
+                return false
+            }
+            try {
+                run.unwrap(input, archive.encrypted).use { tar ->
+                    RootData.restore(run.tar, archive.part, entry.packageName, uid, tar)
+                }
+            } catch (e: WrongPasswordException) {
+                Log.w(TAG, "The password does not open ${archive.name} of ${entry.packageName}")
+                return true
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not put back ${archive.name} of ${entry.packageName}", e)
+                return false
+            }
+        }
+        return null
     }
 
     /** Stops the job after the file it is on; the folder's index is still brought up to date. */
@@ -405,24 +558,40 @@ object BackupManager {
         context: Context,
         uri: Uri,
         selected: List<BackupCandidate>,
-        settingsJson: String
+        settingsJson: String,
+        data: DataChoice
     ): BackupState {
         val (whole, changed) = selected.partition { candidate ->
             candidate.readable && candidate.sources.size == candidate.entry.files.size &&
                 candidate.sources.zip(candidate.entry.files).all { (file, said) -> file.canRead() && file.length() == said.size }
         }
         val byPackage = whole.associateBy { it.entry.packageName }
-        val total = whole.sumOf { it.entry.size }
+        val total = candidateBytes(whole, data)
         var index = 0
         var label = ""
+        val dataFailed = ArrayList<String>()
         try {
             // The picker has made the file already; one with nothing to put in it goes too.
             if (whole.isEmpty()) throw IOException("None of the apps chosen can be written as they are")
+            // The zip's head names the data archives before they are written, so what each app
+            // has is asked first; their sizes stay unknown to the head.
+            val run = dataRun(data)
+            if (data.include && run == null) dataFailed += whole.map { it.entry.label }
+            val parts = run?.let { RootData.parts(whole.map { it.entry.packageName }) }.orEmpty()
+            val entries = whole.map { candidate ->
+                candidate.entry.copy(
+                    data = parts[candidate.entry.packageName].orEmpty().map {
+                        BackupData(DataCrypt.fileName(it, run!!.encrypt), RestoreRules.UNKNOWN_SIZE)
+                    }
+                )
+            }
+            var filesDone = 0L
+            var dataDone = 0L
             val out = context.contentResolver.openOutputStream(uri, "wt") ?: throw IOException("Nothing to write to")
             out.use { stream ->
                 ZipBackup.write(
                     BufferedOutputStream(stream, BUFFER_BYTES),
-                    whole.map { it.entry },
+                    entries,
                     settingsJson,
                     Instant.now().toString(),
                     open = { entry, i ->
@@ -432,7 +601,26 @@ object BackupManager {
                         }
                         byPackage.getValue(entry.packageName).sources[i].inputStream()
                     },
-                    onBytes = { bytes -> _state.value = BackupState.Running(false, index, whole.size, label, bytes, total) }
+                    onBytes = { bytes ->
+                        filesDone = bytes
+                        _state.value = BackupState.Running(false, index, whole.size, label, filesDone + dataDone, total)
+                    },
+                    writeData = { entry, archive, item ->
+                        try {
+                            val bytes = run!!.wrap(item).use { sink ->
+                                RootData.archive(run.tar, archive.part, entry.packageName, sink) { sofar ->
+                                    _state.value = BackupState.Running(false, index, whole.size, label, filesDone + dataDone + sofar, total)
+                                }
+                            }
+                            dataDone += bytes
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // The item stands, cut short; a restore finds it so and leaves the data be.
+                            Log.w(TAG, "Could not take the data of ${entry.packageName}", e)
+                            if (entry.label !in dataFailed) dataFailed += entry.label
+                        }
+                    }
                 )
             }
         } catch (e: Throwable) {
@@ -443,75 +631,117 @@ object BackupManager {
             }
             throw e
         }
-        return BackupState.Done(false, whole.size, 0, changed.map { it.entry.label }, zip = true)
+        return BackupState.Done(false, whole.size, 0, changed.map { it.entry.label }, zip = true, dataFailed = dataFailed)
     }
 
     /**
      * Installs [selected] from the zip file [uri], taking each app's files out as the zip comes
      * to them, and handing them to the system as [install] does for a folder.
      */
-    private suspend fun installZip(context: Context, uri: Uri, selected: List<RestoreEntry>): BackupState {
-        val total = selected.sumOf { it.entry.size }
+    private suspend fun installZip(context: Context, uri: Uri, selected: List<RestoreEntry>, data: DataChoice): BackupState {
+        val total = selected.sumOf { it.entry.size + if (data.include) it.entry.dataSize else 0 }
         var index = 0
         var label = ""
         var saved = 0
         val failed = ArrayList<String>()
+        val dataFailed = ArrayList<String>()
+        var wrongPassword = false
+        val run = dataRun(data)
         val input = context.contentResolver.openInputStream(uri) ?: throw IOException("The zip file cannot be read")
-        input.use { stream ->
-            ZipBackup.extract(
-                BufferedInputStream(stream, BUFFER_BYTES),
-                selected.map { it.entry },
-                dirFor = { entry ->
-                    index++
-                    label = entry.label
-                    File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}")
-                },
-                onBytes = { bytes -> _state.value = BackupState.Running(true, index, selected.size, label, bytes, total) },
-                onApp = { entry, files, _ ->
-                    if (files == null) {
-                        Log.w(TAG, "The zip file does not hold the files of ${entry.packageName} whole")
-                        failed += entry.label
-                    } else {
-                        // The files are in a folder of their own, which the install takes over.
-                        val dir = files.first().parentFile ?: throw IOException("No folder for the files")
-                        val key = localKey(entry.packageName)
-                        var attempt: Int? = null
+        // The data archives go beside the files, not with them: the install takes the files'
+        // folder and removes it when it settles, before the data is put back.
+        val dataDirs = HashMap<String, File>()
+        try {
+            input.use { stream ->
+                ZipBackup.extract(
+                    BufferedInputStream(stream, BUFFER_BYTES),
+                    selected.map { it.entry },
+                    dirFor = { entry ->
+                        index++
+                        label = entry.label
+                        File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}")
+                    },
+                    dataDirFor = { entry ->
+                        dataDirs.getOrPut(entry.packageName) {
+                            File(File(context.cacheDir, "apk"), "restore-data-${restores.incrementAndGet()}")
+                        }
+                    },
+                    onBytes = { bytes -> _state.value = BackupState.Running(true, index, selected.size, label, bytes, total) },
+                    onApp = { entry, files, archives ->
                         try {
-                            val outcome = InstallManager.installLocalAndAwait(
-                                context, key, entry.label, entry.packageName, dir, files, INSTALL_TIMEOUT_MS
-                            ) { attempt = it }
+                            if (files == null) {
+                                Log.w(TAG, "The zip file does not hold the files of ${entry.packageName} whole")
+                                failed += entry.label
+                                return@extract
+                            }
+                            // The files are in a folder of their own, which the install takes over.
+                            val dir = files.first().parentFile ?: throw IOException("No folder for the files")
+                            val key = localKey(entry.packageName)
+                            var attempt: Int? = null
+                            val outcome = try {
+                                InstallManager.installLocalAndAwait(
+                                    context, key, entry.label, entry.packageName, dir, files, INSTALL_TIMEOUT_MS
+                                ) { attempt = it }
+                            } catch (e: CancellationException) {
+                                attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
+                                throw e
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Could not restore ${entry.packageName}", e)
+                                failed += entry.label
+                                if (attempt == null) dir.deleteRecursively()
+                                return@extract
+                            }
                             when (outcome) {
                                 Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
                                 Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                                 null -> if (attempt == null) failed += entry.label
                             }
-                        } catch (e: CancellationException) {
-                            attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
-                            throw e
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Could not restore ${entry.packageName}", e)
-                            failed += entry.label
-                            if (attempt == null) dir.deleteRecursively()
+                            if (run != null && entry.data.isNotEmpty()) {
+                                if (outcome != Outcome.INSTALLED) {
+                                    dataFailed += entry.label
+                                } else {
+                                    val wrong = restoreData(context, run, entry) { archive -> archives[archive.part]?.inputStream() }
+                                    if (wrong != null) {
+                                        dataFailed += entry.label
+                                        if (wrong) wrongPassword = true
+                                    }
+                                }
+                            } else if (data.include && entry.data.isNotEmpty()) {
+                                dataFailed += entry.label
+                            }
+                        } finally {
+                            dataDirs.remove(entry.packageName)?.deleteRecursively()
                         }
                     }
-                }
-            )
+                )
+            }
+        } finally {
+            dataDirs.values.forEach { it.deleteRecursively() }
         }
-        return BackupState.Done(true, saved, 0, failed, zip = true)
+        return BackupState.Done(true, saved, 0, failed, zip = true, dataFailed = dataFailed, wrongPassword = wrongPassword)
     }
 
-    private suspend fun write(docs: Documents, selected: List<BackupCandidate>, settingsJson: String): BackupState {
+    private suspend fun write(
+        docs: Documents,
+        selected: List<BackupCandidate>,
+        settingsJson: String,
+        data: DataChoice
+    ): BackupState {
         val root = docs.children(docs.rootId) ?: throw IOException("The folder cannot be listed")
         val rootByName = root.associateBy { it.name }.toMutableMap()
-        val total = selected.sumOf { it.entry.size }
+        val total = candidateBytes(selected, data)
         var done = 0L
         var saved = 0
         var skipped = 0
         val failed = ArrayList<String>()
+        val dataFailed = ArrayList<String>()
         val written = HashMap<String, BackupEntry>()
         var cancelled: CancellationException? = null
         var indexWritten = false
         try {
+            val run = dataRun(data)
+            if (data.include && run == null) dataFailed += selected.map { it.entry.label }
+            val parts = run?.let { RootData.parts(selected.map { it.entry.packageName }) }.orEmpty()
             selected.forEachIndexed { i, candidate ->
                 coroutineContext.ensureActive()
                 val entry = candidate.entry
@@ -526,7 +756,12 @@ object BackupManager {
                     val stored = byName[AppBackup.ENTRY_NAME]
                         ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
                         ?.let(AppBackup::entryFromText)
-                    if (AppBackup.isUpToDate(stored, byName.mapValues { it.value.size }, entry)) {
+                    val upToDate = AppBackup.isUpToDate(stored, byName.mapValues { it.value.size }, entry)
+                    val wanted = parts[entry.packageName].orEmpty()
+                    val oldData = byName.values.filter { AppBackup.isDataName(it.name) }
+                    // The files up to date, and no data asked for nor left over from before:
+                    // the folder is as it should be. The data is taken afresh every time.
+                    if (upToDate && run == null && oldData.isEmpty()) {
                         skipped++
                         written[entry.packageName] = entry
                         done += entry.size
@@ -540,24 +775,47 @@ object BackupManager {
                         // until the entry is gone, so that it never stands for files it is not.
                         if (!docs.delete(it.id)) throw IOException("The app's entry could not be removed")
                     }
-                    val names = entry.files.mapTo(HashSet()) { it.name }
-                    byName.values.filter { it.name.endsWith(".apk") && it.name !in names }.forEach {
-                        docs.delete(it.id)
-                        byName.remove(it.name)
-                    }
-                    entry.files.forEachIndexed { f, file ->
-                        val id = byName[file.name]?.id ?: docs.create(folderId, APK_MIME, file.name)
-                        candidate.sources[f].inputStream().use { input ->
-                            docs.openWrite(id).use { output ->
-                                done += copy(input, output) { copied ->
-                                    _state.value = BackupState.Running(false, i + 1, selected.size, entry.label, done + copied, total)
+                    if (upToDate) {
+                        done += entry.size
+                    } else {
+                        val names = entry.files.mapTo(HashSet()) { it.name }
+                        byName.values.filter { it.name.endsWith(".apk") && it.name !in names }.forEach {
+                            docs.delete(it.id)
+                            byName.remove(it.name)
+                        }
+                        entry.files.forEachIndexed { f, file ->
+                            val id = byName[file.name]?.id ?: docs.create(folderId, APK_MIME, file.name)
+                            candidate.sources[f].inputStream().use { input ->
+                                docs.openWrite(id).use { output ->
+                                    done += copy(input, output) { copied ->
+                                        _state.value = BackupState.Running(false, i + 1, selected.size, entry.label, done + copied, total)
+                                    }
                                 }
                             }
                         }
                     }
-                    docs.writeText(docs.create(folderId, JSON_MIME, AppBackup.ENTRY_NAME), entry.toJson().toString(2))
+                    var archives = emptyList<BackupData>()
+                    if (run != null && wanted.isNotEmpty()) {
+                        try {
+                            archives = writeData(docs, folderId, byName, entry, run, wanted) { sofar ->
+                                _state.value = BackupState.Running(false, i + 1, selected.size, entry.label, done + sofar, total)
+                            }
+                            done += archives.sumOf { it.size }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not take the data of ${entry.packageName}", e)
+                            dataFailed += entry.label
+                        }
+                    }
+                    // The folder holds the data as it was chosen this time: nothing of an
+                    // earlier choice, which the entry would not tell of, stays.
+                    val kept = archives.mapTo(HashSet()) { it.name }
+                    byName.values.filter { AppBackup.isDataName(it.name) && it.name !in kept }.forEach { docs.delete(it.id) }
+                    val made = entry.copy(data = archives)
+                    docs.writeText(docs.create(folderId, JSON_MIME, AppBackup.ENTRY_NAME), made.toJson().toString(2))
                     saved++
-                    written[entry.packageName] = entry
+                    written[entry.packageName] = made
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -585,7 +843,45 @@ object BackupManager {
             }
         }
         cancelled?.let { throw CancelledWith(indexWritten, it) }
-        return BackupState.Done(false, saved, skipped, failed, indexWritten)
+        return BackupState.Done(false, saved, skipped, failed, indexWritten, dataFailed = dataFailed)
+    }
+
+    /**
+     * Writes the data archives of [entry], one for each of [parts], into the app's folder
+     * [folderId], whose files [byName] are kept up to date; returns their descriptions. An
+     * archive that cannot be written whole is removed, and the rest are not written.
+     */
+    private suspend fun writeData(
+        docs: Documents,
+        folderId: String,
+        byName: MutableMap<String, Doc>,
+        entry: BackupEntry,
+        run: DataRun,
+        parts: List<String>,
+        onBytes: (Long) -> Unit
+    ): List<BackupData> {
+        val archives = ArrayList<BackupData>()
+        var before = 0L
+        for (part in parts) {
+            val name = DataCrypt.fileName(part, run.encrypt)
+            val id = byName[name]?.id ?: docs.create(folderId, DATA_MIME, name).also {
+                byName[name] = Doc(it, name, DATA_MIME, -1)
+            }
+            val counting = Counting(docs.openWrite(id))
+            try {
+                run.wrap(counting).use { sink ->
+                    RootData.archive(run.tar, part, entry.packageName, sink) { sofar -> onBytes(before + sofar) }
+                }
+            } catch (e: Throwable) {
+                runCatching { counting.close() }
+                docs.delete(id)
+                byName.remove(name)
+                throw e
+            }
+            archives += BackupData(name, counting.count)
+            before += counting.count
+        }
+        return archives
     }
 
     /** A cancel, carrying whether the folder's index was still written. */
@@ -625,11 +921,14 @@ object BackupManager {
         docs.writeText(id, text)
     }
 
-    private suspend fun install(context: Context, docs: Documents, selected: List<RestoreEntry>): BackupState {
-        val total = selected.sumOf { it.entry.size }
+    private suspend fun install(context: Context, docs: Documents, selected: List<RestoreEntry>, data: DataChoice): BackupState {
+        val total = selected.sumOf { it.entry.size + if (data.include) it.entry.dataSize else 0 }
         var done = 0L
         var saved = 0
         val failed = ArrayList<String>()
+        val dataFailed = ArrayList<String>()
+        var wrongPassword = false
+        val run = dataRun(data)
         selected.forEachIndexed { i, row ->
             coroutineContext.ensureActive()
             val entry = row.entry
@@ -669,6 +968,29 @@ object BackupManager {
                     // Either way the files are no longer ours.
                     null -> if (attempt == null) failed += entry.label
                 }
+                if (run != null && entry.data.isNotEmpty()) {
+                    if (outcome != Outcome.INSTALLED) {
+                        dataFailed += entry.label
+                    } else {
+                        val wrong = restoreData(context, run, entry) { archive ->
+                            files[archive.name]?.let { doc ->
+                                try {
+                                    docs.openRead(doc.id)
+                                } catch (e: IOException) {
+                                    Log.w(TAG, "Could not open ${archive.name} of ${entry.packageName}", e)
+                                    null
+                                }
+                            }
+                        }
+                        if (wrong != null) {
+                            dataFailed += entry.label
+                            if (wrong) wrongPassword = true
+                        }
+                        done += entry.dataSize
+                    }
+                } else if (data.include && entry.data.isNotEmpty()) {
+                    dataFailed += entry.label
+                }
             } catch (e: CancellationException) {
                 // The attempt begun is given up, when it is still ours to give up; its own
                 // cleanup takes the files. Files no attempt has taken are ours to remove.
@@ -680,7 +1002,7 @@ object BackupManager {
                 if (attempt == null) dir.deleteRecursively()
             }
         }
-        return BackupState.Done(true, saved, 0, failed)
+        return BackupState.Done(true, saved, 0, failed, dataFailed = dataFailed, wrongPassword = wrongPassword)
     }
 
     /**
