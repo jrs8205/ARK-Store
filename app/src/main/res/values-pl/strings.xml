@@ -284,6 +284,9 @@
     </plurals>
     <string name="backup_select_all">Wszystkie</string>
     <string name="backup_select_none">Żadne</string>
+    <string name="backup_filter_outside_play">Spoza Play</string>
+    <string name="restore_filter_missing">Brakujące</string>
+    <string name="backup_no_match">Żadna aplikacja nie pasuje do wyszukiwania.</string>
     <string name="backup_installer_by_hand">zainstalowana ręcznie</string>
     <string name="backup_unreadable">Nie można odczytać plików.</string>
     <string name="action_save_backup">Zapisz w folderze</string>
@@ -309,6 +312,8 @@
     <string name="backup_index_not_written">Nie udało się zapisać indeksu folderu ani pliku ustawień sklepu. Skopiowane aplikacje nadal można przywrócić z ich folderów.</string>
     <string name="backup_ways">Folder pozostaje aktualny: kolejna kopia zapasowa obejmuje tylko to, co się zmieniło, a aplikacja usunięta z urządzenia zostaje w nim, dopóki jej stamtąd nie usuniesz. Plik ZIP to jeden plik do przeniesienia na inny telefon lub do usługi w chmurze, takiej jak Google Drive, za każdym razem zapisywany od nowa w całości.</string>
     <string name="action_save_zip">Zapisz w pliku ZIP</string>
+    <string name="action_to_zip">W pliku ZIP</string>
+    <string name="backup_ways_question">Folder czy ZIP?</string>
     <string name="action_choose_zip">Wybierz plik ZIP</string>
     <string name="backup_zip_file">Plik ZIP: %1$s</string>
     <string name="restore_choose_source">Wybierz folder lub plik ZIP, w którym zapisano kopię zapasową.</string>
@@ -340,7 +345,7 @@
     <string name="backup_event_cancelled">anulowano</string>
     <string name="backup_event_failed">nie powiodło się</string>
     <string name="backup_include_data">Uwzględnij też dane samych aplikacji</string>
-    <string name="backup_include_data_detail">Z uprawnieniami roota: ustawienia, bazy danych i pliki każdej aplikacji, łącznie około %1$s. Pamięć podręczna jest pomijana.</string>
+    <string name="backup_include_data_detail">Z uprawnieniami roota, łącznie około %1$s. Pamięć podręczna jest pomijana.</string>
     <string name="backup_password_label">Hasło do danych</string>
     <string name="backup_password_hint">Dane zostaną nim zaszyfrowane. Hasło nie jest nigdzie zapisywane: bez niego nie da się przywrócić danych.</string>
     <string name="backup_password_empty">Bez hasła dane zostaną zapisane bez szyfrowania, łącznie z danymi logowania. Przechowuj kopię zapasową w bezpiecznym miejscu lub podaj hasło.</string>

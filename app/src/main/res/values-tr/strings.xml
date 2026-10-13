@@ -266,6 +266,9 @@
     </plurals>
     <string name="backup_select_all">Tümü</string>
     <string name="backup_select_none">Hiçbiri</string>
+    <string name="backup_filter_outside_play">Play dışı</string>
+    <string name="restore_filter_missing">Eksik</string>
+    <string name="backup_no_match">Aramayla eşleşen uygulama yok.</string>
     <string name="backup_installer_by_hand">elle yüklendi</string>
     <string name="backup_unreadable">Dosyalar okunamıyor.</string>
     <string name="action_save_backup">Klasöre kaydet</string>
@@ -291,6 +294,8 @@
     <string name="backup_index_not_written">Klasörün dizini ve mağazanın ayar dosyası yazılamadı. Kopyalanan uygulamalar yine de kendi klasörlerinden geri yüklenebilir.</string>
     <string name="backup_ways">Klasör güncel kalır: sonraki yedekleme yalnızca değişenleri kopyalar ve cihazdan kaldırılan bir uygulama, siz oradan silene kadar klasörde kalır. ZIP dosyası, başka bir telefona veya Google Drive gibi bir bulut hizmetine taşımak için tek bir dosyadır ve her seferinde tamamen yeniden yazılır.</string>
     <string name="action_save_zip">ZIP dosyasına kaydet</string>
+    <string name="action_to_zip">ZIP dosyasına</string>
+    <string name="backup_ways_question">Klasör mü, ZIP mi?</string>
     <string name="action_choose_zip">ZIP dosyası seç</string>
     <string name="backup_zip_file">ZIP dosyası: %1$s</string>
     <string name="restore_choose_source">Yedeğin kaydedildiği klasörü veya ZIP dosyasını seçin.</string>
@@ -318,7 +323,7 @@
     <string name="backup_event_cancelled">iptal edildi</string>
     <string name="backup_event_failed">başarısız oldu</string>
     <string name="backup_include_data">Uygulamaların kendi verilerini de yedekle</string>
-    <string name="backup_include_data_detail">Root ile: her uygulamanın ayarları, veritabanları ve dosyaları, toplamda yaklaşık %1$s. Önbellekler dahil edilmez.</string>
+    <string name="backup_include_data_detail">Root ile, toplamda yaklaşık %1$s. Önbellekler dahil edilmez.</string>
     <string name="backup_password_label">Veri parolası</string>
     <string name="backup_password_hint">Veriler bu parolayla şifrelenir. Parola hiçbir yerde saklanmaz; o olmadan veriler geri yüklenemez.</string>
     <string name="backup_password_empty">Parola olmadan veriler, oturum bilgileri dahil olduğu gibi kaydedilir. Yedeği güvenli bir yerde saklayın veya bir parola girin.</string>

@@ -284,6 +284,9 @@
     </plurals>
     <string name="backup_select_all">Усі</string>
     <string name="backup_select_none">Жодного</string>
+    <string name="backup_filter_outside_play">Не з Play</string>
+    <string name="restore_filter_missing">Відсутні</string>
+    <string name="backup_no_match">Жоден додаток не відповідає запиту.</string>
     <string name="backup_installer_by_hand">установлено вручну</string>
     <string name="backup_unreadable">Не вдається прочитати файли.</string>
     <string name="action_save_backup">Зберегти в папку</string>
@@ -309,6 +312,8 @@
     <string name="backup_index_not_written">Не вдалося записати індекс у папці й файл налаштувань магазину. Скопійовані додатки все одно можна відновити з їхніх папок.</string>
     <string name="backup_ways">Папка залишається актуальною: наступне резервне копіювання копіює лише те, що змінилося, а додаток, видалений із пристрою, залишається в ній, доки ви не видалите його звідти. ZIP-файл — це один файл для перенесення на інший телефон або в хмарний сервіс, як-от Google Drive; щоразу він записується повністю заново.</string>
     <string name="action_save_zip">Зберегти в ZIP-файл</string>
+    <string name="action_to_zip">У ZIP-файл</string>
+    <string name="backup_ways_question">Папка чи ZIP?</string>
     <string name="action_choose_zip">Вибрати ZIP-файл</string>
     <string name="backup_zip_file">ZIP-файл: %1$s</string>
     <string name="restore_choose_source">Виберіть папку або ZIP-файл, куди було збережено резервну копію.</string>
@@ -340,7 +345,7 @@
     <string name="backup_event_cancelled">скасовано</string>
     <string name="backup_event_failed">не вдалося</string>
     <string name="backup_include_data">Також зберегти дані самих додатків</string>
-    <string name="backup_include_data_detail">З root-правами: налаштування, бази даних і файли кожного додатка, загалом близько %1$s. Кеш не зберігається.</string>
+    <string name="backup_include_data_detail">З root-правами, загалом близько %1$s. Кеш не зберігається.</string>
     <string name="backup_password_label">Пароль для даних</string>
     <string name="backup_password_hint">Ним шифруються дані. Він ніде не зберігається: без нього дані не вдасться відновити.</string>
     <string name="backup_password_empty">Без пароля дані зберігаються як є, включно з обліковими даними. Тримайте резервну копію в надійному місці або задайте пароль.</string>

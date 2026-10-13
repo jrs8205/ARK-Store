@@ -266,6 +266,9 @@
     </plurals>
     <string name="backup_select_all">Alle</string>
     <string name="backup_select_none">Geen</string>
+    <string name="backup_filter_outside_play">Niet via Play</string>
+    <string name="restore_filter_missing">Ontbrekend</string>
+    <string name="backup_no_match">Geen app die overeenkomt met je zoekopdracht.</string>
     <string name="backup_installer_by_hand">handmatig geïnstalleerd</string>
     <string name="backup_unreadable">De bestanden kunnen niet worden gelezen.</string>
     <string name="action_save_backup">Opslaan in map</string>
@@ -291,6 +294,8 @@
     <string name="backup_index_not_written">De index in de map en het instellingenbestand van de store konden niet worden geschreven. De gekopieerde apps kunnen nog steeds uit hun eigen mappen worden teruggezet.</string>
     <string name="backup_ways">Een map blijft actueel: de volgende back-up kopieert alleen wat er is veranderd, en een app die van het apparaat is verwijderd, blijft erin staan totdat je deze daar verwijdert. Een zip-bestand is één bestand om naar een andere telefoon of een clouddienst zoals Google Drive over te zetten, en wordt elke keer helemaal opnieuw geschreven.</string>
     <string name="action_save_zip">Opslaan in zip-bestand</string>
+    <string name="action_to_zip">In zip-bestand</string>
+    <string name="backup_ways_question">Map of zip?</string>
     <string name="action_choose_zip">Zip-bestand kiezen</string>
     <string name="backup_zip_file">Zip-bestand: %1$s</string>
     <string name="restore_choose_source">Kies de map of het zip-bestand waarin de back-up is opgeslagen.</string>
@@ -318,7 +323,7 @@
     <string name="backup_event_cancelled">geannuleerd</string>
     <string name="backup_event_failed">mislukt</string>
     <string name="backup_include_data">Ook de gegevens van de apps zelf</string>
-    <string name="backup_include_data_detail">Met root: de instellingen, databases en bestanden van elke app, samen ongeveer %1$s. Caches gaan niet mee.</string>
+    <string name="backup_include_data_detail">Met root, samen ongeveer %1$s. Caches gaan niet mee.</string>
     <string name="backup_password_label">Wachtwoord voor de gegevens</string>
     <string name="backup_password_hint">De gegevens worden ermee versleuteld. Het wordt nergens bewaard: zonder dit wachtwoord kun je de gegevens niet terugzetten.</string>
     <string name="backup_password_empty">Zonder wachtwoord worden de gegevens onversleuteld opgeslagen, inclusief inloggegevens. Bewaar de back-up op een veilige plek of geef een wachtwoord op.</string>

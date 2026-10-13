@@ -284,6 +284,9 @@
     </plurals>
     <string name="backup_select_all">Все</string>
     <string name="backup_select_none">Ни одного</string>
+    <string name="backup_filter_outside_play">Не из Play</string>
+    <string name="restore_filter_missing">Недостающие</string>
+    <string name="backup_no_match">По запросу не найдено ни одного приложения.</string>
     <string name="backup_installer_by_hand">установлено вручную</string>
     <string name="backup_unreadable">Не удаётся прочитать файлы.</string>
     <string name="action_save_backup">Сохранить в папку</string>
@@ -309,6 +312,8 @@
     <string name="backup_index_not_written">Не удалось записать индекс в папке и файл настроек магазина. Скопированные приложения всё равно можно восстановить из их папок.</string>
     <string name="backup_ways">Папка всегда актуальна: при следующем резервном копировании копируется только то, что изменилось, а приложение, удалённое с устройства, остаётся в ней, пока вы не удалите его оттуда. ZIP-файл — это один файл для переноса на другой телефон или в облачный сервис, например Google Drive; каждый раз он записывается заново целиком.</string>
     <string name="action_save_zip">Сохранить в ZIP-файл</string>
+    <string name="action_to_zip">В ZIP-файл</string>
+    <string name="backup_ways_question">Папка или ZIP?</string>
     <string name="action_choose_zip">Выбрать ZIP-файл</string>
     <string name="backup_zip_file">ZIP-файл: %1$s</string>
     <string name="restore_choose_source">Выберите папку или ZIP-файл, куда была сохранена резервная копия.</string>
@@ -340,7 +345,7 @@
     <string name="backup_event_cancelled">отменено</string>
     <string name="backup_event_failed">не удалось</string>
     <string name="backup_include_data">Также сохранить данные самих приложений</string>
-    <string name="backup_include_data_detail">С root-правами: настройки, базы данных и файлы каждого приложения, всего около %1$s. Кеш не сохраняется.</string>
+    <string name="backup_include_data_detail">С root-правами, всего около %1$s. Кеш не сохраняется.</string>
     <string name="backup_password_label">Пароль для данных</string>
     <string name="backup_password_hint">Данные шифруются этим паролем. Он нигде не хранится: без него восстановить данные нельзя.</string>
     <string name="backup_password_empty">Без пароля данные сохраняются как есть, включая учётные данные. Храните резервную копию в надёжном месте или задайте пароль.</string>

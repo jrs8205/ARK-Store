@@ -257,6 +257,9 @@
     </plurals>
     <string name="backup_select_all">모두 선택</string>
     <string name="backup_select_none">선택 해제</string>
+    <string name="backup_filter_outside_play">Play 외부</string>
+    <string name="restore_filter_missing">없는 앱</string>
+    <string name="backup_no_match">검색과 일치하는 앱이 없습니다.</string>
     <string name="backup_installer_by_hand">직접 설치</string>
     <string name="backup_unreadable">파일을 읽을 수 없습니다.</string>
     <string name="action_save_backup">폴더에 저장</string>
@@ -282,6 +285,8 @@
     <string name="backup_index_not_written">폴더의 색인과 스토어 설정 파일을 쓸 수 없었습니다. 복사된 앱은 여전히 각 앱의 폴더에서 복원할 수 있습니다.</string>
     <string name="backup_ways">폴더는 최신 상태로 유지됩니다. 다음 백업 때는 변경된 항목만 복사되며, 기기에서 제거한 앱은 폴더에서 직접 삭제할 때까지 폴더에 남아 있습니다. ZIP 파일은 다른 휴대전화나 Google Drive 같은 클라우드 서비스로 옮기기 위한 하나의 파일이며, 매번 전체가 새로 기록됩니다.</string>
     <string name="action_save_zip">ZIP 파일에 저장</string>
+    <string name="action_to_zip">ZIP 파일로</string>
+    <string name="backup_ways_question">폴더 또는 ZIP?</string>
     <string name="action_choose_zip">ZIP 파일 선택</string>
     <string name="backup_zip_file">ZIP 파일: %1$s</string>
     <string name="restore_choose_source">백업을 저장한 폴더나 ZIP 파일을 선택하세요.</string>
@@ -307,7 +312,7 @@
     <string name="backup_event_cancelled">취소됨</string>
     <string name="backup_event_failed">실패</string>
     <string name="backup_include_data">앱 자체의 데이터도 포함</string>
-    <string name="backup_include_data_detail">루트 권한으로 각 앱의 설정, 데이터베이스, 파일을 백업합니다(총 약 %1$s). 캐시는 제외됩니다.</string>
+    <string name="backup_include_data_detail">루트 권한으로 백업합니다(총 약 %1$s). 캐시는 제외됩니다.</string>
     <string name="backup_password_label">데이터 비밀번호</string>
     <string name="backup_password_hint">데이터가 이 비밀번호로 암호화됩니다. 비밀번호는 어디에도 저장되지 않으므로, 비밀번호가 없으면 데이터를 복원할 수 없습니다.</string>
     <string name="backup_password_empty">비밀번호가 없으면 데이터가 로그인 정보까지 포함해 그대로 저장됩니다. 백업을 안전한 곳에 보관하거나 비밀번호를 입력하세요.</string>

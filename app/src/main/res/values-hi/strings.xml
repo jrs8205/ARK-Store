@@ -266,6 +266,9 @@
     </plurals>
     <string name="backup_select_all">सभी</string>
     <string name="backup_select_none">कोई नहीं</string>
+    <string name="backup_filter_outside_play">Play के बाहर से</string>
+    <string name="restore_filter_missing">गायब</string>
+    <string name="backup_no_match">खोज से मेल खाने वाला कोई ऐप नहीं मिला।</string>
     <string name="backup_installer_by_hand">मैन्युअल रूप से इंस्टॉल किया गया</string>
     <string name="backup_unreadable">फ़ाइलें पढ़ी नहीं जा सकतीं।</string>
     <string name="action_save_backup">फ़ोल्डर में सेव करें</string>
@@ -291,6 +294,8 @@
     <string name="backup_index_not_written">फ़ोल्डर का इंडेक्स और स्टोर की सेटिंग फ़ाइल नहीं लिखे जा सके। कॉपी किए गए ऐप अब भी अपने-अपने फ़ोल्डर से रीस्टोर किए जा सकते हैं।</string>
     <string name="backup_ways">फ़ोल्डर अप-टू-डेट रहता है: अगले बैकअप में सिर्फ़ वही कॉपी होता है जो बदला है, और डिवाइस से हटाया गया ऐप उसमें तब तक रहता है, जब तक आप उसे वहां से मिटा नहीं देते। ZIP फ़ाइल एक ही फ़ाइल होती है, जिसे दूसरे फ़ोन पर या Google Drive जैसी क्लाउड सेवा में ले जाया जा सकता है; इसे हर बार पूरा नए सिरे से लिखा जाता है।</string>
     <string name="action_save_zip">ZIP फ़ाइल में सेव करें</string>
+    <string name="action_to_zip">ZIP फ़ाइल में</string>
+    <string name="backup_ways_question">फ़ोल्डर या ZIP?</string>
     <string name="action_choose_zip">ZIP फ़ाइल चुनें</string>
     <string name="backup_zip_file">ZIP फ़ाइल: %1$s</string>
     <string name="restore_choose_source">वह फ़ोल्डर या ZIP फ़ाइल चुनें, जिसमें बैकअप सेव किया गया था।</string>
@@ -318,7 +323,7 @@
     <string name="backup_event_cancelled">रद्द किया गया</string>
     <string name="backup_event_failed">विफल</string>
     <string name="backup_include_data">ऐप का अपना डेटा भी शामिल करें</string>
-    <string name="backup_include_data_detail">रूट से: हर ऐप की सेटिंग, डेटाबेस और फ़ाइलें, कुल मिलाकर लगभग %1$s। कैश शामिल नहीं किया जाता।</string>
+    <string name="backup_include_data_detail">रूट से, कुल मिलाकर लगभग %1$s। कैश शामिल नहीं किया जाता।</string>
     <string name="backup_password_label">डेटा का पासवर्ड</string>
     <string name="backup_password_hint">डेटा इसी से एन्क्रिप्ट किया जाता है। यह कहीं सेव नहीं होता: इसके बिना डेटा वापस नहीं लाया जा सकता।</string>
     <string name="backup_password_empty">पासवर्ड के बिना डेटा जैसा है वैसा ही सेव होता है, लॉगिन समेत। बैकअप को किसी सुरक्षित जगह रखें या पासवर्ड डालें।</string>

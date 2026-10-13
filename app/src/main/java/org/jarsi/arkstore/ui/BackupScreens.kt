@@ -9,6 +9,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,10 +22,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -57,7 +62,11 @@ import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.localKey
 
-/** Chooses the installed apps to copy, and copies them to the folder or to a zip file. */
+/**
+ * Chooses the installed apps to copy, and copies them to the folder or to a zip file. The
+ * list of apps has the height of the page: the search and the ways to choose stay above
+ * it, and what goes with the apps (their data, the password) and where they go stay below.
+ */
 @Composable
 internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String, onBack: () -> Unit) {
     val tree by viewModel.tree.collectAsStateWithLifecycle()
@@ -75,6 +84,9 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     var noPicker by rememberSaveable { mutableStateOf(false) }
     // A save to a folder not chosen yet asks for one first, and goes on once it is chosen.
     var saveWhenChosen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var outsidePlayOnly by rememberSaveable { mutableStateOf(false) }
+    var explainWays by rememberSaveable { mutableStateOf(false) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) {
             viewModel.chooseTree(uri)
@@ -89,26 +101,6 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     LaunchedEffect(installedChanged) { viewModel.loadCandidates() }
     LaunchedEffect(Unit) { viewModel.checkDataAvailable() }
     StorePage(title = stringResource(R.string.action_backup_apps), onBack = onBack, scrolling = false) {
-        SourceLine(
-            text = when {
-                noPicker -> stringResource(R.string.backup_no_picker)
-                tree == null -> stringResource(R.string.backup_no_folder)
-                else -> stringResource(R.string.backup_folder, folderName(tree!!))
-            },
-            error = noPicker
-        )
-        if (tree != null) {
-            StoreOutlinedButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    noPicker = !launch { folderPicker.launch(tree) }
-                },
-                enabled = !running,
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                Text(stringResource(R.string.action_change_folder))
-            }
-        }
         val list = candidates
         if (list == null) {
             Text(
@@ -119,41 +111,25 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
             Spacer(Modifier.weight(1f))
         } else {
             val chosen = list.filter { it.entry.packageName in selected }
-            SelectionBar(
+            val shown = list.filter { candidate ->
+                (!outsidePlayOnly || Installers.preselected(candidate.entry.installer)) && matches(candidate.entry, query)
+            }
+            SearchField(query = query, onQueryChange = { query = it }, modifier = Modifier.padding(top = 4.dp))
+            SelectionTools(
                 count = chosen.size,
                 bytes = chosen.sumOf { it.entry.size + if (withData) dataBytes(it) else 0 },
                 enabled = !running,
-                onAll = { viewModel.selectAll(true) },
-                onNone = { viewModel.selectAll(false) }
+                onAll = { viewModel.selectAll(true, shown.map { it.entry.packageName }) },
+                onNone = { viewModel.selectAll(false, shown.map { it.entry.packageName }) },
+                filterLabel = stringResource(R.string.backup_filter_outside_play),
+                filterOn = outsidePlayOnly,
+                onFilter = { outsidePlayOnly = !outsidePlayOnly }
             )
-            if (dataAvailable) {
-                CheckRow(
-                    checked = includeData,
-                    enabled = !running,
-                    onCheckedChange = viewModel::setIncludeData,
-                    title = stringResource(R.string.backup_include_data),
-                    detail = stringResource(
-                        R.string.backup_include_data_detail,
-                        Formatter.formatShortFileSize(context, chosen.sumOf { dataBytes(it) })
-                    ),
-                    note = null,
-                    noteIsError = false
-                )
-                if (includeData) {
-                    PasswordField(
-                        value = password,
-                        onValueChange = viewModel::setPassword,
-                        enabled = !running,
-                        label = stringResource(R.string.backup_password_label),
-                        supporting = stringResource(
-                            if (password.isEmpty()) R.string.backup_password_empty else R.string.backup_password_hint
-                        ),
-                        warn = password.isEmpty()
-                    )
-                }
-            }
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                items(list, key = { it.entry.packageName }) { candidate ->
+                if (shown.isEmpty()) {
+                    item(key = "none") { NoMatch() }
+                }
+                items(shown, key = { it.entry.packageName }) { candidate ->
                     val entry = candidate.entry
                     val data = candidate.dataSize?.takeIf { withData }?.let {
                         stringResource(R.string.backup_data_size, Formatter.formatShortFileSize(context, it))
@@ -176,37 +152,82 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
             }
         }
         val canStart = list != null && list.any { it.readable && it.entry.packageName in selected }
+        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
         JobFooter(state = state, onCancel = viewModel::cancel, onDismiss = viewModel::dismiss) {
-            Text(
-                text = stringResource(R.string.backup_ways),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 8.dp)
+            if (dataAvailable) {
+                val chosenData = candidates.orEmpty().filter { it.entry.packageName in selected }.sumOf { dataBytes(it) }
+                CheckRow(
+                    checked = includeData,
+                    enabled = !running,
+                    onCheckedChange = viewModel::setIncludeData,
+                    title = stringResource(R.string.backup_include_data),
+                    detail = stringResource(R.string.backup_include_data_detail, Formatter.formatShortFileSize(context, chosenData)),
+                    note = null,
+                    noteIsError = false
+                )
+                if (includeData) {
+                    PasswordField(
+                        value = password,
+                        onValueChange = viewModel::setPassword,
+                        enabled = !running,
+                        label = stringResource(R.string.backup_password_label),
+                        supporting = stringResource(
+                            if (password.isEmpty()) R.string.backup_password_empty else R.string.backup_password_hint
+                        ),
+                        warn = password.isEmpty()
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                StoreButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        if (tree != null) {
+                            viewModel.startBackup(settingsJson())
+                        } else {
+                            saveWhenChosen = true
+                            noPicker = !launch { folderPicker.launch(null) }
+                        }
+                    },
+                    enabled = canStart,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_save_backup))
+                }
+                StoreOutlinedButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        noPicker = !launch { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
+                    },
+                    enabled = canStart,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_to_zip))
+                }
+            }
+            if (explainWays) {
+                Text(
+                    text = stringResource(R.string.backup_ways),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+            DestinationLine(
+                text = when {
+                    noPicker -> stringResource(R.string.backup_no_picker)
+                    tree == null -> stringResource(R.string.backup_no_folder)
+                    else -> stringResource(R.string.backup_folder, folderName(tree!!))
+                },
+                error = noPicker,
+                enabled = !running,
+                actions = listOf(
+                    stringResource(if (tree == null) R.string.action_choose_folder else R.string.action_change_folder) to {
+                        noPicker = !launch { folderPicker.launch(tree) }
+                    },
+                    stringResource(R.string.backup_ways_question) to { explainWays = !explainWays }
+                )
             )
-            StoreButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    if (tree != null) {
-                        viewModel.startBackup(settingsJson())
-                    } else {
-                        saveWhenChosen = true
-                        noPicker = !launch { folderPicker.launch(null) }
-                    }
-                },
-                enabled = canStart
-            ) {
-                Text(stringResource(R.string.action_save_backup))
-            }
-            StoreOutlinedButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    noPicker = !launch { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
-                },
-                enabled = canStart,
-                modifier = Modifier.padding(top = 8.dp)
-            ) {
-                Text(stringResource(R.string.action_save_zip))
-            }
         }
     }
 }
@@ -232,6 +253,8 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val haptics = LocalHapticFeedback.current
     val running = state is BackupState.Running
     var noPicker by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var missingOnly by rememberSaveable { mutableStateOf(false) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) viewModel.chooseTree(uri)
     }
@@ -246,38 +269,26 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     LaunchedEffect(Unit) { viewModel.checkDataAvailable() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
         val read = folder
-        SourceLine(
+        DestinationLine(
             text = when {
                 noPicker -> stringResource(R.string.backup_no_picker)
                 zip != null -> stringResource(R.string.backup_zip_file, read?.name ?: zip!!.lastPathSegment.orEmpty())
                 tree != null -> stringResource(R.string.backup_folder, read?.name ?: folderName(tree!!))
                 else -> stringResource(R.string.restore_choose_source)
             },
-            error = noPicker
-        )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 8.dp)
-        ) {
-            StoreOutlinedButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+            error = noPicker,
+            enabled = !running,
+            actions = listOf(
+                stringResource(if (tree == null || isZip) R.string.action_choose_folder else R.string.action_change_folder) to {
                     noPicker = !launch { folderPicker.launch(tree) }
                 },
-                enabled = !running
-            ) {
-                Text(stringResource(if (tree == null || isZip) R.string.action_choose_folder else R.string.action_change_folder))
-            }
-            StoreOutlinedButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                stringResource(R.string.action_choose_zip) to {
                     noPicker = !launch { zipPicker.launch(arrayOf("*/*")) }
-                },
-                enabled = !running
-            ) {
-                Text(stringResource(R.string.action_choose_zip))
-            }
-        }
+                }
+            )
+        )
+        val hasData = read?.entries?.any { it.entry.data.isNotEmpty() } == true
+        val withData = hasData && dataAvailable && restoreData
         when {
             zip == null && tree == null -> Spacer(Modifier.weight(1f))
             read == null -> {
@@ -306,43 +317,18 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
             }
             else -> {
                 val chosen = read.entries.filter { it.status.selectable && it.entry.packageName in selected }
-                val hasData = read.entries.any { it.entry.data.isNotEmpty() }
-                val withData = hasData && dataAvailable && restoreData
-                SelectionBar(
+                val shown = read.entries.filter { row -> (!missingOnly || row.status.preselected) && matches(row.entry, query) }
+                SearchField(query = query, onQueryChange = { query = it }, modifier = Modifier.padding(top = 4.dp))
+                SelectionTools(
                     count = chosen.size,
                     bytes = chosen.sumOf { it.entry.size + if (withData) it.entry.dataSize else 0 },
                     enabled = !running,
-                    onAll = { viewModel.selectAllRestore(true) },
-                    onNone = { viewModel.selectAllRestore(false) }
+                    onAll = { viewModel.selectAllRestore(true, shown.map { it.entry.packageName }) },
+                    onNone = { viewModel.selectAllRestore(false, shown.map { it.entry.packageName }) },
+                    filterLabel = stringResource(R.string.restore_filter_missing),
+                    filterOn = missingOnly,
+                    onFilter = { missingOnly = !missingOnly }
                 )
-                if (hasData && dataAvailable) {
-                    CheckRow(
-                        checked = restoreData,
-                        enabled = !running,
-                        onCheckedChange = viewModel::setRestoreData,
-                        title = stringResource(R.string.restore_include_data),
-                        detail = stringResource(R.string.restore_include_data_detail),
-                        note = null,
-                        noteIsError = false
-                    )
-                    if (restoreData && chosen.any { row -> row.entry.data.any { it.encrypted } }) {
-                        PasswordField(
-                            value = restorePassword,
-                            onValueChange = viewModel::setRestorePassword,
-                            enabled = !running,
-                            label = stringResource(R.string.restore_password_label),
-                            supporting = null,
-                            warn = false
-                        )
-                    }
-                } else if (hasData) {
-                    Text(
-                        text = stringResource(R.string.restore_data_needs_root),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     if (read.settings != null) {
                         item(key = AppBackup.SETTINGS_NAME) {
@@ -357,7 +343,10 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                             )
                         }
                     }
-                    items(read.entries, key = { it.entry.packageName }) { row ->
+                    if (shown.isEmpty()) {
+                        item(key = "none") { NoMatch() }
+                    }
+                    items(shown, key = { it.entry.packageName }) { row ->
                         val entry = row.entry
                         val install = installs[localKey(entry.packageName)]
                         val note = when {
@@ -388,15 +377,48 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
             read.entries.any { it.status.selectable && it.entry.packageName in selected } ||
                 (importSettings && read.settings != null)
             )
+        HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
         JobFooter(state = state, onCancel = viewModel::cancel, onDismiss = viewModel::dismiss) {
-            StoreButton(
-                onClick = {
-                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                    viewModel.startRestore(onImportSettings)
-                },
-                enabled = canStart
-            ) {
-                Text(stringResource(R.string.action_restore))
+            if (hasData && dataAvailable) {
+                CheckRow(
+                    checked = restoreData,
+                    enabled = !running,
+                    onCheckedChange = viewModel::setRestoreData,
+                    title = stringResource(R.string.restore_include_data),
+                    detail = stringResource(R.string.restore_include_data_detail),
+                    note = null,
+                    noteIsError = false
+                )
+                val chosen = read?.entries.orEmpty().filter { it.status.selectable && it.entry.packageName in selected }
+                if (restoreData && chosen.any { row -> row.entry.data.any { it.encrypted } }) {
+                    PasswordField(
+                        value = restorePassword,
+                        onValueChange = viewModel::setRestorePassword,
+                        enabled = !running,
+                        label = stringResource(R.string.restore_password_label),
+                        supporting = null,
+                        warn = false
+                    )
+                }
+            } else if (hasData) {
+                Text(
+                    text = stringResource(R.string.restore_data_needs_root),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                StoreButton(
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                        viewModel.startRestore(onImportSettings)
+                    },
+                    enabled = canStart,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.action_restore))
+                }
             }
         }
     }
@@ -410,15 +432,10 @@ private inline fun launch(open: () -> Unit): Boolean = try {
     false
 }
 
-/** What the page works with: the folder, the zip file, or what to choose. */
-@Composable
-private fun SourceLine(text: String, error: Boolean) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 8.dp)
-    )
+/** Whether [entry] is one the user looks for with [query]: by its name or its package. */
+private fun matches(entry: BackupEntry, query: String): Boolean {
+    val q = query.trim()
+    return q.isEmpty() || entry.label.contains(q, ignoreCase = true) || entry.packageName.contains(q, ignoreCase = true)
 }
 
 /** The folder's path as the provider names it, for a folder whose own name has not been read. */
@@ -431,19 +448,66 @@ internal fun folderName(tree: Uri): String {
     return id.substringAfter(':').ifEmpty { id }
 }
 
-/** How many are chosen and how much they weigh, with the way to choose all or none. */
+/**
+ * Where the backup goes or comes from, with the ways to change it as small buttons after
+ * the text, on one line where they fit and wrapped where they do not.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SelectionBar(count: Int, bytes: Long, enabled: Boolean, onAll: () -> Unit, onNone: () -> Unit) {
+private fun DestinationLine(text: String, error: Boolean, enabled: Boolean, actions: List<Pair<String, () -> Unit>>) {
+    val haptics = LocalHapticFeedback.current
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        for ((label, action) in actions) {
+            // No room at the start: a button that wraps to a line of its own begins where the text does.
+            TextButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    action()
+                },
+                enabled = enabled,
+                contentPadding = PaddingValues(start = 0.dp, end = 12.dp, top = 8.dp, bottom = 8.dp)
+            ) {
+                Text(label)
+            }
+        }
+    }
+}
+
+/**
+ * How many are chosen and how much they weigh, with the ways to choose all or none of the
+ * apps on the screen, and a chip that narrows the screen to [filterLabel].
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionTools(
+    count: Int,
+    bytes: Long,
+    enabled: Boolean,
+    onAll: () -> Unit,
+    onNone: () -> Unit,
+    filterLabel: String,
+    filterOn: Boolean,
+    onFilter: () -> Unit
+) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     Text(
         text = pluralStringResource(R.plurals.backup_selected, count, count, Formatter.formatShortFileSize(context, bytes)),
-        style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier.padding(top = 16.dp)
+        style = MaterialTheme.typography.bodyMedium,
+        modifier = Modifier.padding(top = 8.dp)
     )
-    Row(
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)
+        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
     ) {
         StoreOutlinedButton(
             onClick = {
@@ -463,7 +527,19 @@ private fun SelectionBar(count: Int, bytes: Long, enabled: Boolean, onAll: () ->
         ) {
             Text(stringResource(R.string.backup_select_none))
         }
+        ChoiceChip(selected = filterOn, label = filterLabel, onClick = onFilter)
     }
+}
+
+/** Nothing on the screen: the search or the filter leaves no app. */
+@Composable
+private fun NoMatch() {
+    Text(
+        text = stringResource(R.string.backup_no_match),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(vertical = 16.dp)
+    )
 }
 
 /** A row of the list: a box to tick, the app's name, a line about it, and a note when there is one. */

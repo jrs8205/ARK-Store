@@ -266,6 +266,9 @@
     </plurals>
     <string name="backup_select_all">Kaikki</string>
     <string name="backup_select_none">Ei mitään</string>
+    <string name="backup_filter_outside_play">Ei Playsta</string>
+    <string name="restore_filter_missing">Puuttuvat</string>
+    <string name="backup_no_match">Hakua vastaavia sovelluksia ei ole.</string>
     <string name="backup_installer_by_hand">asennettu käsin</string>
     <string name="backup_unreadable">Tiedostoja ei voi lukea.</string>
     <string name="action_save_backup">Tallenna kansioon</string>
@@ -289,8 +292,10 @@
     <string name="restore_installing">Asennetaan…</string>
     <string name="restore_fail_invalid">Kansion tiedosto ei ole kelvollinen sovelluspaketti.</string>
     <string name="backup_index_not_written">Kansion luetteloa ja kaupan asetustiedostoa ei voitu kirjoittaa. Kopioidut sovellukset voi silti palauttaa niiden kansioista.</string>
-    <string name="backup_ways">Kansio pysyy ajan tasalla: seuraava varmuuskopio kopioi vain muuttuneet, ja puhelimesta poistettu sovellus jää kansioon, kunnes poistat sen sieltä. Zip-tiedosto on yksi tiedosto siirtoon toiseen puhelimeen tai pilveen, kuten Google Driveen, ja se kirjoitetaan joka kerta kokonaan.</string>
+    <string name="backup_ways">Kansio pysyy ajan tasalla: seuraava varmuuskopio kopioi vain muuttuneet sovellukset, ja puhelimesta poistettu sovellus säilyy kansiossa, kunnes poistat sen sieltä. Zip on yksi tiedosto, jonka voi siirtää toiseen puhelimeen tai pilvipalveluun, kuten Google Driveen; se kirjoitetaan joka kerta kokonaan uudelleen.</string>
     <string name="action_save_zip">Tallenna zip-tiedostoon</string>
+    <string name="action_to_zip">Zip-tiedostoon</string>
+    <string name="backup_ways_question">Kansio vai zip?</string>
     <string name="action_choose_zip">Valitse zip-tiedosto</string>
     <string name="backup_zip_file">Zip-tiedosto: %1$s</string>
     <string name="restore_choose_source">Valitse kansio tai zip-tiedosto, johon varmuuskopio on tallennettu.</string>
@@ -318,7 +323,7 @@
     <string name="backup_event_cancelled">keskeytetty</string>
     <string name="backup_event_failed">epäonnistui</string>
     <string name="backup_include_data">Myös sovellusten omat tiedot</string>
-    <string name="backup_include_data_detail">Rootilla: jokaisen sovelluksen asetukset, tietokannat ja tiedostot, yhteensä noin %1$s. Välimuistit jäävät pois.</string>
+    <string name="backup_include_data_detail">Rootilla, yhteensä noin %1$s. Välimuistit jäävät pois.</string>
     <string name="backup_password_label">Tietojen salasana</string>
     <string name="backup_password_hint">Tiedot salataan sillä. Sitä ei tallenneta mihinkään: ilman sitä tietoja ei saa takaisin.</string>
     <string name="backup_password_empty">Ilman salasanaa tiedot tallennetaan sellaisinaan kirjautumisineen. Säilytä varmuuskopio turvallisessa paikassa tai anna salasana.</string>

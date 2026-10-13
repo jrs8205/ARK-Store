@@ -275,6 +275,9 @@
     </plurals>
     <string name="backup_select_all">Todos</string>
     <string name="backup_select_none">Nenhum</string>
+    <string name="backup_filter_outside_play">Fora do Play</string>
+    <string name="restore_filter_missing">Faltando</string>
+    <string name="backup_no_match">Nenhum app corresponde à pesquisa.</string>
     <string name="backup_installer_by_hand">instalado manualmente</string>
     <string name="backup_unreadable">Não é possível ler os arquivos.</string>
     <string name="action_save_backup">Salvar na pasta</string>
@@ -300,6 +303,8 @@
     <string name="backup_index_not_written">Não foi possível gravar o índice da pasta e o arquivo de configurações da loja. Os apps copiados ainda podem ser restaurados a partir das respectivas pastas.</string>
     <string name="backup_ways">Uma pasta fica em dia: o próximo backup copia só o que mudou, e um app removido do dispositivo continua nela até você apagá-lo de lá. Um arquivo ZIP é um único arquivo para levar a outro celular ou a um serviço de nuvem como o Google Drive, gravado por inteiro a cada vez.</string>
     <string name="action_save_zip">Salvar em arquivo ZIP</string>
+    <string name="action_to_zip">Em arquivo ZIP</string>
+    <string name="backup_ways_question">Pasta ou ZIP?</string>
     <string name="action_choose_zip">Escolher arquivo ZIP</string>
     <string name="backup_zip_file">Arquivo ZIP: %1$s</string>
     <string name="restore_choose_source">Escolha a pasta ou o arquivo ZIP em que o backup foi salvo.</string>
@@ -329,7 +334,7 @@
     <string name="backup_event_cancelled">cancelado</string>
     <string name="backup_event_failed">falhou</string>
     <string name="backup_include_data">Salvar também os dados dos próprios apps</string>
-    <string name="backup_include_data_detail">Com root: as configurações, os bancos de dados e os arquivos de cada app, cerca de %1$s no total. Os caches ficam de fora.</string>
+    <string name="backup_include_data_detail">Com root, cerca de %1$s no total. Os caches ficam de fora.</string>
     <string name="backup_password_label">Senha dos dados</string>
     <string name="backup_password_hint">Ela é usada para criptografar os dados e não fica guardada em lugar nenhum: sem ela, não é possível recuperá-los.</string>
     <string name="backup_password_empty">Sem senha, os dados são salvos como estão, incluindo os logins. Guarde o backup em um lugar seguro ou informe uma senha.</string>

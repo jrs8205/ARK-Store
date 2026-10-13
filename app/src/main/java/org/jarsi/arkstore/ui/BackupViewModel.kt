@@ -208,10 +208,11 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         _candidates.value?.let(::chooseForBackup)
     }
 
-    /** Chooses every app whose files can be read, or none. */
-    fun selectAll(all: Boolean) {
+    /** Chooses every app whose files can be read, or none; [among] the apps on the screen alone when it is given. */
+    fun selectAll(all: Boolean, among: Collection<String>? = null) {
         val list = _candidates.value ?: return
-        backupSaid = backupSaid.all(list.filter { it.readable }.map { it.entry.packageName }, all)
+        val names = list.filter { it.readable && (among == null || it.entry.packageName in among) }.map { it.entry.packageName }
+        backupSaid = backupSaid.all(names, all)
         chooseForBackup(list)
     }
 
@@ -294,9 +295,11 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         _folder.value?.let(::chooseForRestore)
     }
 
-    fun selectAllRestore(all: Boolean) {
+    /** Chooses every app that can be restored, or none; [among] the apps on the screen alone when it is given. */
+    fun selectAllRestore(all: Boolean, among: Collection<String>? = null) {
         val folder = _folder.value ?: return
-        restoreSaid = restoreSaid.all(folder.entries.filter { it.status.selectable }.map { it.entry.packageName }, all)
+        val names = folder.entries.filter { it.status.selectable && (among == null || it.entry.packageName in among) }.map { it.entry.packageName }
+        restoreSaid = restoreSaid.all(names, all)
         chooseForRestore(folder)
     }
 

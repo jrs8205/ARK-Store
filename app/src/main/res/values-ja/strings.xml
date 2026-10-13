@@ -257,6 +257,9 @@
     </plurals>
     <string name="backup_select_all">すべて選択</string>
     <string name="backup_select_none">選択解除</string>
+    <string name="backup_filter_outside_play">Play 以外</string>
+    <string name="restore_filter_missing">不足分</string>
+    <string name="backup_no_match">検索に一致するアプリはありません。</string>
     <string name="backup_installer_by_hand">手動でインストール</string>
     <string name="backup_unreadable">ファイルを読み込めません。</string>
     <string name="action_save_backup">フォルダに保存</string>
@@ -282,6 +285,8 @@
     <string name="backup_index_not_written">フォルダのインデックスとストアの設定ファイルを書き込めませんでした。コピーされたアプリは、それぞれのフォルダから引き続き復元できます。</string>
     <string name="backup_ways">フォルダは最新の状態に保たれます。次回のバックアップでは変更された分だけがコピーされ、デバイスから削除したアプリは、フォルダで削除するまでそこに残ります。ZIP ファイルは、別のスマートフォンや Google Drive などのクラウドサービスに移すための 1 つのファイルで、毎回すべて書き直されます。</string>
     <string name="action_save_zip">ZIP ファイルに保存</string>
+    <string name="action_to_zip">ZIP ファイルへ</string>
+    <string name="backup_ways_question">フォルダか ZIP か？</string>
     <string name="action_choose_zip">ZIP ファイルを選択</string>
     <string name="backup_zip_file">ZIP ファイル：%1$s</string>
     <string name="restore_choose_source">バックアップを保存したフォルダまたは ZIP ファイルを選択してください。</string>
@@ -307,7 +312,7 @@
     <string name="backup_event_cancelled">キャンセル済み</string>
     <string name="backup_event_failed">失敗</string>
     <string name="backup_include_data">アプリ自体のデータも含める</string>
-    <string name="backup_include_data_detail">Root 権限で、各アプリの設定、データベース、ファイルをコピーします（合計約 %1$s）。キャッシュは含まれません。</string>
+    <string name="backup_include_data_detail">Root 権限でコピーします（合計約 %1$s）。キャッシュは含まれません。</string>
     <string name="backup_password_label">データのパスワード</string>
     <string name="backup_password_hint">データはこのパスワードで暗号化されます。パスワードはどこにも保存されず、これがなければデータは復元できません。</string>
     <string name="backup_password_empty">パスワードを設定しない場合、データはログイン情報も含めてそのまま保存されます。バックアップを安全な場所に保管するか、パスワードを入力してください。</string>

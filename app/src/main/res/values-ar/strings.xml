@@ -302,6 +302,9 @@
     </plurals>
     <string name="backup_select_all">الكل</string>
     <string name="backup_select_none">لا شيء</string>
+    <string name="backup_filter_outside_play">من خارج Play</string>
+    <string name="restore_filter_missing">الناقصة</string>
+    <string name="backup_no_match">لا يوجد تطبيق يطابق البحث.</string>
     <string name="backup_installer_by_hand">مثبّت يدويًا</string>
     <string name="backup_unreadable">تتعذّر قراءة الملفات.</string>
     <string name="action_save_backup">حفظ في المجلد</string>
@@ -327,6 +330,8 @@
     <string name="backup_index_not_written">تعذّرت كتابة فهرس المجلد وملف إعدادات المتجر. لا يزال بالإمكان استعادة التطبيقات المنسوخة من مجلداتها.</string>
     <string name="backup_ways">يبقى المجلد محدّثًا: لا يُنسخ في النسخ الاحتياطي التالي إلا ما تغيّر، ويبقى التطبيق الذي أُزيل من الجهاز فيه إلى أن تحذفه منه. أما ملف ZIP فهو ملف واحد للنقل إلى هاتف آخر أو إلى خدمة سحابية مثل Google Drive، ويُكتب كاملًا من جديد في كل مرة.</string>
     <string name="action_save_zip">حفظ في ملف ZIP</string>
+    <string name="action_to_zip">في ملف ZIP</string>
+    <string name="backup_ways_question">مجلد أم ملف ZIP؟</string>
     <string name="action_choose_zip">اختيار ملف ZIP</string>
     <string name="backup_zip_file">ملف ZIP: %1$s</string>
     <string name="restore_choose_source">اختر المجلد أو ملف ZIP الذي حُفظت فيه النسخة الاحتياطية.</string>
@@ -362,7 +367,7 @@
     <string name="backup_event_cancelled">تم الإلغاء</string>
     <string name="backup_event_failed">فشل</string>
     <string name="backup_include_data">نسخ بيانات التطبيقات نفسها أيضًا</string>
-    <string name="backup_include_data_detail">بصلاحيات الروت: إعدادات كل تطبيق وقواعد بياناته وملفاته، بحجم إجمالي يقارب %1$s. وتُستبعَد ذاكرات التخزين المؤقت.</string>
+    <string name="backup_include_data_detail">بصلاحيات الروت، بحجم إجمالي يقارب %1$s. وتُستبعَد ذاكرات التخزين المؤقت.</string>
     <string name="backup_password_label">كلمة مرور البيانات</string>
     <string name="backup_password_hint">تُشفَّر البيانات بها، ولا تُحفَظ في أي مكان: فمن دونها لا يمكن استعادة البيانات.</string>
     <string name="backup_password_empty">من دون كلمة مرور، تُحفَظ البيانات كما هي، بما فيها بيانات تسجيل الدخول. احتفظ بالنسخة الاحتياطية في مكان آمن، أو أدخِل كلمة مرور.</string>

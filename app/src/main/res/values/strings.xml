@@ -281,6 +281,9 @@
     </plurals>
     <string name="backup_select_all">All</string>
     <string name="backup_select_none">None</string>
+    <string name="backup_filter_outside_play">Not from Play</string>
+    <string name="restore_filter_missing">Missing</string>
+    <string name="backup_no_match">No app matches the search.</string>
     <string name="backup_installer_by_hand">installed by hand</string>
     <string name="backup_unreadable">The files cannot be read.</string>
     <string name="action_save_backup">Save to folder</string>
@@ -306,6 +309,8 @@
     <string name="backup_index_not_written">The folder\'s index and the store\'s settings file could not be written. The apps copied can still be restored from their folders.</string>
     <string name="backup_ways">A folder stays up to date: the next backup copies only what has changed, and an app removed from the device stays in it until you delete it there. A zip file is one file for moving to another phone or to a cloud service such as Google Drive, written whole each time.</string>
     <string name="action_save_zip">Save to zip file</string>
+    <string name="action_to_zip">To a zip file</string>
+    <string name="backup_ways_question">Folder or zip?</string>
     <string name="action_choose_zip">Choose zip file</string>
     <string name="backup_zip_file">Zip file: %1$s</string>
     <string name="restore_choose_source">Choose the folder or the zip file the backup was saved to.</string>
@@ -333,7 +338,7 @@
     <string name="backup_event_cancelled">cancelled</string>
     <string name="backup_event_failed">failed</string>
     <string name="backup_include_data">Also the apps\' own data</string>
-    <string name="backup_include_data_detail">As root: the settings, databases and files of each app, about %1$s in all. The caches are left out.</string>
+    <string name="backup_include_data_detail">As root, about %1$s in all. The caches are left out.</string>
     <string name="backup_password_label">Password for the data</string>
     <string name="backup_password_hint">The data is encrypted with it. It is not kept anywhere: without it the data cannot be brought back.</string>
     <string name="backup_password_empty">Without a password the data is saved as it is, logins and all. Keep the backup somewhere safe, or give a password.</string>

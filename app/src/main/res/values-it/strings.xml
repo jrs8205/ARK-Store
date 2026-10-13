@@ -275,6 +275,9 @@
     </plurals>
     <string name="backup_select_all">Tutte</string>
     <string name="backup_select_none">Nessuna</string>
+    <string name="backup_filter_outside_play">Fuori da Play</string>
+    <string name="restore_filter_missing">Mancanti</string>
+    <string name="backup_no_match">Nessuna app corrisponde alla ricerca.</string>
     <string name="backup_installer_by_hand">installata manualmente</string>
     <string name="backup_unreadable">Impossibile leggere i file.</string>
     <string name="action_save_backup">Salva nella cartella</string>
@@ -300,6 +303,8 @@
     <string name="backup_index_not_written">Non è stato possibile scrivere l\'indice della cartella e il file delle impostazioni dello store. Le app copiate possono comunque essere ripristinate dalle rispettive cartelle.</string>
     <string name="backup_ways">Una cartella resta aggiornata: il backup successivo copia solo ciò che è cambiato e un\'app rimossa dal dispositivo vi resta finché non la elimini da lì. Un file ZIP è un unico file per passare a un altro telefono o a un servizio cloud come Google Drive, e viene riscritto per intero ogni volta.</string>
     <string name="action_save_zip">Salva in un file ZIP</string>
+    <string name="action_to_zip">In un file ZIP</string>
+    <string name="backup_ways_question">Cartella o ZIP?</string>
     <string name="action_choose_zip">Scegli file ZIP</string>
     <string name="backup_zip_file">File ZIP: %1$s</string>
     <string name="restore_choose_source">Scegli la cartella o il file ZIP in cui è stato salvato il backup.</string>
@@ -329,7 +334,7 @@
     <string name="backup_event_cancelled">annullato</string>
     <string name="backup_event_failed">non riuscito</string>
     <string name="backup_include_data">Anche i dati delle app</string>
-    <string name="backup_include_data_detail">Con i permessi di root: impostazioni, database e file di ogni app, circa %1$s in totale. Le cache sono escluse.</string>
+    <string name="backup_include_data_detail">Con i permessi di root, circa %1$s in totale. Le cache sono escluse.</string>
     <string name="backup_password_label">Password per i dati</string>
     <string name="backup_password_hint">I dati vengono crittografati con questa password, che non viene salvata da nessuna parte: senza di essa non è possibile ripristinarli.</string>
     <string name="backup_password_empty">Senza password i dati vengono salvati in chiaro, comprese le credenziali di accesso. Conserva il backup in un luogo sicuro oppure imposta una password.</string>

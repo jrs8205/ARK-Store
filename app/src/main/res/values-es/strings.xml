@@ -275,6 +275,9 @@
     </plurals>
     <string name="backup_select_all">Todas</string>
     <string name="backup_select_none">Ninguna</string>
+    <string name="backup_filter_outside_play">Fuera de Play</string>
+    <string name="restore_filter_missing">Que faltan</string>
+    <string name="backup_no_match">Ninguna aplicación coincide con la búsqueda.</string>
     <string name="backup_installer_by_hand">instalada manualmente</string>
     <string name="backup_unreadable">No se pueden leer los archivos.</string>
     <string name="action_save_backup">Guardar en la carpeta</string>
@@ -300,6 +303,8 @@
     <string name="backup_index_not_written">No se han podido escribir el índice de la carpeta ni el archivo de ajustes de la tienda. Aun así, las aplicaciones copiadas se pueden restaurar desde sus carpetas.</string>
     <string name="backup_ways">Una carpeta se mantiene al día: la siguiente copia de seguridad solo copia lo que ha cambiado, y una aplicación quitada del dispositivo se queda en ella hasta que la borres de allí. Un archivo ZIP es un único archivo para pasar a otro teléfono o a un servicio en la nube como Google Drive, y se escribe entero cada vez.</string>
     <string name="action_save_zip">Guardar en un archivo ZIP</string>
+    <string name="action_to_zip">En un archivo ZIP</string>
+    <string name="backup_ways_question">¿Carpeta o ZIP?</string>
     <string name="action_choose_zip">Elegir archivo ZIP</string>
     <string name="backup_zip_file">Archivo ZIP: %1$s</string>
     <string name="restore_choose_source">Elige la carpeta o el archivo ZIP en el que se guardó la copia de seguridad.</string>
@@ -329,7 +334,7 @@
     <string name="backup_event_cancelled">cancelado</string>
     <string name="backup_event_failed">fallido</string>
     <string name="backup_include_data">También los datos de las propias aplicaciones</string>
-    <string name="backup_include_data_detail">Con root: los ajustes, las bases de datos y los archivos de cada aplicación, unos %1$s en total. Las cachés se dejan fuera.</string>
+    <string name="backup_include_data_detail">Con root, unos %1$s en total. Las cachés se dejan fuera.</string>
     <string name="backup_password_label">Contraseña de los datos</string>
     <string name="backup_password_hint">Los datos se cifran con ella. No se guarda en ningún sitio: sin ella, los datos no se pueden recuperar.</string>
     <string name="backup_password_empty">Sin contraseña, los datos se guardan tal cual, con los inicios de sesión incluidos. Conserva la copia de seguridad en un lugar seguro o escribe una contraseña.</string>

@@ -1530,11 +1530,11 @@ private fun RowScope.ButtonFace(base: Color, metal: Boolean, content: @Composabl
  * The colouring of a row of chips: the categories in the secondary tone, the places in the
  * tertiary tone that the badges naming a place on the cards have too.
  */
-private enum class ChipTone { CATEGORY, PLACE }
+internal enum class ChipTone { CATEGORY, PLACE }
 
 /** A chip of a row of choices; raised metal, pressed in when chosen, when materials are on. */
 @Composable
-private fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, tone: ChipTone = ChipTone.CATEGORY) {
+internal fun ChoiceChip(selected: Boolean, label: String, onClick: () -> Unit, tone: ChipTone = ChipTone.CATEGORY) {
     val haptics = LocalHapticFeedback.current
     val metal = LocalMaterial.current
     val scheme = MaterialTheme.colorScheme
@@ -1768,7 +1768,7 @@ private fun SortMenu(selected: SortOrder, onSelect: (SortOrder) -> Unit) {
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
+internal fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val haptics = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     Box(modifier = modifier) {

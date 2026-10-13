@@ -275,6 +275,9 @@
     </plurals>
     <string name="backup_select_all">Toutes</string>
     <string name="backup_select_none">Aucune</string>
+    <string name="backup_filter_outside_play">Hors Play</string>
+    <string name="restore_filter_missing">Manquantes</string>
+    <string name="backup_no_match">Aucune application ne correspond à la recherche.</string>
     <string name="backup_installer_by_hand">installée manuellement</string>
     <string name="backup_unreadable">Impossible de lire les fichiers.</string>
     <string name="action_save_backup">Enregistrer dans le dossier</string>
@@ -300,6 +303,8 @@
     <string name="backup_index_not_written">L\'index du dossier et le fichier de paramètres de la boutique n\'ont pas pu être écrits. Les applications copiées peuvent tout de même être restaurées à partir de leurs dossiers.</string>
     <string name="backup_ways">Un dossier reste à jour : la sauvegarde suivante ne copie que ce qui a changé, et une application retirée de l\'appareil y reste tant que vous ne l\'en supprimez pas. Un fichier ZIP est un fichier unique pour passer sur un autre téléphone ou vers un service cloud comme Google Drive ; il est entièrement réécrit à chaque fois.</string>
     <string name="action_save_zip">Enregistrer dans un fichier ZIP</string>
+    <string name="action_to_zip">Dans un fichier ZIP</string>
+    <string name="backup_ways_question">Dossier ou ZIP ?</string>
     <string name="action_choose_zip">Choisir un fichier ZIP</string>
     <string name="backup_zip_file">Fichier ZIP : %1$s</string>
     <string name="restore_choose_source">Choisissez le dossier ou le fichier ZIP dans lequel la sauvegarde a été enregistrée.</string>
@@ -329,7 +334,7 @@
     <string name="backup_event_cancelled">annulé</string>
     <string name="backup_event_failed">échec</string>
     <string name="backup_include_data">Inclure aussi les données des applications</string>
-    <string name="backup_include_data_detail">Avec l\'accès root : les paramètres, bases de données et fichiers de chaque application, environ %1$s au total. Les caches sont exclus.</string>
+    <string name="backup_include_data_detail">Avec l\'accès root, environ %1$s au total. Les caches sont exclus.</string>
     <string name="backup_password_label">Mot de passe des données</string>
     <string name="backup_password_hint">Il sert à chiffrer les données. Il n\'est enregistré nulle part : sans lui, impossible de restaurer les données.</string>
     <string name="backup_password_empty">Sans mot de passe, les données sont enregistrées telles quelles, identifiants compris. Conservez la sauvegarde en lieu sûr ou saisissez un mot de passe.</string>

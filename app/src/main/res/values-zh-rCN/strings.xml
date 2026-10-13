@@ -257,6 +257,9 @@
     </plurals>
     <string name="backup_select_all">全选</string>
     <string name="backup_select_none">全不选</string>
+    <string name="backup_filter_outside_play">非 Play 渠道</string>
+    <string name="restore_filter_missing">缺少的</string>
+    <string name="backup_no_match">没有符合搜索条件的应用。</string>
     <string name="backup_installer_by_hand">手动安装</string>
     <string name="backup_unreadable">无法读取这些文件。</string>
     <string name="action_save_backup">保存到文件夹</string>
@@ -282,6 +285,8 @@
     <string name="backup_index_not_written">无法写入文件夹的索引和商店的设置文件。已复制的应用仍可从各自的文件夹恢复。</string>
     <string name="backup_ways">文件夹会保持最新：下次备份只复制有变化的内容，从设备上移除的应用会一直保留在文件夹中，直到您在那里将其删除。ZIP 文件是单个文件，便于转移到另一部手机或 Google Drive 等云服务，每次都会完整重写。</string>
     <string name="action_save_zip">保存到 ZIP 文件</string>
+    <string name="action_to_zip">存为 ZIP 文件</string>
+    <string name="backup_ways_question">文件夹还是 ZIP？</string>
     <string name="action_choose_zip">选择 ZIP 文件</string>
     <string name="backup_zip_file">ZIP 文件：%1$s</string>
     <string name="restore_choose_source">请选择保存备份的文件夹或 ZIP 文件。</string>
@@ -307,7 +312,7 @@
     <string name="backup_event_cancelled">已取消</string>
     <string name="backup_event_failed">失败</string>
     <string name="backup_include_data">同时备份应用自身的数据</string>
-    <string name="backup_include_data_detail">使用 Root 权限备份每个应用的设置、数据库和文件，总计约 %1$s。不包括缓存。</string>
+    <string name="backup_include_data_detail">使用 Root 权限备份，总计约 %1$s。不包括缓存。</string>
     <string name="backup_password_label">数据密码</string>
     <string name="backup_password_hint">数据将使用此密码加密。密码不会保存在任何地方：没有它就无法恢复数据。</string>
     <string name="backup_password_empty">如果不设置密码，数据（包括登录信息）将原样保存。请将备份存放在安全的地方，或者设置密码。</string>
