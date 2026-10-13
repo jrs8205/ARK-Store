@@ -21,6 +21,21 @@ sealed interface FolderRead {
 data class BackupFile(val name: String, val size: Long)
 
 /**
+ * One archive of an app's own data in a backup, taken as root: its file's name, which tells
+ * the [part] of the data it holds and whether it is [encrypted], and its size, which is
+ * [RestoreRules.UNKNOWN_SIZE] in a zip's head, where the size is not known when the entry is
+ * written.
+ */
+data class BackupData(val name: String, val size: Long) {
+    val encrypted: Boolean get() = DataCrypt.isEncrypted(name)
+
+    /** [AppBackup.DATA_USER] or [AppBackup.DATA_USER_DE]. */
+    val part: String get() = name.substringBefore('.')
+
+    fun toJson(): JSONObject = JSONObject().put("name", name).put("size", size)
+}
+
+/**
  * An app as a backup folder holds it: what the device knew of it when it was copied, and the
  * files copied. Written to the app's own folder as `app.json` and gathered into the folder's
  * `index.json`; read back from either, see [AppBackup.entryFromJson].
@@ -39,9 +54,15 @@ data class BackupEntry(
     /** The lowest Android API level the app runs on, when known. */
     val minSdk: Int?,
     /** The files copied, `base.apk` first. */
-    val files: List<BackupFile>
+    val files: List<BackupFile>,
+    /** The archives of the app's own data, when it was taken as root; at most one per part. */
+    val data: List<BackupData> = emptyList()
 ) {
+    /** The size of the app's files; the data's size is apart, and not always known. */
     val size: Long get() = files.sumOf { it.size }
+
+    /** The size of the data archives whose size is known. */
+    val dataSize: Long get() = data.sumOf { maxOf(it.size, 0) }
 
     fun toJson(): JSONObject = JSONObject()
         .put("package", packageName)
@@ -53,6 +74,7 @@ data class BackupEntry(
         .put("updatedAt", updatedAt)
         .put("minSdk", minSdk ?: JSONObject.NULL)
         .put("files", JSONArray(files.map { JSONObject().put("name", it.name).put("size", it.size) }))
+        .also { if (data.isNotEmpty()) it.put("data", JSONArray(data.map(BackupData::toJson))) }
 }
 
 /**
@@ -70,6 +92,14 @@ object AppBackup {
     const val BASE_NAME = "base.apk"
     const val SETTINGS_NAME = Backup.FILE_NAME
 
+    /** The parts of an app's data: its credential-encrypted data and its device-encrypted data. */
+    const val DATA_USER = "data"
+    const val DATA_USER_DE = "data_de"
+    val DATA_PARTS = listOf(DATA_USER, DATA_USER_DE)
+
+    /** The names a data archive may have in an app's folder. */
+    private val DATA_NAMES = DATA_PARTS.flatMap { listOf(DataCrypt.fileName(it, false), DataCrypt.fileName(it, true)) }.toSet()
+
     /** The most bytes an index or an entry is read for; an index of thousands of apps is far smaller. */
     const val MAX_JSON_BYTES = 4 * 1024 * 1024
     const val MAX_ENTRIES = 5000
@@ -85,6 +115,9 @@ object AppBackup {
     fun isPackageName(name: String): Boolean = name.length <= MAX_NAME && PACKAGE_NAME.matches(name)
 
     fun isFileName(name: String): Boolean = name.length <= MAX_NAME && FILE_NAME.matches(name)
+
+    /** Whether [name] is one of the names a data archive has, see [DataCrypt.fileName]. */
+    fun isDataName(name: String): Boolean = name in DATA_NAMES
 
     /**
      * The name a split file of the device, named [deviceName] there, gets in the backup: its own
@@ -135,7 +168,21 @@ object AppBackup {
             BackupFile(name, size)
         }
         if (files.first().name != BASE_NAME || files.distinctBy { it.name }.size != files.size) return null
-        return BackupEntry(packageName, label, versionCode, versionName, installer, signers, updatedAt, minSdk, files)
+        val data = when (val value = json.opt("data")) {
+            null, JSONObject.NULL -> emptyList()
+            is JSONArray -> {
+                if (value.length() > DATA_PARTS.size) return null
+                List(value.length()) { i ->
+                    val item = value.opt(i) as? JSONObject ?: return null
+                    val name = (item.opt("name") as? String)?.takeIf(::isDataName) ?: return null
+                    val size = long(item.opt("size"))?.takeIf { it >= RestoreRules.UNKNOWN_SIZE } ?: return null
+                    BackupData(name, size)
+                }
+            }
+            else -> return null
+        }
+        if (data.distinctBy { it.part }.size != data.size) return null
+        return BackupEntry(packageName, label, versionCode, versionName, installer, signers, updatedAt, minSdk, files, data)
     }
 
     fun indexToJson(entries: List<BackupEntry>, writtenAt: String): JSONObject = JSONObject()

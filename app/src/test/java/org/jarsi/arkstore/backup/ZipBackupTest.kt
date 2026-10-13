@@ -86,7 +86,7 @@ class ZipBackupTest {
         override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) count += it }
     }
 
-    private class Extracted(val entry: BackupEntry, val files: List<File>?)
+    private class Extracted(val entry: BackupEntry, val files: List<File>?, val data: Map<String, File>)
 
     private fun extract(zip: ByteArray, vararg wanted: BackupEntry): List<Extracted> {
         val got = ArrayList<Extracted>()
@@ -95,11 +95,15 @@ class ZipBackupTest {
                 ByteArrayInputStream(zip),
                 wanted.toList(),
                 dirFor = { File(temp.root, "restore-" + it.packageName) },
-                onApp = { e, files -> got += Extracted(e, files) }
+                onApp = { e, files, data -> got += Extracted(e, files, data) }
             )
         }
         return got
     }
+
+    /** The bytes of a data archive of an entry, as the test writes them; no real archive. */
+    private fun dataContent(entry: BackupEntry, data: BackupData): ByteArray =
+        ("data of " + entry.packageName + "/" + data.name).toByteArray()
 
     @Test
     fun fileNameCarriesTheDate() {
@@ -250,6 +254,70 @@ class ZipBackupTest {
         val got = extract(zip, a, b)
         // A's files did not come together, so A is not installed from a part of them.
         assertEquals(listOf("org.a.app" to false, "org.b.app" to true), got.map { it.entry.packageName to (it.files != null) })
+    }
+
+    @Test
+    fun theDataArchivesFollowTheFilesOfTheirAppAndComeBackByPart() {
+        val withData = a.copy(data = listOf(BackupData("data.tar.gz.aes", -1), BackupData("data_de.tar.gz", -1)))
+        val out = ByteArrayOutputStream()
+        runBlocking {
+            ZipBackup.write(
+                out, listOf(withData, b), "{}", "2026-10-13T07:00:00Z",
+                open = { e, i -> ByteArrayInputStream(content(e, e.files[i])) },
+                writeData = { e, d, stream ->
+                    stream.write(dataContent(e, d))
+                    // Closing what the writer was given must not close the zip.
+                    stream.close()
+                }
+            )
+        }
+        val zip = out.toByteArray()
+        assertEquals(
+            listOf(
+                "index.json", "ark-store-settings.json", "org.a.app/app.json", "org.b.app/app.json",
+                "org.a.app/base.apk", "org.a.app/split_config.arm64_v8a.apk", "org.a.app/data.tar.gz.aes",
+                "org.a.app/data_de.tar.gz", "org.b.app/base.apk"
+            ),
+            names(zip)
+        )
+        val head = runBlocking { ZipBackup.readHead(ByteArrayInputStream(zip)) }
+        assertEquals(listOf(withData, b), head.entries)
+        val got = extract(zip, withData, b)
+        assertEquals(listOf("org.a.app", "org.b.app"), got.map { it.entry.packageName })
+        val first = got[0]
+        assertEquals(withData.files.map { it.name }, first.files!!.map { it.name })
+        assertEquals(setOf("data", "data_de"), first.data.keys)
+        assertArrayEquals(dataContent(withData, withData.data[0]), first.data.getValue("data").readBytes())
+        assertArrayEquals(dataContent(withData, withData.data[1]), first.data.getValue("data_de").readBytes())
+        assertEquals(emptyMap<String, File>(), got[1].data)
+    }
+
+    @Test
+    fun aDataArchiveMissingOrOfAnotherSizeIsLeftOutWhileTheFilesStand() {
+        val withData = b.copy(data = listOf(BackupData("data.tar.gz", 5), BackupData("data_de.tar.gz", 5)))
+        val zip = rawZip(
+            "org.b.app/base.apk" to content(b, b.files[0]),
+            "org.b.app/data.tar.gz" to ByteArray(6),
+            // Not named by the entry at all.
+            "org.b.app/data_de.tar.gz.aes" to ByteArray(5)
+        )
+        val got = extract(zip, withData).single()
+        assertTrue(got.files != null)
+        assertEquals(emptyMap<String, File>(), got.data)
+        assertFalse(File(temp.root, "restore-org.b.app/data.tar.gz").exists())
+        val right = rawZip(
+            "org.b.app/base.apk" to content(b, b.files[0]),
+            "org.b.app/data.tar.gz" to ByteArray(5)
+        )
+        assertEquals(setOf("data"), extract(right, withData).single().data.keys)
+    }
+
+    @Test
+    fun dataNamesAreTheirOwnKind() {
+        assertEquals(ZipBackup.Name.Data("org.a.app", "data.tar.gz.aes"), ZipBackup.parseName("org.a.app/data.tar.gz.aes"))
+        assertEquals(ZipBackup.Name.Data("org.a.app", "data_de.tar.gz"), ZipBackup.parseName("x/org.a.app/data_de.tar.gz"))
+        assertNull(ZipBackup.parseName("org.a.app/data.tar"))
+        assertNull(ZipBackup.parseName("org.a.app/other.tar.gz"))
     }
 
     @Test

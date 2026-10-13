@@ -197,6 +197,42 @@ class AppBackupTest {
         assertFalse(AppBackup.isCandidate(0, "bad name", self))
     }
 
+    @Test
+    fun theDataArchivesRoundTripAndAreChecked() {
+        val withData = entry.copy(data = listOf(BackupData("data.tar.gz.aes", 1000), BackupData("data_de.tar.gz", -1)))
+        assertEquals(withData, AppBackup.entryFromText(withData.toJson().toString()))
+        assertTrue(withData.data[0].encrypted)
+        assertFalse(withData.data[1].encrypted)
+        assertEquals(AppBackup.DATA_USER, withData.data[0].part)
+        assertEquals(AppBackup.DATA_USER_DE, withData.data[1].part)
+        // An entry written before there was data has none.
+        assertEquals(emptyList<BackupData>(), AppBackup.entryFromJson(json("data" to null))!!.data)
+        assertFalse(entry.toJson().has("data"))
+        fun data(vararg items: JSONObject) = JSONArray(items.toList())
+        fun item(name: Any?, size: Any?) = JSONObject().put("name", name ?: JSONObject.NULL).put("size", size ?: JSONObject.NULL)
+        assertNull(AppBackup.entryFromJson(json("data" to data(item("base.apk", 1)))))
+        assertNull(AppBackup.entryFromJson(json("data" to data(item("../data.tar.gz", 1)))))
+        assertNull(AppBackup.entryFromJson(json("data" to data(item("data.tar.gz", -2)))))
+        assertNull(AppBackup.entryFromJson(json("data" to data(item("data.tar.gz", "1")))))
+        assertNull(AppBackup.entryFromJson(json("data" to data(item(null, 1)))))
+        assertNull(AppBackup.entryFromJson(json("data" to "data.tar.gz")))
+        // One archive per part.
+        assertNull(AppBackup.entryFromJson(json("data" to data(item("data.tar.gz", 1), item("data.tar.gz.aes", 1)))))
+        assertTrue(AppBackup.isDataName("data.tar.gz"))
+        assertTrue(AppBackup.isDataName("data_de.tar.gz.aes"))
+        assertFalse(AppBackup.isDataName("data.tar"))
+        assertFalse(AppBackup.isDataName("base.apk"))
+        assertFalse(AppBackup.isFileName("data.tar.gz"))
+    }
+
+    @Test
+    fun theDataDoesNotCountTowardsBeingUpToDate() {
+        val stored = entry.copy(data = listOf(BackupData("data.tar.gz", 5)))
+        val present = mapOf("base.apk" to 123_456L, "split_config.arm64_v8a.apk" to 2_345L)
+        assertTrue(AppBackup.isUpToDate(stored, present, entry))
+        assertTrue(AppBackup.isUpToDate(entry, present, stored))
+    }
+
     private fun files(vararg entries: Pair<String, Long>): JSONArray =
         JSONArray(entries.map { JSONObject().put("name", it.first).put("size", it.second) })
 }

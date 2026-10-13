@@ -36,6 +36,8 @@ object ZipBackup {
         data object Settings : Name
         data class Entry(val packageName: String) : Name
         data class File(val packageName: String, val fileName: String) : Name
+        /** An archive of the app's own data, see [BackupData]. */
+        data class Data(val packageName: String, val fileName: String) : Name
     }
 
     /**
@@ -64,6 +66,7 @@ object ZipBackup {
         !AppBackup.isPackageName(pkg) -> null
         file == AppBackup.ENTRY_NAME -> Name.Entry(pkg)
         AppBackup.isFileName(file) -> Name.File(pkg, file)
+        AppBackup.isDataName(file) -> Name.Data(pkg, file)
         else -> null
     }
 
@@ -71,8 +74,9 @@ object ZipBackup {
      * Writes a zip of [entries] to [out]: the index, the store's settings as [settingsJson], each
      * app's entry, and then each app's files in turn, read through [open] (the entry and the
      * index of its file). A file of another size than its entry says fails the whole zip, which
-     * then would hold an entry for files it has not. [onBytes] is told the bytes of files written
-     * so far. [out] is left open.
+     * then would hold an entry for files it has not. After an app's files come its data
+     * archives, each written by [writeData] into the stream it is given, whose size the entry
+     * does not know. [onBytes] is told the bytes of files written so far. [out] is left open.
      */
     suspend fun write(
         out: OutputStream,
@@ -80,7 +84,8 @@ object ZipBackup {
         settingsJson: String,
         writtenAt: String,
         open: (BackupEntry, Int) -> InputStream,
-        onBytes: (Long) -> Unit = {}
+        onBytes: (Long) -> Unit = {},
+        writeData: suspend (BackupEntry, BackupData, OutputStream) -> Unit = { _, _, _ -> }
     ) {
         val zip = ZipOutputStream(out)
         fun text(name: String, text: String) {
@@ -121,9 +126,22 @@ object ZipBackup {
                 done += copied
                 onBytes(done)
             }
+            for (data in entry.data) {
+                zip.putNextEntry(ZipEntry("${entry.packageName}/${data.name}"))
+                writeData(entry, data, Unclosable(zip))
+                zip.closeEntry()
+            }
         }
         zip.finish()
         zip.flush()
+    }
+
+    /** The zip's stream as given to a writer of one item: closing it closes the item alone. */
+    private class Unclosable(private val zip: ZipOutputStream) : OutputStream() {
+        override fun write(b: Int) = zip.write(b)
+        override fun write(b: ByteArray, off: Int, len: Int) = zip.write(b, off, len)
+        override fun flush() = zip.flush()
+        override fun close() = Unit
     }
 
     /** What the head of a zip tells: its apps' entries, and the store's settings when it has them. */
@@ -155,7 +173,7 @@ object ZipBackup {
                         entries[entry.packageName] = entry
                     }
                 }
-                is Name.File -> {
+                is Name.File, is Name.Data -> {
                     val all = indexed
                     if (all != null && settings != null && entries.keys.containsAll(all)) break
                 }
@@ -174,14 +192,16 @@ object ZipBackup {
      * Takes the files of the apps [wanted] out of [input], one app at a time, each into the
      * directory [dirFor] gives it, and hands each to [onApp] once its files are all there at the
      * sizes its entry names, or null when they are not: missing, larger than said, or not
-     * together. With the files the directory is [onApp]'s; without them it is removed here.
-     * [onBytes] is told the bytes taken out so far.
+     * together. With them come the app's data archives found whole, by their part ([BackupData.part]);
+     * one missing or of another size than said is left out, and the app's files stand without it.
+     * With the files the directory is [onApp]'s; without them it is removed here. [onBytes] is
+     * told the bytes taken out so far.
      */
     suspend fun extract(
         input: InputStream,
         wanted: List<BackupEntry>,
         dirFor: (BackupEntry) -> File,
-        onApp: suspend (BackupEntry, List<File>?) -> Unit,
+        onApp: suspend (BackupEntry, List<File>?, Map<String, File>) -> Unit,
         onBytes: (Long) -> Unit = {}
     ) {
         val byPackage = wanted.associateBy { it.packageName }
@@ -196,10 +216,15 @@ object ZipBackup {
             val files = taking.entry.files.map { taking.files[it.name] }
             val whole = !taking.broken && files.zip(taking.entry.files).all { (f, said) -> f != null && f.length() == said.size }
             if (whole) {
-                onApp(taking.entry, files.map { it!! })
+                val data = taking.entry.data.mapNotNull { said ->
+                    val file = taking.data[said.name] ?: return@mapNotNull null
+                    if (said.size != RestoreRules.UNKNOWN_SIZE && file.length() != said.size) return@mapNotNull null
+                    said.part to file
+                }.toMap()
+                onApp(taking.entry, files.map { it!! }, data)
             } else {
                 taking.dir.deleteRecursively()
-                onApp(taking.entry, null)
+                onApp(taking.entry, null, emptyMap())
             }
         }
 
@@ -209,27 +234,40 @@ object ZipBackup {
                 coroutineContext.ensureActive()
                 val item = zip.nextEntry ?: break
                 if (item.isDirectory) continue
-                val name = parseName(item.name) as? Name.File ?: continue
-                val entry = byPackage[name.packageName] ?: continue
-                if (name.packageName in done) continue
-                val said = entry.files.firstOrNull { it.name == name.fileName } ?: continue
-                current?.let { if (it.entry.packageName != name.packageName) finish(it) }
+                val (packageName, fileName, isData) = when (val name = parseName(item.name)) {
+                    is Name.File -> Triple(name.packageName, name.fileName, false)
+                    is Name.Data -> Triple(name.packageName, name.fileName, true)
+                    else -> continue
+                }
+                val entry = byPackage[packageName] ?: continue
+                if (packageName in done) continue
+                // What the entry does not name is not the app's, whatever the zip calls it.
+                val saidSize = if (isData) {
+                    entry.data.firstOrNull { it.name == fileName }?.size ?: continue
+                } else {
+                    entry.files.firstOrNull { it.name == fileName }?.size ?: continue
+                }
+                current?.let { if (it.entry.packageName != packageName) finish(it) }
                 val taking = current ?: Taking(entry, dirFor(entry).also { it.mkdirs() }).also { current = it }
-                if (said.name in taking.files || taking.broken) {
+                if (isData) {
+                    // The archive is the app's extra; a second of the same name is left alone.
+                    if (fileName in taking.data) continue
+                } else if (fileName in taking.files || taking.broken) {
                     taking.broken = true
                     continue
                 }
-                val target = File(taking.dir, said.name)
+                val target = File(taking.dir, fileName)
                 var copied = 0L
                 var told = 0L
+                var overflow = false
                 target.outputStream().use { output ->
                     while (true) {
                         coroutineContext.ensureActive()
                         val n = zip.read(buffer)
                         if (n < 0) break
                         copied += n
-                        if (copied > said.size) {
-                            taking.broken = true
+                        if (saidSize != RestoreRules.UNKNOWN_SIZE && copied > saidSize) {
+                            overflow = true
                             break
                         }
                         output.write(buffer, 0, n)
@@ -241,7 +279,11 @@ object ZipBackup {
                 }
                 total += copied
                 onBytes(total)
-                taking.files[said.name] = target
+                if (overflow) {
+                    if (isData) target.delete() else taking.broken = true
+                    continue
+                }
+                if (isData) taking.data[fileName] = target else taking.files[fileName] = target
             }
             current?.let { finish(it) }
         } catch (e: Throwable) {
@@ -250,17 +292,18 @@ object ZipBackup {
                 // What could not be read is missing for the apps not done yet.
                 for (entry in wanted) if (entry.packageName !in done) {
                     done += entry.packageName
-                    onApp(entry, null)
+                    onApp(entry, null, emptyMap())
                 }
                 return
             }
             throw e
         }
-        for (entry in wanted) if (entry.packageName !in done) onApp(entry, null)
+        for (entry in wanted) if (entry.packageName !in done) onApp(entry, null, emptyMap())
     }
 
     private class Taking(val entry: BackupEntry, val dir: File) {
         val files = HashMap<String, File>()
+        val data = HashMap<String, File>()
         var broken = false
     }
 

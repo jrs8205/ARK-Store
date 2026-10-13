@@ -467,7 +467,7 @@ object BackupManager {
                     File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}")
                 },
                 onBytes = { bytes -> _state.value = BackupState.Running(true, index, selected.size, label, bytes, total) },
-                onApp = { entry, files ->
+                onApp = { entry, files, _ ->
                     if (files == null) {
                         Log.w(TAG, "The zip file does not hold the files of ${entry.packageName} whole")
                         failed += entry.label
