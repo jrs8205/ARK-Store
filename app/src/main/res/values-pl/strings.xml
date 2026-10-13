@@ -232,6 +232,18 @@
     <string name="auto_update_unmetered_description">Nie przez sieć komórkową ani inną sieć z pomiarem użycia danych</string>
     <string name="auto_update_charging_switch">Tylko podczas ładowania</string>
     <string name="auto_update_charging_description">Czeka, aż urządzenie zostanie podłączone do ładowarki</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Używaj uprawnień roota</string>
+    <string name="root_description">Instalowanie, aktualizowanie, odinstalowywanie i przywracanie aplikacji odbywa się bez pytań ze strony Androida, a kopia zapasowa może obejmować też dane samych aplikacji. Wymaga zrootowanego urządzenia (Magisk, KernelSU lub APatch); po włączeniu tej opcji menedżer roota poprosi o zgodę.</string>
+    <string name="root_checking">Wysyłanie prośby do menedżera roota…</string>
+    <string name="root_granted">Przyznano uprawnienia roota: %1$s.</string>
+    <string name="root_granted_unknown">Przyznano uprawnienia roota.</string>
+    <string name="root_denied">Odmówiono uprawnień roota. Zezwól ARK-Store na dostęp w menedżerze roota i spróbuj ponownie; do tego czasu instalacje odbywają się standardowo.</string>
+    <string name="root_missing">Niedostępne: to urządzenie nie jest zrootowane.</string>
+    <string name="root_lost">Ostatnia instalacja nie uzyskała uprawnień roota i odbyła się standardowo.</string>
+    <string name="uninstall_confirm_title">Odinstalować %1$s?</string>
+    <string name="uninstall_confirm_message">Aplikacja i jej dane zostaną usunięte od razu, bez pytania ze strony Androida.</string>
+    <string name="uninstall_failed">Nie udało się odinstalować: %1$s</string>
     <string name="error_token">GitHub odrzucił token podany w ustawieniach. Zastąp go tam innym lub usuń.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Potrzebny tylko wtedy, gdy dodajesz źródła: sklep odczytuje dodane konta i repozytoria bezpośrednio z GitHuba, a bez tokenu GitHub pozwala na to z jednej sieci 60 razy na godzinę. Jeśli lista przestanie się odświeżać i pojawi się komunikat, że GitHub ogranicza liczbę żądań, token zwiększy ten limit żądań. Na stronie github.com/settings/personal-access-tokens utwórz osobisty token dostępu typu fine-grained bez żadnych uprawnień – publiczne repozytoria można odczytywać bez nich. Token pozostaje na tym urządzeniu, nie trafia do kopii zapasowych ani plików eksportu i jest wysyłany wyłącznie do GitHuba.</string>
@@ -252,7 +264,7 @@
     <string name="transfer_failed">Nie udało się odczytać ani zapisać pliku.</string>
     <string name="action_back">Wstecz</string>
     <string name="backup_title">Kopia zapasowa aplikacji</string>
-    <string name="backup_description">Skopiuj aplikacje zainstalowane z innych źródeł niż Google Play jako pliki APK do folderu lub pliku ZIP i zainstaluj je ponownie – na tym lub innym urządzeniu. Dane samych aplikacji nie są kopiowane.</string>
+    <string name="backup_description">Skopiuj aplikacje zainstalowane z innych źródeł niż Google Play jako pliki APK do folderu lub pliku ZIP i zainstaluj je ponownie – na tym lub innym urządzeniu. Dane samych aplikacji są kopiowane tylko wtedy, gdy włączone są uprawnienia roota.</string>
     <string name="action_backup_apps">Utwórz kopię zapasową aplikacji</string>
     <string name="action_restore_apps">Przywróć aplikacje</string>
     <string name="backup_notification_saving">Tworzenie kopii zapasowej: %1$s</string>
@@ -327,4 +339,19 @@
     <string name="backup_event_restored">przekazano do systemu: %1$d, nieudane: %2$d</string>
     <string name="backup_event_cancelled">anulowano</string>
     <string name="backup_event_failed">nie powiodło się</string>
+    <string name="backup_include_data">Uwzględnij też dane samych aplikacji</string>
+    <string name="backup_include_data_detail">Z uprawnieniami roota: ustawienia, bazy danych i pliki każdej aplikacji, łącznie około %1$s. Pamięć podręczna jest pomijana.</string>
+    <string name="backup_password_label">Hasło do danych</string>
+    <string name="backup_password_hint">Dane zostaną nim zaszyfrowane. Hasło nie jest nigdzie zapisywane: bez niego nie da się przywrócić danych.</string>
+    <string name="backup_password_empty">Bez hasła dane zostaną zapisane bez szyfrowania, łącznie z danymi logowania. Przechowuj kopię zapasową w bezpiecznym miejscu lub podaj hasło.</string>
+    <string name="backup_data_size">dane %1$s</string>
+    <string name="restore_include_data">Przywróć też dane samych aplikacji</string>
+    <string name="restore_include_data_detail">Z uprawnieniami roota, dla aplikacji, których dane są w kopii zapasowej. Ich obecne dane na tym urządzeniu zostaną zastąpione.</string>
+    <string name="restore_data_needs_root">Kopia zapasowa zawiera też dane samych aplikacji. Do ich przywrócenia potrzebne są uprawnienia roota; zobacz ustawienia.</string>
+    <string name="restore_password_label">Hasło do danych</string>
+    <string name="restore_data">z danymi</string>
+    <string name="restore_data_encrypted">z zaszyfrowanymi danymi</string>
+    <string name="backup_data_failed">Nie zapisano danych tych aplikacji: %1$s</string>
+    <string name="restore_data_failed">Nie przywrócono danych tych aplikacji: %1$s</string>
+    <string name="restore_wrong_password">To nie jest hasło, którym zaszyfrowano dane.</string>
 </resources>

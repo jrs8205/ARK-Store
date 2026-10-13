@@ -208,6 +208,18 @@
     <string name="auto_update_unmetered_description">不使用移动数据或其他按流量计费的网络</string>
     <string name="auto_update_charging_switch">仅在充电时</string>
     <string name="auto_update_charging_description">等到设备接通电源后再更新</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">使用 Root 权限</string>
+    <string name="root_description">安装、更新、卸载和恢复都无需 Android 确认即可完成，备份中也可以包含应用自身的数据。需要已通过 Magisk、KernelSU 或 APatch 获取 Root 权限的设备；开启此选项时，会向 Root 管理应用请求授权。</string>
+    <string name="root_checking">正在向 Root 管理应用请求授权…</string>
+    <string name="root_granted">已获得 Root 权限（%1$s）。</string>
+    <string name="root_granted_unknown">已获得 Root 权限。</string>
+    <string name="root_denied">Root 权限请求被拒绝。请在 Root 管理应用中允许 ARK-Store，然后重试；在此之前，安装将按常规方式进行。</string>
+    <string name="root_missing">不可用：此设备未获取 Root 权限。</string>
+    <string name="root_lost">上次安装未获得 Root 权限，已按常规方式进行。</string>
+    <string name="uninstall_confirm_title">要卸载 %1$s 吗？</string>
+    <string name="uninstall_confirm_message">该应用及其数据将立即被删除，无需 Android 确认。</string>
+    <string name="uninstall_failed">卸载失败：%1$s</string>
     <string name="error_token">GitHub 拒绝了设置中提供的令牌。请在设置中替换或移除该令牌。</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">仅在您添加了来源时才需要：商店会直接从 GitHub 读取您添加的帐号和仓库，而在没有令牌的情况下，GitHub 只允许同一网络每小时读取 60 次。如果列表不再刷新，并提示 GitHub 正在限制请求，使用令牌可以提高请求次数上限。请前往 github.com/settings/personal-access-tokens 创建一个不授予任何权限的细粒度个人访问令牌；读取公开仓库无需任何权限。令牌仅保存在此设备上，不会包含在备份和导出文件中，并且只会发送给 GitHub。</string>
@@ -228,7 +240,7 @@
     <string name="transfer_failed">无法读取或写入该文件。</string>
     <string name="action_back">返回</string>
     <string name="backup_title">应用备份</string>
-    <string name="backup_description">将从 Google Play 以外的渠道安装的应用以 APK 文件的形式复制到文件夹或 ZIP 文件中，之后可在此设备或其他设备上重新安装。不包括应用自身的数据。</string>
+    <string name="backup_description">将从 Google Play 以外的渠道安装的应用以 APK 文件的形式复制到文件夹或 ZIP 文件中，之后可在此设备或其他设备上重新安装。仅在开启 Root 后，才会包括应用自身的数据。</string>
     <string name="action_backup_apps">备份应用</string>
     <string name="action_restore_apps">恢复应用</string>
     <string name="backup_notification_saving">正在备份：%1$s</string>
@@ -294,4 +306,19 @@
     <string name="backup_event_restored">已交给系统 %1$d 个，失败 %2$d 个</string>
     <string name="backup_event_cancelled">已取消</string>
     <string name="backup_event_failed">失败</string>
+    <string name="backup_include_data">同时备份应用自身的数据</string>
+    <string name="backup_include_data_detail">使用 Root 权限备份每个应用的设置、数据库和文件，总计约 %1$s。不包括缓存。</string>
+    <string name="backup_password_label">数据密码</string>
+    <string name="backup_password_hint">数据将使用此密码加密。密码不会保存在任何地方：没有它就无法恢复数据。</string>
+    <string name="backup_password_empty">如果不设置密码，数据（包括登录信息）将原样保存。请将备份存放在安全的地方，或者设置密码。</string>
+    <string name="backup_data_size">数据 %1$s</string>
+    <string name="restore_include_data">同时恢复应用自身的数据</string>
+    <string name="restore_include_data_detail">使用 Root 权限，为备份中包含数据的应用恢复数据。这些应用在此设备上的现有数据将被替换。</string>
+    <string name="restore_data_needs_root">此备份中还包含应用自身的数据。恢复这些数据需要 Root 权限，请查看设置。</string>
+    <string name="restore_password_label">数据密码</string>
+    <string name="restore_data">含数据</string>
+    <string name="restore_data_encrypted">含数据，已加密</string>
+    <string name="backup_data_failed">以下应用的数据未能保存：%1$s</string>
+    <string name="restore_data_failed">以下应用的数据未能恢复：%1$s</string>
+    <string name="restore_wrong_password">此密码与加密数据时使用的密码不一致。</string>
 </resources>

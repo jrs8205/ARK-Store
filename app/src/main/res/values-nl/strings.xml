@@ -216,6 +216,18 @@
     <string name="auto_update_unmetered_description">Niet via mobiele data of een ander netwerk met datalimiet</string>
     <string name="auto_update_charging_switch">Alleen tijdens opladen</string>
     <string name="auto_update_charging_description">Wacht tot het apparaat aan de oplader is aangesloten</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Root gebruiken</string>
+    <string name="root_description">Installaties, updates, verwijderingen en terugzettingen gaan door zonder dat Android iets vraagt, en een back-up kan ook de gegevens van de apps zelf bevatten. Vereist een geroot apparaat met Magisk, KernelSU of APatch; als je dit aanzet, wordt de root-app om toestemming gevraagd.</string>
+    <string name="root_checking">Toestemming vragen aan de root-app…</string>
+    <string name="root_granted">Root-toegang verleend: %1$s.</string>
+    <string name="root_granted_unknown">Root-toegang verleend.</string>
+    <string name="root_denied">Root-toegang geweigerd. Sta ARK-Store toe in de root-app en probeer het opnieuw; tot die tijd gaan installaties op de gewone manier.</string>
+    <string name="root_missing">Niet beschikbaar: dit apparaat is niet geroot.</string>
+    <string name="root_lost">De laatste installatie kreeg geen root-toegang en ging op de gewone manier.</string>
+    <string name="uninstall_confirm_title">%1$s verwijderen?</string>
+    <string name="uninstall_confirm_message">De app en de bijbehorende gegevens worden meteen verwijderd, zonder dat Android iets vraagt.</string>
+    <string name="uninstall_failed">Verwijderen mislukt: %1$s</string>
     <string name="error_token">GitHub heeft het token uit de instellingen geweigerd. Vervang of verwijder het daar.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Alleen nodig als je bronnen toevoegt: de store haalt de accounts en repository\'s die je hebt toegevoegd rechtstreeks op bij GitHub, en zonder token staat GitHub dat per netwerk 60 keer per uur toe. Als de lijst niet meer wordt vernieuwd en je de melding ziet dat GitHub verzoeken beperkt, verhoogt een token die limiet voor verzoeken. Maak een fine-grained persoonlijk toegangstoken zonder rechten aan op github.com/settings/personal-access-tokens; openbare repository\'s kun je ook zonder rechten lezen. Het token blijft op dit apparaat, buiten back-ups en exports, en wordt alleen naar GitHub gestuurd.</string>
@@ -236,7 +248,7 @@
     <string name="transfer_failed">Het bestand kan niet worden gelezen of geschreven.</string>
     <string name="action_back">Terug</string>
     <string name="backup_title">Back-up van apps</string>
-    <string name="backup_description">Kopieer de apps die niet via Google Play zijn geïnstalleerd als APK-bestanden naar een map of een zip-bestand, en installeer ze terug op dit of een ander apparaat. De gegevens van de apps zelf gaan niet mee.</string>
+    <string name="backup_description">Kopieer de apps die niet via Google Play zijn geïnstalleerd als APK-bestanden naar een map of een zip-bestand, en installeer ze terug op dit of een ander apparaat. De gegevens van de apps zelf gaan alleen mee als root aanstaat.</string>
     <string name="action_backup_apps">Back-up van apps maken</string>
     <string name="action_restore_apps">Apps terugzetten</string>
     <string name="backup_notification_saving">Back-up van %1$s wordt gemaakt</string>
@@ -305,4 +317,19 @@
     <string name="backup_event_restored">doorgegeven aan het systeem: %1$d, mislukt: %2$d</string>
     <string name="backup_event_cancelled">geannuleerd</string>
     <string name="backup_event_failed">mislukt</string>
+    <string name="backup_include_data">Ook de gegevens van de apps zelf</string>
+    <string name="backup_include_data_detail">Met root: de instellingen, databases en bestanden van elke app, samen ongeveer %1$s. Caches gaan niet mee.</string>
+    <string name="backup_password_label">Wachtwoord voor de gegevens</string>
+    <string name="backup_password_hint">De gegevens worden ermee versleuteld. Het wordt nergens bewaard: zonder dit wachtwoord kun je de gegevens niet terugzetten.</string>
+    <string name="backup_password_empty">Zonder wachtwoord worden de gegevens onversleuteld opgeslagen, inclusief inloggegevens. Bewaar de back-up op een veilige plek of geef een wachtwoord op.</string>
+    <string name="backup_data_size">gegevens %1$s</string>
+    <string name="restore_include_data">Ook de gegevens van de apps zelf terugzetten</string>
+    <string name="restore_include_data_detail">Met root, voor de apps waarvan de gegevens in de back-up staan. Hun huidige gegevens op dit apparaat worden vervangen.</string>
+    <string name="restore_data_needs_root">De back-up bevat ook de gegevens van de apps zelf. Om die terug te zetten is root-toegang nodig; zie de instellingen.</string>
+    <string name="restore_password_label">Wachtwoord van de gegevens</string>
+    <string name="restore_data">met gegevens</string>
+    <string name="restore_data_encrypted">met gegevens, versleuteld</string>
+    <string name="backup_data_failed">De gegevens van deze apps zijn niet opgeslagen: %1$s</string>
+    <string name="restore_data_failed">De gegevens van deze apps zijn niet teruggezet: %1$s</string>
+    <string name="restore_wrong_password">Dit is niet het wachtwoord waarmee de gegevens zijn versleuteld.</string>
 </resources>

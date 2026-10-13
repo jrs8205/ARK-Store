@@ -232,6 +232,18 @@
     <string name="auto_update_unmetered_description">Не через мобільний трафік чи іншу лімітну мережу</string>
     <string name="auto_update_charging_switch">Лише під час заряджання</string>
     <string name="auto_update_charging_description">Чекає, доки пристрій підключать до живлення</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Використовувати root-права</string>
+    <string name="root_description">Установлення, оновлення, видалення й відновлення відбуваються без запитів Android, а до резервної копії можна додати дані самих додатків. Потрібен пристрій із root-правами (Magisk, KernelSU або APatch); під час увімкнення ARK-Store попросить дозволу в root-менеджера.</string>
+    <string name="root_checking">Запит до root-менеджера…</string>
+    <string name="root_granted">Root-права надано: %1$s.</string>
+    <string name="root_granted_unknown">Root-права надано.</string>
+    <string name="root_denied">У root-правах відмовлено. Дозвольте доступ для ARK-Store у root-менеджері й повторіть спробу; до того часу додатки встановлюються звичайним способом.</string>
+    <string name="root_missing">Недоступно: на цьому пристрої немає root-прав.</string>
+    <string name="root_lost">Останнє встановлення не отримало root-прав і відбулося звичайним способом.</string>
+    <string name="uninstall_confirm_title">Видалити %1$s?</string>
+    <string name="uninstall_confirm_message">Додаток і його дані буде видалено одразу, без запиту Android.</string>
+    <string name="uninstall_failed">Не вдалося видалити: %1$s</string>
     <string name="error_token">GitHub відхилив токен, указаний у налаштуваннях. Замініть або видаліть його там.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Потрібен, лише якщо ви додаєте джерела: магазин читає додані вами облікові записи й репозиторії безпосередньо з GitHub, а без токена GitHub дозволяє робити це з однієї мережі 60 разів на годину. Якщо список перестає оновлюватися з повідомленням, що GitHub обмежує запити, токен збільшить ліміт запитів. Створіть на сторінці github.com/settings/personal-access-tokens персональний токен доступу типу fine-grained без жодних дозволів: загальнодоступні репозиторії можна читати й без них. Токен зберігається лише на цьому пристрої, не потрапляє в резервні копії та експорт і надсилається тільки на GitHub.</string>
@@ -252,7 +264,7 @@
     <string name="transfer_failed">Не вдалося прочитати або записати файл.</string>
     <string name="action_back">Назад</string>
     <string name="backup_title">Резервне копіювання додатків</string>
-    <string name="backup_description">Скопіюйте додатки, установлені не з Google Play, у вигляді файлів APK у папку або ZIP-файл, щоб потім знову встановити їх на цьому чи іншому пристрої. Дані самих додатків не копіюються.</string>
+    <string name="backup_description">Скопіюйте додатки, установлені не з Google Play, у вигляді файлів APK у папку або ZIP-файл, щоб потім знову встановити їх на цьому чи іншому пристрої. Дані самих додатків копіюються, лише якщо ввімкнено root-права.</string>
     <string name="action_backup_apps">Створити резервну копію</string>
     <string name="action_restore_apps">Відновити додатки</string>
     <string name="backup_notification_saving">Резервне копіювання: %1$s</string>
@@ -327,4 +339,19 @@
     <string name="backup_event_restored">передано системі: %1$d, не вдалося: %2$d</string>
     <string name="backup_event_cancelled">скасовано</string>
     <string name="backup_event_failed">не вдалося</string>
+    <string name="backup_include_data">Також зберегти дані самих додатків</string>
+    <string name="backup_include_data_detail">З root-правами: налаштування, бази даних і файли кожного додатка, загалом близько %1$s. Кеш не зберігається.</string>
+    <string name="backup_password_label">Пароль для даних</string>
+    <string name="backup_password_hint">Ним шифруються дані. Він ніде не зберігається: без нього дані не вдасться відновити.</string>
+    <string name="backup_password_empty">Без пароля дані зберігаються як є, включно з обліковими даними. Тримайте резервну копію в надійному місці або задайте пароль.</string>
+    <string name="backup_data_size">дані %1$s</string>
+    <string name="restore_include_data">Також відновити дані самих додатків</string>
+    <string name="restore_include_data_detail">З root-правами, для додатків, дані яких є в резервній копії. Їхні поточні дані на цьому пристрої буде замінено.</string>
+    <string name="restore_data_needs_root">У резервній копії є й дані самих додатків. Щоб відновити їх, потрібні root-права (див. налаштування).</string>
+    <string name="restore_password_label">Пароль для даних</string>
+    <string name="restore_data">з даними</string>
+    <string name="restore_data_encrypted">із зашифрованими даними</string>
+    <string name="backup_data_failed">Не вдалося зберегти дані цих додатків: %1$s</string>
+    <string name="restore_data_failed">Не вдалося відновити дані цих додатків: %1$s</string>
+    <string name="restore_wrong_password">Це не той пароль, яким було зашифровано дані.</string>
 </resources>

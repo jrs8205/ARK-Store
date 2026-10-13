@@ -208,6 +208,18 @@
     <string name="auto_update_unmetered_description">모바일 데이터 및 기타 데이터 전송량 제한 네트워크에서는 사용하지 않음</string>
     <string name="auto_update_charging_switch">충전 중에만</string>
     <string name="auto_update_charging_description">기기가 충전기에 연결될 때까지 기다립니다</string>
+    <string name="root_title">루트</string>
+    <string name="root_switch">루트 권한 사용</string>
+    <string name="root_description">설치, 업데이트, 제거, 복원이 Android의 확인 없이 진행되며, 백업에 앱 자체의 데이터도 포함할 수 있습니다. Magisk, KernelSU 또는 APatch로 루팅된 기기가 필요하며, 사용 설정하면 루트 관리 앱에 권한을 요청합니다.</string>
+    <string name="root_checking">루트 관리 앱에 요청하는 중…</string>
+    <string name="root_granted">루트 권한 허용됨: %1$s</string>
+    <string name="root_granted_unknown">루트 권한 허용됨</string>
+    <string name="root_denied">루트 권한이 거부되었습니다. 루트 관리 앱에서 ARK-Store를 허용한 후 다시 시도하세요. 그때까지는 일반적인 방식으로 설치됩니다.</string>
+    <string name="root_missing">사용할 수 없습니다. 이 기기는 루팅되어 있지 않습니다.</string>
+    <string name="root_lost">마지막 설치는 루트 권한을 얻지 못해 일반적인 방식으로 진행되었습니다.</string>
+    <string name="uninstall_confirm_title">%1$s 앱을 제거할까요?</string>
+    <string name="uninstall_confirm_message">앱과 앱 데이터가 Android의 확인 없이 바로 삭제됩니다.</string>
+    <string name="uninstall_failed">제거하지 못했습니다: %1$s</string>
     <string name="error_token">GitHub에서 설정에 입력한 토큰을 거부했습니다. 설정에서 토큰을 변경하거나 삭제하세요.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">소스를 추가한 경우에만 필요합니다. 스토어는 추가한 계정과 저장소를 GitHub에서 직접 읽어 오는데, 토큰이 없으면 GitHub는 한 네트워크에서 시간당 60회까지만 허용합니다. GitHub에서 요청을 제한하고 있다는 메시지와 함께 목록이 새로고침되지 않으면 토큰을 사용하면 요청 한도를 늘릴 수 있습니다. github.com/settings/personal-access-tokens에서 권한 없이 세분화된 개인용 액세스 토큰을 만드세요. 공개 저장소는 권한 없이도 읽을 수 있습니다. 토큰은 이 기기에만 저장되고 백업과 내보내기에 포함되지 않으며, GitHub로만 전송됩니다.</string>
@@ -228,7 +240,7 @@
     <string name="transfer_failed">파일을 읽거나 쓸 수 없습니다.</string>
     <string name="action_back">뒤로</string>
     <string name="backup_title">앱 백업</string>
-    <string name="backup_description">Google Play 외부에서 설치한 앱을 APK 파일로 폴더나 ZIP 파일에 복사하고, 이 기기나 다른 기기에 다시 설치합니다. 앱 자체의 데이터는 포함되지 않습니다.</string>
+    <string name="backup_description">Google Play 외부에서 설치한 앱을 APK 파일로 폴더나 ZIP 파일에 복사하고, 이 기기나 다른 기기에 다시 설치합니다. 앱 자체의 데이터는 루트 권한을 사용 설정한 경우에만 포함됩니다.</string>
     <string name="action_backup_apps">앱 백업하기</string>
     <string name="action_restore_apps">앱 복원하기</string>
     <string name="backup_notification_saving">백업 중: %1$s</string>
@@ -294,4 +306,19 @@
     <string name="backup_event_restored">시스템에 전달 %1$d개, 실패 %2$d개</string>
     <string name="backup_event_cancelled">취소됨</string>
     <string name="backup_event_failed">실패</string>
+    <string name="backup_include_data">앱 자체의 데이터도 포함</string>
+    <string name="backup_include_data_detail">루트 권한으로 각 앱의 설정, 데이터베이스, 파일을 백업합니다(총 약 %1$s). 캐시는 제외됩니다.</string>
+    <string name="backup_password_label">데이터 비밀번호</string>
+    <string name="backup_password_hint">데이터가 이 비밀번호로 암호화됩니다. 비밀번호는 어디에도 저장되지 않으므로, 비밀번호가 없으면 데이터를 복원할 수 없습니다.</string>
+    <string name="backup_password_empty">비밀번호가 없으면 데이터가 로그인 정보까지 포함해 그대로 저장됩니다. 백업을 안전한 곳에 보관하거나 비밀번호를 입력하세요.</string>
+    <string name="backup_data_size">데이터 %1$s</string>
+    <string name="restore_include_data">앱 자체의 데이터도 복원</string>
+    <string name="restore_include_data_detail">백업에 데이터가 있는 앱의 데이터를 루트 권한으로 복원합니다. 이 기기에 있는 해당 앱의 데이터는 대체됩니다.</string>
+    <string name="restore_data_needs_root">이 백업에는 앱 자체의 데이터도 들어 있습니다. 데이터를 복원하려면 루트 권한이 필요합니다. 설정을 확인하세요.</string>
+    <string name="restore_password_label">데이터 비밀번호</string>
+    <string name="restore_data">데이터 포함</string>
+    <string name="restore_data_encrypted">데이터 포함, 암호화됨</string>
+    <string name="backup_data_failed">다음 앱의 데이터를 저장하지 못했습니다: %1$s</string>
+    <string name="restore_data_failed">다음 앱의 데이터를 복원하지 못했습니다: %1$s</string>
+    <string name="restore_wrong_password">데이터를 암호화할 때 사용한 비밀번호가 아닙니다.</string>
 </resources>

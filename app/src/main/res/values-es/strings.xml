@@ -224,6 +224,18 @@
     <string name="auto_update_unmetered_description">Ni con datos móviles ni con otras redes de uso medido</string>
     <string name="auto_update_charging_switch">Solo mientras se carga</string>
     <string name="auto_update_charging_description">Espera a que el dispositivo esté conectado a la corriente</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Usar root</string>
+    <string name="root_description">Las instalaciones, actualizaciones, desinstalaciones y restauraciones se completan sin que Android pregunte, y una copia de seguridad puede incluir los datos de las propias aplicaciones. Requiere un dispositivo rooteado con Magisk, KernelSU o APatch; al activarlo se pide permiso a la aplicación de root.</string>
+    <string name="root_checking">Consultando a la aplicación de root…</string>
+    <string name="root_granted">Acceso root concedido: %1$s.</string>
+    <string name="root_granted_unknown">Acceso root concedido.</string>
+    <string name="root_denied">Se ha denegado el acceso root. Autoriza a ARK-Store en la aplicación de root e inténtalo de nuevo; hasta entonces, las instalaciones se hacen de la forma habitual.</string>
+    <string name="root_missing">No disponible: este dispositivo no está rooteado.</string>
+    <string name="root_lost">La última instalación no obtuvo acceso root y se hizo de la forma habitual.</string>
+    <string name="uninstall_confirm_title">¿Desinstalar %1$s?</string>
+    <string name="uninstall_confirm_message">Se eliminarán la aplicación y sus datos al momento, sin que Android pregunte nada.</string>
+    <string name="uninstall_failed">No se ha podido desinstalar: %1$s</string>
     <string name="error_token">GitHub ha rechazado el token indicado en los ajustes. Sustitúyelo o quítalo allí.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Solo hace falta si añades fuentes: la tienda lee directamente de GitHub las cuentas y los repositorios que has añadido, y sin token GitHub permite hacerlo 60 veces por hora desde una misma red. Si la lista deja de actualizarse con un aviso de que GitHub está limitando las solicitudes, un token aumenta ese límite de solicitudes. Crea en github.com/settings/personal-access-tokens un token de acceso personal específico (fine-grained) sin ningún permiso; los repositorios públicos se pueden leer sin permisos. El token se queda en este dispositivo, fuera de las copias de seguridad y de las exportaciones, y solo se envía a GitHub.</string>
@@ -244,7 +256,7 @@
     <string name="transfer_failed">No se ha podido leer o escribir el archivo.</string>
     <string name="action_back">Atrás</string>
     <string name="backup_title">Copia de seguridad de aplicaciones</string>
-    <string name="backup_description">Copia las aplicaciones instaladas desde fuera de Google Play, como archivos APK, en una carpeta o en un archivo ZIP, y vuelve a instalarlas en este dispositivo o en otro. Los datos de las propias aplicaciones no se incluyen.</string>
+    <string name="backup_description">Copia las aplicaciones instaladas desde fuera de Google Play, como archivos APK, en una carpeta o en un archivo ZIP, y vuelve a instalarlas en este dispositivo o en otro. Los datos de las propias aplicaciones solo se incluyen si root está activado.</string>
     <string name="action_backup_apps">Crear copia de seguridad</string>
     <string name="action_restore_apps">Restaurar aplicaciones</string>
     <string name="backup_notification_saving">Copiando %1$s</string>
@@ -316,4 +328,19 @@
     <string name="backup_event_restored">enviadas al sistema: %1$d, fallidas: %2$d</string>
     <string name="backup_event_cancelled">cancelado</string>
     <string name="backup_event_failed">fallido</string>
+    <string name="backup_include_data">También los datos de las propias aplicaciones</string>
+    <string name="backup_include_data_detail">Con root: los ajustes, las bases de datos y los archivos de cada aplicación, unos %1$s en total. Las cachés se dejan fuera.</string>
+    <string name="backup_password_label">Contraseña de los datos</string>
+    <string name="backup_password_hint">Los datos se cifran con ella. No se guarda en ningún sitio: sin ella, los datos no se pueden recuperar.</string>
+    <string name="backup_password_empty">Sin contraseña, los datos se guardan tal cual, con los inicios de sesión incluidos. Conserva la copia de seguridad en un lugar seguro o escribe una contraseña.</string>
+    <string name="backup_data_size">datos %1$s</string>
+    <string name="restore_include_data">Restaurar también los datos de las propias aplicaciones</string>
+    <string name="restore_include_data_detail">Con root, para las aplicaciones que los tengan en la copia de seguridad. Se sustituyen sus datos en este dispositivo.</string>
+    <string name="restore_data_needs_root">La copia de seguridad también contiene los datos de las propias aplicaciones. Para restaurarlos hace falta root; consulta los ajustes.</string>
+    <string name="restore_password_label">Contraseña de los datos</string>
+    <string name="restore_data">con datos</string>
+    <string name="restore_data_encrypted">con datos cifrados</string>
+    <string name="backup_data_failed">No se han guardado los datos de estas aplicaciones: %1$s</string>
+    <string name="restore_data_failed">No se han restaurado los datos de estas aplicaciones: %1$s</string>
+    <string name="restore_wrong_password">Esta no es la contraseña con la que se cifraron los datos.</string>
 </resources>

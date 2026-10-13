@@ -216,6 +216,18 @@
     <string name="auto_update_unmetered_description">Nicht über mobile Daten oder andere getaktete Netzwerke</string>
     <string name="auto_update_charging_switch">Nur beim Laden</string>
     <string name="auto_update_charging_description">Wartet, bis das Gerät geladen wird</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Root verwenden</string>
+    <string name="root_description">Installationen, Updates, Deinstallationen und Wiederherstellungen laufen ohne Rückfrage von Android durch, und eine Sicherung kann auch die Daten der Apps selbst enthalten. Erfordert ein gerootetes Gerät mit Magisk, KernelSU oder APatch; beim Einschalten wird die Root-App um Erlaubnis gefragt.</string>
+    <string name="root_checking">Anfrage an die Root-App…</string>
+    <string name="root_granted">Root-Zugriff gewährt: %1$s.</string>
+    <string name="root_granted_unknown">Root-Zugriff gewährt.</string>
+    <string name="root_denied">Root-Zugriff wurde verweigert. Erlaube ARK-Store in der Root-App und versuche es noch einmal; bis dahin wird auf dem üblichen Weg installiert.</string>
+    <string name="root_missing">Nicht verfügbar: Dieses Gerät ist nicht gerootet.</string>
+    <string name="root_lost">Die letzte Installation hat keinen Root-Zugriff erhalten und lief auf dem üblichen Weg.</string>
+    <string name="uninstall_confirm_title">%1$s deinstallieren?</string>
+    <string name="uninstall_confirm_message">Die App und ihre Daten werden sofort entfernt, ohne Rückfrage von Android.</string>
+    <string name="uninstall_failed">Deinstallation fehlgeschlagen: %1$s</string>
     <string name="error_token">GitHub hat das in den Einstellungen eingegebene Token abgelehnt. Ersetze oder entferne es dort.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Nur nötig, wenn du Quellen hinzufügst: ARK-Store liest die von dir hinzugefügten Konten und Repositorys direkt von GitHub, und ohne Token erlaubt GitHub das einem Netzwerk nur 60 Mal pro Stunde. Wenn die Liste nicht mehr aktualisiert wird und ein Hinweis erscheint, dass GitHub Anfragen begrenzt, erhöht ein Token dieses Anfragelimit. Erstelle unter github.com/settings/personal-access-tokens ein persönliches Zugriffstoken vom Typ „Fine-grained“ ohne Berechtigungen; öffentliche Repositorys lassen sich auch ohne Berechtigungen lesen. Das Token bleibt auf diesem Gerät, ist nicht in Sicherungen und Exporten enthalten und wird nur an GitHub gesendet.</string>
@@ -236,7 +248,7 @@
     <string name="transfer_failed">Die Datei konnte nicht gelesen oder geschrieben werden.</string>
     <string name="action_back">Zurück</string>
     <string name="backup_title">App-Sicherung</string>
-    <string name="backup_description">Kopiere die Apps, die nicht über Google Play installiert wurden, als APK-Dateien in einen Ordner oder eine ZIP-Datei und installiere sie wieder, auf diesem oder einem anderen Gerät. Die Daten der Apps selbst sind nicht enthalten.</string>
+    <string name="backup_description">Kopiere die Apps, die nicht über Google Play installiert wurden, als APK-Dateien in einen Ordner oder eine ZIP-Datei und installiere sie wieder, auf diesem oder einem anderen Gerät. Die Daten der Apps selbst sind nur enthalten, wenn Root eingeschaltet ist.</string>
     <string name="action_backup_apps">Apps sichern</string>
     <string name="action_restore_apps">Apps wiederherstellen</string>
     <string name="backup_notification_saving">%1$s wird gesichert</string>
@@ -305,4 +317,19 @@
     <string name="backup_event_restored">an das System übergeben: %1$d, fehlgeschlagen: %2$d</string>
     <string name="backup_event_cancelled">abgebrochen</string>
     <string name="backup_event_failed">fehlgeschlagen</string>
+    <string name="backup_include_data">Auch die Daten der Apps selbst</string>
+    <string name="backup_include_data_detail">Mit Root: Einstellungen, Datenbanken und Dateien jeder App, insgesamt etwa %1$s. Caches werden nicht gesichert.</string>
+    <string name="backup_password_label">Passwort für die Daten</string>
+    <string name="backup_password_hint">Die Daten werden damit verschlüsselt. Es wird nirgends gespeichert: Ohne das Passwort lassen sich die Daten nicht wiederherstellen.</string>
+    <string name="backup_password_empty">Ohne Passwort werden die Daten unverschlüsselt gespeichert, Logins inklusive. Bewahre die Sicherung an einem sicheren Ort auf oder gib ein Passwort ein.</string>
+    <string name="backup_data_size">Daten %1$s</string>
+    <string name="restore_include_data">Auch die Daten der Apps selbst wiederherstellen</string>
+    <string name="restore_include_data_detail">Mit Root, für die Apps, deren Daten in der Sicherung enthalten sind. Ihre Daten auf diesem Gerät werden ersetzt.</string>
+    <string name="restore_data_needs_root">Die Sicherung enthält auch die Daten der Apps selbst. Zum Wiederherstellen ist Root nötig; siehe Einstellungen.</string>
+    <string name="restore_password_label">Passwort für die Daten</string>
+    <string name="restore_data">mit Daten</string>
+    <string name="restore_data_encrypted">mit Daten, verschlüsselt</string>
+    <string name="backup_data_failed">Die Daten dieser Apps wurden nicht gesichert: %1$s</string>
+    <string name="restore_data_failed">Die Daten dieser Apps wurden nicht wiederhergestellt: %1$s</string>
+    <string name="restore_wrong_password">Das ist nicht das Passwort, mit dem die Daten verschlüsselt wurden.</string>
 </resources>

@@ -224,6 +224,18 @@
     <string name="auto_update_unmetered_description">Ni avec les données mobiles, ni sur un autre réseau facturé à l\'usage</string>
     <string name="auto_update_charging_switch">Pendant la recharge uniquement</string>
     <string name="auto_update_charging_description">Attend que l\'appareil soit branché</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Utiliser l\'accès root</string>
+    <string name="root_description">Les installations, mises à jour, désinstallations et restaurations se font sans qu\'Android demande de confirmation, et une sauvegarde peut inclure les données des applications. Nécessite un appareil rooté avec Magisk, KernelSU ou APatch ; à l\'activation, l\'autorisation est demandée à l\'application root.</string>
+    <string name="root_checking">Interrogation de l\'application root…</string>
+    <string name="root_granted">Accès root accordé : %1$s.</string>
+    <string name="root_granted_unknown">Accès root accordé.</string>
+    <string name="root_denied">L\'accès root a été refusé. Autorisez ARK-Store dans l\'application root, puis réessayez ; en attendant, les installations se font de la manière habituelle.</string>
+    <string name="root_missing">Indisponible : cet appareil n\'est pas rooté.</string>
+    <string name="root_lost">La dernière installation n\'a pas obtenu l\'accès root et s\'est faite de la manière habituelle.</string>
+    <string name="uninstall_confirm_title">Désinstaller %1$s ?</string>
+    <string name="uninstall_confirm_message">L\'application et ses données vont être supprimées immédiatement, sans confirmation d\'Android.</string>
+    <string name="uninstall_failed">Impossible de désinstaller : %1$s</string>
     <string name="error_token">GitHub a refusé le jeton indiqué dans les paramètres. Remplacez-le ou supprimez-le depuis les paramètres.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">Utile uniquement si vous ajoutez des sources : la boutique lit directement sur GitHub les comptes et dépôts que vous avez ajoutés, et sans jeton, GitHub n\'autorise que 60 requêtes par heure depuis un même réseau. Si la liste ne s\'actualise plus et qu\'un message indique que GitHub limite les requêtes, un jeton augmente cette limite de requêtes. Créez sur github.com/settings/personal-access-tokens un jeton d\'accès personnel à granularité fine (fine-grained), sans aucune autorisation : les dépôts publics sont lisibles sans autorisation. Le jeton reste sur cet appareil, en dehors des sauvegardes et des exports, et n\'est envoyé qu\'à GitHub.</string>
@@ -244,7 +256,7 @@
     <string name="transfer_failed">Impossible de lire ou d\'écrire le fichier.</string>
     <string name="action_back">Retour</string>
     <string name="backup_title">Sauvegarde des applications</string>
-    <string name="backup_description">Copiez les applications installées en dehors de Google Play, sous forme de fichiers APK, dans un dossier ou un fichier ZIP, puis réinstallez-les sur cet appareil ou sur un autre. Les données des applications ne sont pas incluses.</string>
+    <string name="backup_description">Copiez les applications installées en dehors de Google Play, sous forme de fichiers APK, dans un dossier ou un fichier ZIP, puis réinstallez-les sur cet appareil ou sur un autre. Les données des applications ne sont incluses que si l\'accès root est activé.</string>
     <string name="action_backup_apps">Sauvegarder les applications</string>
     <string name="action_restore_apps">Restaurer les applications</string>
     <string name="backup_notification_saving">Sauvegarde : %1$s</string>
@@ -316,4 +328,19 @@
     <string name="backup_event_restored">transmises au système : %1$d ; échecs : %2$d</string>
     <string name="backup_event_cancelled">annulé</string>
     <string name="backup_event_failed">échec</string>
+    <string name="backup_include_data">Inclure aussi les données des applications</string>
+    <string name="backup_include_data_detail">Avec l\'accès root : les paramètres, bases de données et fichiers de chaque application, environ %1$s au total. Les caches sont exclus.</string>
+    <string name="backup_password_label">Mot de passe des données</string>
+    <string name="backup_password_hint">Il sert à chiffrer les données. Il n\'est enregistré nulle part : sans lui, impossible de restaurer les données.</string>
+    <string name="backup_password_empty">Sans mot de passe, les données sont enregistrées telles quelles, identifiants compris. Conservez la sauvegarde en lieu sûr ou saisissez un mot de passe.</string>
+    <string name="backup_data_size">données %1$s</string>
+    <string name="restore_include_data">Restaurer aussi les données des applications</string>
+    <string name="restore_include_data_detail">Avec l\'accès root, pour les applications dont les données figurent dans la sauvegarde. Leurs données sur cet appareil sont remplacées.</string>
+    <string name="restore_data_needs_root">La sauvegarde contient aussi les données des applications. Leur restauration nécessite l\'accès root ; voir les paramètres.</string>
+    <string name="restore_password_label">Mot de passe des données</string>
+    <string name="restore_data">avec données</string>
+    <string name="restore_data_encrypted">avec données chiffrées</string>
+    <string name="backup_data_failed">Les données de ces applications n\'ont pas été enregistrées : %1$s</string>
+    <string name="restore_data_failed">Les données de ces applications n\'ont pas été restaurées : %1$s</string>
+    <string name="restore_wrong_password">Ce n\'est pas le mot de passe avec lequel les données ont été chiffrées.</string>
 </resources>

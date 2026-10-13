@@ -216,6 +216,18 @@
     <string name="auto_update_unmetered_description">मोबाइल डेटा या किसी दूसरे सीमित डेटा वाले नेटवर्क पर नहीं</string>
     <string name="auto_update_charging_switch">सिर्फ़ चार्ज होते समय</string>
     <string name="auto_update_charging_description">डिवाइस को चार्जिंग पर लगाए जाने तक इंतज़ार करता है</string>
+    <string name="root_title">रूट</string>
+    <string name="root_switch">रूट इस्तेमाल करें</string>
+    <string name="root_description">इंस्टॉल, अपडेट, अनइंस्टॉल और रीस्टोर Android के पूछे बिना हो जाते हैं, और बैकअप में ऐप का अपना डेटा भी शामिल किया जा सकता है। इसके लिए Magisk, KernelSU या APatch से रूट किया गया डिवाइस ज़रूरी है; इसे चालू करने पर रूट ऐप से अनुमति मांगी जाती है।</string>
+    <string name="root_checking">रूट ऐप से अनुमति मांगी जा रही है…</string>
+    <string name="root_granted">रूट की अनुमति मिल गई: %1$s।</string>
+    <string name="root_granted_unknown">रूट की अनुमति मिल गई।</string>
+    <string name="root_denied">रूट की अनुमति अस्वीकार कर दी गई। रूट ऐप में ARK-Store को अनुमति दें और फिर से कोशिश करें; तब तक ऐप सामान्य तरीके से इंस्टॉल होंगे।</string>
+    <string name="root_missing">उपलब्ध नहीं है: यह डिवाइस रूट नहीं किया गया है।</string>
+    <string name="root_lost">पिछले इंस्टॉलेशन को रूट नहीं मिला, इसलिए वह सामान्य तरीके से हुआ।</string>
+    <string name="uninstall_confirm_title">%1$s अनइंस्टॉल करें?</string>
+    <string name="uninstall_confirm_message">ऐप और उसका डेटा Android के पूछे बिना तुरंत हटा दिया जाएगा।</string>
+    <string name="uninstall_failed">अनइंस्टॉल नहीं हो सका: %1$s</string>
     <string name="error_token">सेटिंग में दिया गया टोकन GitHub ने अस्वीकार कर दिया है। सेटिंग में जाकर इसे बदलें या हटाएं।</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">इसकी ज़रूरत सिर्फ़ तब है, जब आप स्रोत जोड़ते हैं: आपके जोड़े गए खातों और रिपॉज़िटरी की जानकारी स्टोर सीधे GitHub से पढ़ता है, और टोकन के बिना GitHub किसी नेटवर्क से ऐसा घंटे में सिर्फ़ 60 बार करने देता है। अगर सूची रीफ़्रेश होना बंद हो जाए और यह मैसेज दिखे कि GitHub अनुरोधों को सीमित कर रहा है, तो टोकन से अनुरोधों की सीमा बढ़ जाती है। github.com/settings/personal-access-tokens पर जाकर बिना किसी अनुमति वाला एक fine-grained पर्सनल ऐक्सेस टोकन बनाएं; सार्वजनिक रिपॉज़िटरी पढ़ने के लिए किसी अनुमति की ज़रूरत नहीं होती। टोकन इसी डिवाइस पर रहता है, बैकअप और एक्सपोर्ट में शामिल नहीं होता और सिर्फ़ GitHub को भेजा जाता है।</string>
@@ -236,7 +248,7 @@
     <string name="transfer_failed">फ़ाइल को पढ़ा या उसमें लिखा नहीं जा सका।</string>
     <string name="action_back">वापस जाएं</string>
     <string name="backup_title">ऐप का बैकअप</string>
-    <string name="backup_description">Google Play के बाहर से इंस्टॉल किए गए ऐप को उनकी APK फ़ाइलों के रूप में किसी फ़ोल्डर या ZIP फ़ाइल में कॉपी करें, और उन्हें इसी या किसी दूसरे डिवाइस पर वापस इंस्टॉल करें। ऐप का अपना डेटा इसमें शामिल नहीं होता।</string>
+    <string name="backup_description">Google Play के बाहर से इंस्टॉल किए गए ऐप को उनकी APK फ़ाइलों के रूप में किसी फ़ोल्डर या ZIP फ़ाइल में कॉपी करें, और उन्हें इसी या किसी दूसरे डिवाइस पर वापस इंस्टॉल करें। ऐप का अपना डेटा सिर्फ़ तब शामिल होता है, जब रूट चालू हो।</string>
     <string name="action_backup_apps">ऐप का बैकअप लें</string>
     <string name="action_restore_apps">ऐप रीस्टोर करें</string>
     <string name="backup_notification_saving">बैकअप लिया जा रहा है: %1$s</string>
@@ -305,4 +317,19 @@
     <string name="backup_event_restored">सिस्टम को सौंपे गए: %1$d, विफल: %2$d</string>
     <string name="backup_event_cancelled">रद्द किया गया</string>
     <string name="backup_event_failed">विफल</string>
+    <string name="backup_include_data">ऐप का अपना डेटा भी शामिल करें</string>
+    <string name="backup_include_data_detail">रूट से: हर ऐप की सेटिंग, डेटाबेस और फ़ाइलें, कुल मिलाकर लगभग %1$s। कैश शामिल नहीं किया जाता।</string>
+    <string name="backup_password_label">डेटा का पासवर्ड</string>
+    <string name="backup_password_hint">डेटा इसी से एन्क्रिप्ट किया जाता है। यह कहीं सेव नहीं होता: इसके बिना डेटा वापस नहीं लाया जा सकता।</string>
+    <string name="backup_password_empty">पासवर्ड के बिना डेटा जैसा है वैसा ही सेव होता है, लॉगिन समेत। बैकअप को किसी सुरक्षित जगह रखें या पासवर्ड डालें।</string>
+    <string name="backup_data_size">डेटा %1$s</string>
+    <string name="restore_include_data">ऐप का अपना डेटा भी वापस लाएं</string>
+    <string name="restore_include_data_detail">रूट से, उन ऐप के लिए जिनका डेटा बैकअप में है। इस डिवाइस पर मौजूद उनका डेटा बदल दिया जाएगा।</string>
+    <string name="restore_data_needs_root">बैकअप में ऐप का अपना डेटा भी है। उसे वापस लाने के लिए रूट ज़रूरी है; सेटिंग देखें।</string>
+    <string name="restore_password_label">डेटा का पासवर्ड</string>
+    <string name="restore_data">डेटा के साथ</string>
+    <string name="restore_data_encrypted">डेटा के साथ, एन्क्रिप्टेड</string>
+    <string name="backup_data_failed">इन ऐप का डेटा सेव नहीं हुआ: %1$s</string>
+    <string name="restore_data_failed">इन ऐप का डेटा वापस नहीं लाया जा सका: %1$s</string>
+    <string name="restore_wrong_password">यह वह पासवर्ड नहीं है, जिससे डेटा एन्क्रिप्ट किया गया था।</string>
 </resources>

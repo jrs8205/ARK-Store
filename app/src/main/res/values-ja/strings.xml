@@ -208,6 +208,18 @@
     <string name="auto_update_unmetered_description">モバイルデータやその他の従量制ネットワークでは更新しません</string>
     <string name="auto_update_charging_switch">充電中のみ</string>
     <string name="auto_update_charging_description">デバイスが電源に接続されるまで待機します</string>
+    <string name="root_title">Root</string>
+    <string name="root_switch">Root 権限を使用</string>
+    <string name="root_description">インストール、更新、アンインストール、復元が Android の確認なしで行われ、バックアップにアプリ自体のデータも含められるようになります。Magisk、KernelSU、APatch のいずれかで Root 化されたデバイスが必要です。オンにすると、Root 管理アプリに許可を求めます。</string>
+    <string name="root_checking">Root 管理アプリに確認しています…</string>
+    <string name="root_granted">Root 権限を取得しました（%1$s）。</string>
+    <string name="root_granted_unknown">Root 権限を取得しました。</string>
+    <string name="root_denied">Root 権限が拒否されました。Root 管理アプリで ARK-Store を許可してから、もう一度お試しください。それまでは、インストールは通常の方法で行われます。</string>
+    <string name="root_missing">利用できません。このデバイスは Root 化されていません。</string>
+    <string name="root_lost">前回のインストールでは Root 権限を取得できなかったため、通常の方法で行われました。</string>
+    <string name="uninstall_confirm_title">%1$s をアンインストールしますか？</string>
+    <string name="uninstall_confirm_message">アプリとそのデータは、Android の確認なしですぐに削除されます。</string>
+    <string name="uninstall_failed">アンインストールできませんでした：%1$s</string>
     <string name="error_token">設定で入力したトークンが GitHub で拒否されました。設定でトークンを置き換えるか、削除してください。</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">ソースを追加する場合にのみ必要です。このストアは追加したアカウントやリポジトリを GitHub から直接読み込みますが、トークンがない場合、GitHub が許可するのは 1 つのネットワークにつき 1 時間に 60 回までです。GitHub がリクエストを制限しているというメッセージが表示されてリストが更新されなくなった場合は、トークンを使うと制限が緩和されます。github.com/settings/personal-access-tokens で、権限を何も付けずに fine-grained personal access token を作成してください。公開リポジトリは権限なしで読み取れます。トークンはこのデバイスにのみ保存され、バックアップやエクスポートには含まれず、GitHub 以外には送信されません。</string>
@@ -228,7 +240,7 @@
     <string name="transfer_failed">ファイルの読み込みまたは書き込みができませんでした。</string>
     <string name="action_back">戻る</string>
     <string name="backup_title">アプリのバックアップ</string>
-    <string name="backup_description">Google Play 以外からインストールしたアプリを APK ファイルとしてフォルダまたは ZIP ファイルにコピーし、このデバイスや別のデバイスにインストールし直せます。アプリ自体のデータは含まれません。</string>
+    <string name="backup_description">Google Play 以外からインストールしたアプリを APK ファイルとしてフォルダまたは ZIP ファイルにコピーし、このデバイスや別のデバイスにインストールし直せます。アプリ自体のデータは、Root をオンにしている場合にのみ含まれます。</string>
     <string name="action_backup_apps">アプリをバックアップ</string>
     <string name="action_restore_apps">アプリを復元</string>
     <string name="backup_notification_saving">バックアップ中：%1$s</string>
@@ -294,4 +306,19 @@
     <string name="backup_event_restored">システムに渡した %1$d 件、失敗 %2$d 件</string>
     <string name="backup_event_cancelled">キャンセル済み</string>
     <string name="backup_event_failed">失敗</string>
+    <string name="backup_include_data">アプリ自体のデータも含める</string>
+    <string name="backup_include_data_detail">Root 権限で、各アプリの設定、データベース、ファイルをコピーします（合計約 %1$s）。キャッシュは含まれません。</string>
+    <string name="backup_password_label">データのパスワード</string>
+    <string name="backup_password_hint">データはこのパスワードで暗号化されます。パスワードはどこにも保存されず、これがなければデータは復元できません。</string>
+    <string name="backup_password_empty">パスワードを設定しない場合、データはログイン情報も含めてそのまま保存されます。バックアップを安全な場所に保管するか、パスワードを入力してください。</string>
+    <string name="backup_data_size">データ %1$s</string>
+    <string name="restore_include_data">アプリ自体のデータも復元する</string>
+    <string name="restore_include_data_detail">バックアップにデータが含まれているアプリについて、Root 権限でデータを復元します。このデバイス上の現在のデータは置き換えられます。</string>
+    <string name="restore_data_needs_root">このバックアップにはアプリ自体のデータも含まれています。データの復元には Root 権限が必要です。設定をご確認ください。</string>
+    <string name="restore_password_label">データのパスワード</string>
+    <string name="restore_data">データあり</string>
+    <string name="restore_data_encrypted">データあり（暗号化）</string>
+    <string name="backup_data_failed">次のアプリのデータは保存されませんでした：%1$s</string>
+    <string name="restore_data_failed">次のアプリのデータは復元されませんでした：%1$s</string>
+    <string name="restore_wrong_password">パスワードが、データの暗号化に使われたものと一致しません。</string>
 </resources>

@@ -248,6 +248,18 @@
     <string name="auto_update_unmetered_description">ليس عبر بيانات الجوّال أو أي شبكة أخرى محدودة الاستخدام</string>
     <string name="auto_update_charging_switch">أثناء الشحن فقط</string>
     <string name="auto_update_charging_description">ينتظر إلى أن يتم توصيل الجهاز بالشاحن</string>
+    <string name="root_title">صلاحيات الروت</string>
+    <string name="root_switch">استخدام صلاحيات الروت</string>
+    <string name="root_description">تتم عمليات التثبيت والتحديث وإلغاء التثبيت والاستعادة دون أن يسألك Android، ويمكن أن تتضمّن النسخة الاحتياطية بيانات التطبيقات نفسها. يتطلّب جهازًا بصلاحيات الروت عبر Magisk أو KernelSU أو APatch؛ وعند تفعيل هذا الخيار يُطلب الإذن من تطبيق الروت.</string>
+    <string name="root_checking">جارٍ طلب الإذن من تطبيق الروت…</string>
+    <string name="root_granted">تم منح صلاحيات الروت: %1$s.</string>
+    <string name="root_granted_unknown">تم منح صلاحيات الروت.</string>
+    <string name="root_denied">رُفض منح صلاحيات الروت. امنح ARK-Store الإذن في تطبيق الروت ثم حاول مرة أخرى؛ وحتى ذلك الحين تتم عمليات التثبيت بالطريقة المعتادة.</string>
+    <string name="root_missing">غير متاح: هذا الجهاز غير مزوّد بصلاحيات الروت.</string>
+    <string name="root_lost">لم تحصل عملية التثبيت الأخيرة على صلاحيات الروت، فتمّت بالطريقة المعتادة.</string>
+    <string name="uninstall_confirm_title">هل تريد إلغاء تثبيت %1$s؟</string>
+    <string name="uninstall_confirm_message">ستتم إزالة التطبيق وبياناته فورًا، دون أن يسألك Android.</string>
+    <string name="uninstall_failed">تعذّر إلغاء التثبيت: %1$s</string>
     <string name="error_token">رفض GitHub رمز الوصول المُدخل في الإعدادات. استبدله أو أزِله من هناك.</string>
     <string name="github_title">GitHub</string>
     <string name="github_token_description">لا تحتاج إليه إلا إذا أضفت مصادر: يقرأ المتجر الحسابات والمستودعات التي أضفتها من GitHub مباشرةً، ودون رمز وصول يسمح GitHub بذلك 60 مرة في الساعة لكل شبكة. وإذا توقفت القائمة عن التحديث مع ملاحظة تفيد بأن GitHub يحدّ من الطلبات، فإن رمز الوصول يرفع هذا الحد. أنشئ من الصفحة github.com/settings/personal-access-tokens رمز وصول شخصيًا دقيق الصلاحيات (fine-grained) دون أي أذونات، إذ يمكن قراءة المستودعات العامة دون أذونات. يبقى رمز الوصول على هذا الجهاز، خارج النُّسخ الاحتياطية وملفات التصدير، ولا يُرسَل إلا إلى GitHub.</string>
@@ -268,7 +280,7 @@
     <string name="transfer_failed">تعذّرت قراءة الملف أو الكتابة فيه.</string>
     <string name="action_back">رجوع</string>
     <string name="backup_title">النسخ الاحتياطي للتطبيقات</string>
-    <string name="backup_description">انسخ التطبيقات المثبّتة من خارج Google Play، بملفات APK الخاصة بها، إلى مجلد أو ملف ZIP، ثم ثبّتها من جديد على هذا الجهاز أو على جهاز آخر. لا تُضمَّن بيانات التطبيقات نفسها.</string>
+    <string name="backup_description">انسخ التطبيقات المثبّتة من خارج Google Play، بملفات APK الخاصة بها، إلى مجلد أو ملف ZIP، ثم ثبّتها من جديد على هذا الجهاز أو على جهاز آخر. لا تُضمَّن بيانات التطبيقات نفسها إلا عند تفعيل صلاحيات الروت.</string>
     <string name="action_backup_apps">نسخ التطبيقات احتياطيًا</string>
     <string name="action_restore_apps">استعادة التطبيقات</string>
     <string name="backup_notification_saving">جارٍ نسخ %1$s احتياطيًا</string>
@@ -349,4 +361,19 @@
     <string name="backup_event_restored">سُلِّم إلى النظام: %1$d، فشل: %2$d</string>
     <string name="backup_event_cancelled">تم الإلغاء</string>
     <string name="backup_event_failed">فشل</string>
+    <string name="backup_include_data">نسخ بيانات التطبيقات نفسها أيضًا</string>
+    <string name="backup_include_data_detail">بصلاحيات الروت: إعدادات كل تطبيق وقواعد بياناته وملفاته، بحجم إجمالي يقارب %1$s. وتُستبعَد ذاكرات التخزين المؤقت.</string>
+    <string name="backup_password_label">كلمة مرور البيانات</string>
+    <string name="backup_password_hint">تُشفَّر البيانات بها، ولا تُحفَظ في أي مكان: فمن دونها لا يمكن استعادة البيانات.</string>
+    <string name="backup_password_empty">من دون كلمة مرور، تُحفَظ البيانات كما هي، بما فيها بيانات تسجيل الدخول. احتفظ بالنسخة الاحتياطية في مكان آمن، أو أدخِل كلمة مرور.</string>
+    <string name="backup_data_size">البيانات %1$s</string>
+    <string name="restore_include_data">استعادة بيانات التطبيقات نفسها أيضًا</string>
+    <string name="restore_include_data_detail">بصلاحيات الروت، للتطبيقات التي توجد بياناتها في النسخة الاحتياطية. وتُستبدَل بياناتها الموجودة على هذا الجهاز.</string>
+    <string name="restore_data_needs_root">تتضمّن النسخة الاحتياطية بيانات التطبيقات نفسها أيضًا. وتتطلّب استعادتها صلاحيات الروت؛ راجِع الإعدادات.</string>
+    <string name="restore_password_label">كلمة مرور البيانات</string>
+    <string name="restore_data">مع البيانات</string>
+    <string name="restore_data_encrypted">مع البيانات، مشفّرة</string>
+    <string name="backup_data_failed">لم تُحفَظ بيانات هذه التطبيقات: %1$s</string>
+    <string name="restore_data_failed">لم تُستعَد بيانات هذه التطبيقات: %1$s</string>
+    <string name="restore_wrong_password">ليست هذه كلمة المرور التي شُفِّرت بها البيانات.</string>
 </resources>
