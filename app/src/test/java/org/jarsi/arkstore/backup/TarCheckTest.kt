@@ -65,7 +65,9 @@ class TarCheckTest {
             Item("$root/files/link", '2', link = "notes.txt"),
             Item("$root/files/up", '2', link = "../shared_prefs/a.xml"),
             Item("$root/files/same", '1', link = "$root/files/notes.txt"),
-            Item("files/x.txt", prefix = root)
+            Item("files/x.txt", prefix = root),
+            Item("$root/files/dir", '5'),
+            Item("$root/files/dir", '2', link = "notes.txt")
         )
         assertArrayEquals(bytes, pass(bytes))
         // Read a byte at a time too.
@@ -95,6 +97,14 @@ class TarCheckTest {
         refused(tar(Item("$root/files/link", '2', link = "")))
         refused(tar(Item("$root/files/link", '1', link = "other.app/x")))
         refused(tar(Item("$root/files/link", '1', link = "/x")))
+        // A hard link to a file the archive has not made, or to a link, could be to anything.
+        refused(tar(Item("$root/files/link", '1', link = "$root/files/other.txt")))
+        refused(
+            tar(
+                Item("$root/files/a", '2', link = "b"),
+                Item("$root/files/link", '1', link = "$root/files/a")
+            )
+        )
         // Up to the folder itself is as far as a link may climb.
         pass(tar(Item("$root/files/deep/link", '2', link = "../../databases/db")))
     }
@@ -130,6 +140,79 @@ class TarCheckTest {
                 Item("../evil", content = "x".toByteArray())
             )
         )
+    }
+
+    @Test
+    fun nothingPassesThroughALinkTheArchiveMade() {
+        // A link to the folder itself: a path through it, climbed twice, would leave the folder on the device.
+        refused(
+            tar(
+                Item("$root/up", '2', link = "."),
+                Item("$root/x", '2', link = "up/up/../..")
+            )
+        )
+        refused(
+            tar(
+                Item("$root/files", '2', link = "."),
+                Item("$root/files/evil", content = "x".toByteArray())
+            )
+        )
+        refused(
+            tar(
+                Item("$root/a", '2', link = "b"),
+                Item("$root/a/deep/file", content = "x".toByteArray())
+            )
+        )
+        // A folder made into a link afterwards is a link from then on.
+        refused(
+            tar(
+                Item("$root/d/", '5'),
+                Item("$root/d/ok", content = "x".toByteArray()),
+                Item("$root/d", '2', link = "."),
+                Item("$root/d/late", content = "x".toByteArray())
+            )
+        )
+    }
+
+    @Test
+    fun whatDifferentTarsWouldReadDifferentlyIsRefused() {
+        // A link with a size: some tars skip the bytes, some read them as the next header.
+        refused(tar(Item("$root/link", '2', link = "x", size = 512)))
+        refused(tar(Item("$root/link", '1', link = "$root/x", size = 512)))
+        // A prefix in a header that is not ustar.
+        val notUstar = tar(Item("x", prefix = root))
+        notUstar[257] = 0
+        refused(fixChecksum(notUstar))
+        // A size in base 256.
+        val base256 = tar(Item("$root/x", content = ByteArray(10)))
+        base256[124] = 0x80.toByte()
+        for (i in 125 until 136) base256[i] = 0
+        base256[135] = 10
+        refused(fixChecksum(base256))
+        // A size in a pax header, and a path in a global one.
+        fun pax(vararg records: Pair<String, String>): ByteArray = records.joinToString("") { (k, v) ->
+            val body = " $k=$v\n"
+            var length = body.length + 1
+            while (length.toString().length + body.length != length) length++
+            "$length$body"
+        }.toByteArray()
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("size" to "10")), Item("$root/x", content = ByteArray(10))))
+        refused(tar(Item("./PaxHeaders/g", 'g', content = pax("path" to "$root/x")), Item("$root/x", content = ByteArray(10))))
+        pass(tar(Item("./PaxHeaders/g", 'g', content = pax("comment" to "hi")), Item("$root/x", content = ByteArray(10))))
+        // Data after the end of the archive, which tar would not read.
+        val ended = tar(Item("$root/x", content = ByteArray(10)))
+        refused(ended + tar(Item("../evil", content = ByteArray(10))))
+        pass(ended + ByteArray(5120))
+        // The folder itself as a file.
+        refused(tar(Item(root, content = "x".toByteArray())))
+    }
+
+    private fun fixChecksum(bytes: ByteArray): ByteArray {
+        val header = bytes.copyOf(512)
+        " ".repeat(8).toByteArray().copyInto(header, 148)
+        val sum = header.sumOf { it.toInt() and 0xff }
+        (String.format("%06o", sum) + "\u0000 ").toByteArray().copyInto(header, 148)
+        return header + bytes.copyOfRange(512, bytes.size)
     }
 
     @Test

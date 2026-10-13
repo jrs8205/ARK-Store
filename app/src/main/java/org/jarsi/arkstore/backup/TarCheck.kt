@@ -38,6 +38,12 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         return if (read(one, 0, 1) < 0) -1 else one[0].toInt() and 0xff
     }
 
+    /** The paths of the symbolic links the archive has made so far: nothing may pass through one. */
+    private val symlinks = HashSet<String>()
+
+    /** The paths of the files the archive has made so far, which a hard link may point to. */
+    private val regularFiles = HashSet<String>()
+
     override fun read(b: ByteArray, off: Int, len: Int): Int {
         if (len == 0) return 0
         val n = input.read(b, off, len)
@@ -53,7 +59,12 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         var at = off
         val end = off + len
         while (at < end) {
-            if (ended) return
+            if (ended) {
+                // Nothing may follow the end of the archive but padding: tar would not read
+                // it, and what tar does not read is not checked.
+                for (i in at until end) if (b[i] != 0.toByte()) throw IOException("The archive goes on after its end")
+                return
+            }
             if (remaining > 0) {
                 val n = minOf(remaining, (end - at).toLong()).toInt()
                 capture?.append(b, at, n)
@@ -93,8 +104,11 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
                 return
             }
         }
+        val prefix = string(PREFIX, 155)
+        // A prefix is a ustar header's; one in another kind of header is read by some tars and
+        // not by others, and a name that is read two ways is not checked.
+        if (prefix.isNotEmpty() && !isUstar()) throw IOException("The archive has a prefix in a header that is not ustar")
         val name = paxPath ?: longName ?: string(NAME, 100).let { base ->
-            val prefix = if (isUstar()) string(PREFIX, 155) else ""
             if (prefix.isEmpty()) base else "$prefix/$base"
         }
         val link = paxLink ?: longLink ?: string(LINK, 100)
@@ -102,15 +116,23 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         longLink = null
         paxPath = null
         paxLink = null
+        val parts = checkName(name)
         when (type) {
-            '0', '\u0000', '7', '5' -> checkName(name)
+            '0', '\u0000', '7' -> {
+                if (parts.size == 1) throw IOException("The archive has the app's folder as a file")
+                regularFiles += parts.joinToString("/")
+            }
+            '5' -> Unit
             '2' -> {
-                checkName(name)
-                checkLink(name, link, symbolic = true)
+                // A link holds no data; a tar that read it as holding some would read the
+                // headers after it elsewhere than here.
+                if (size != 0L) throw IOException("The archive has a link with data: $name")
+                checkLink(parts, link, symbolic = true)
+                symlinks += parts.joinToString("/")
             }
             '1' -> {
-                checkName(name)
-                checkLink(name, link, symbolic = false)
+                if (size != 0L) throw IOException("The archive has a link with data: $name")
+                checkLink(parts, link, symbolic = false)
             }
             else -> throw IOException("The archive holds something that is not a file: type '$type' at $name")
         }
@@ -127,11 +149,16 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
                     when (key) {
                         "path" -> paxPath = value
                         "linkpath" -> paxLink = value
+                        // A size given here is read by some tars and not by others.
+                        "size" -> throw IOException("The archive gives a size in a pax header")
                     }
                 }
             }
-            // A global header applies to everything after; its paths are not taken, as tar does not take them either.
-            'g' -> Unit
+            // A global header applies to everything after; one that names paths or sizes is
+            // read differently by different tars.
+            'g' -> for ((key, _) in paxRecords(text)) {
+                if (key == "path" || key == "linkpath" || key == "size") throw IOException("The archive names a path in a global header")
+            }
         }
     }
 
@@ -161,25 +188,42 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         return parts
     }
 
-    private fun checkName(name: String) {
+    /** The parts of [name], under [root] and passing through no link the archive has made. */
+    private fun checkName(name: String): List<String> {
         val parts = parts(name) ?: throw IOException("The archive names a path that is not allowed: $name")
         if (parts.first() != root) throw IOException("The archive names a path outside its folder: $name")
+        throughNoLink(parts.dropLast(1), name)
+        return parts
+    }
+
+    /** Refuses a path whose folders, [folders], include a link the archive has made: where it leads is not known here. */
+    private fun throughNoLink(folders: List<String>, name: String) {
+        for (i in 1..folders.size) {
+            if (folders.subList(0, i).joinToString("/") in symlinks) {
+                throw IOException("The archive reaches through a link it made: $name")
+            }
+        }
     }
 
     /**
-     * Whether [link], the target of [name], stays under [root]: a hard link's target is a
-     * path in the archive; a symbolic link's target is taken from the link's own folder, and
-     * may climb with `..` only as far as [root].
+     * Whether [link], the target of the entry at [parts], stays under [root]: a hard link's
+     * target is a file the archive has made; a symbolic link's target is taken from the
+     * link's own folder, may climb with `..` only as far as [root], and may pass through no
+     * link the archive has made, as such a link could lead anywhere.
      */
-    private fun checkLink(name: String, link: String, symbolic: Boolean) {
+    private fun checkLink(parts: List<String>, link: String, symbolic: Boolean) {
+        val name = parts.joinToString("/")
         if (link.isEmpty() || link.startsWith("/") || '\\' in link || '\u0000' in link) {
             throw IOException("The archive links to a path that is not allowed: $name -> $link")
         }
         if (!symbolic) {
-            checkName(link)
+            val target = parts(link) ?: throw IOException("The archive links to a path that is not allowed: $name -> $link")
+            if (target.joinToString("/") !in regularFiles) {
+                throw IOException("The archive links to a file it has not made: $name -> $link")
+            }
             return
         }
-        val from = parts(name)!!.dropLast(1).toMutableList()
+        val from = parts.dropLast(1).toMutableList()
         for (part in link.split('/')) {
             when (part) {
                 "", "." -> Unit
@@ -189,6 +233,7 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
                 }
                 else -> from += part
             }
+            if (from.joinToString("/") in symlinks) throw IOException("The archive links through a link it made: $name -> $link")
         }
         if (from.first() != root) throw IOException("The archive links outside its folder: $name -> $link")
     }
@@ -202,14 +247,12 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         return String(header, at, end - at, Charsets.UTF_8)
     }
 
-    /** The entry's size: octal as a rule, or base 256 for a size the octal field cannot hold. */
+    /**
+     * The entry's size, in octal. A size in base 256, which some tars read and others do not,
+     * is refused: it stands for more than any file of an app's data is.
+     */
     private fun size(): Long {
-        if (header[SIZE].toInt() and 0x80 != 0) {
-            var value = 0L
-            for (i in 1 until 12) value = (value shl 8) or (header[SIZE + i].toLong() and 0xff)
-            if (value < 0) throw IOException("Not a size")
-            return value
-        }
+        if (header[SIZE].toInt() and 0x80 != 0) throw IOException("The archive has a size that is not octal")
         return octal(SIZE, 12)
     }
 
