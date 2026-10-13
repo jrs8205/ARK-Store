@@ -10,6 +10,7 @@ import org.junit.Test
 class RootDataCommandsTest {
 
     private val pkg = "org.example.app"
+    private val token = "1760371234567-7"
 
     @Test
     fun theFoldersOfTheDataAreTheUsers() {
@@ -52,11 +53,16 @@ class RootDataCommandsTest {
         assertTrue(command.contains("find /data/user/0/org.a -mindepth 1 -maxdepth 1 ! -name cache ! -name code_cache ! -name lib"))
         assertTrue(command.contains("echo \"data org.a\""))
         assertTrue(command.contains("echo \"data_de org.a\""))
-        assertTrue(command.endsWith("; true"))
+        // The listing says when it has run to its end: one that was never run says nothing.
+        assertTrue(command.endsWith("; echo ${RootDataCommands.PARTS_END}"))
         assertEquals(
             mapOf("org.a" to listOf("data", "data_de"), "org.b" to listOf("data_de")),
-            RootDataCommands.partsFrom("data_de org.a\ndata org.a\ndata_de org.b\nfind: oops\ncache org.c\ndata not.a package\n")
+            RootDataCommands.partsFrom("data_de org.a\ndata org.a\ndata_de org.b\nfind: oops\ncache org.c\ndata not.a package\n${RootDataCommands.PARTS_END}\n")
         )
+        assertEquals(emptyMap<String, List<String>>(), RootDataCommands.partsFrom("${RootDataCommands.PARTS_END}\n"))
+        assertNull(RootDataCommands.partsFrom("data org.a\n"))
+        assertNull(RootDataCommands.partsFrom(""))
+        assertNull(RootDataCommands.partsFrom("Permission denied\n"))
         assertThrows(IllegalArgumentException::class.java) { RootDataCommands.parts(0, listOf("../x")) }
     }
 
@@ -75,8 +81,11 @@ class RootDataCommandsTest {
 
     @Test
     fun theRestoreUnpacksBesideTheAppsAndChecksBeforeMovingIntoPlace() {
-        val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, 7)
-        assertEquals("/data/user/0/.arkstore-restore-7", staging)
+        val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, token)
+        assertEquals("/data/user/0/.arkstore-restore-$token", staging)
+        assertEquals("/data/user/0/.arkstore-old-$token", RootDataCommands.old(AppBackup.DATA_USER, 0, token))
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.staging(AppBackup.DATA_USER, 0, "7") }
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.staging(AppBackup.DATA_USER, 0, "1-2; id") }
         assertEquals(
             "rm -rf $staging && mkdir $staging && chmod 700 $staging && tar -x -p -f - -C $staging",
             RootDataCommands.extract("tar", staging)
@@ -96,23 +105,36 @@ class RootDataCommandsTest {
         assertFalse(RootDataCommands.stagingHoldsOnly("", staging, pkg))
         assertFalse(RootDataCommands.stagingHoldsOnly("$staging/$pkg\n$staging/other\n", staging, pkg))
         assertFalse(RootDataCommands.stagingHoldsOnly("$staging/other\n", staging, pkg))
-        val swap = RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, staging, 10234, 7)
+        assertEquals("am force-stop --user 0 $pkg", RootDataCommands.forceStop(pkg, 0))
+        assertEquals("am force-stop --user 10 $pkg", RootDataCommands.forceStop(pkg, 10))
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.forceStop(pkg, -1) }
+        assertEquals("rm -rf $staging", RootDataCommands.remove(staging))
+    }
+
+    @Test
+    fun theSwapKeepsTheOldDataUntilTheNewIsInPlaceAndLabelled() {
+        val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, token)
         val target = "/data/user/0/$pkg"
-        val old = "/data/user/0/.arkstore-old-7"
+        val old = "/data/user/0/.arkstore-old-$token"
+        val putBack = "{ [ ! -e $old ] || [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && " +
+            "rm -rf $target && { [ ! -e $old ] || mv $old $target; }"
         assertEquals(
             listOf(
+                "chown -R -h 10234:10234 $staging/$pkg",
                 "rm -rf $old",
                 "{ [ ! -e $target ] || mv $target $old; }",
-                "{ mv $staging/$pkg $target || { mv $old $target; false; }; }",
+                "{ mv $staging/$pkg $target || { [ ! -e $old ] || mv $old $target; false; }; }",
                 "{ [ ! -L $old/lib ] || [ -e $target/lib ] || mv $old/lib $target/lib; }",
-                "chown -R -h 10234:10234 $target",
-                "restorecon -R -F -D $target",
-                "rm -rf $old $staging"
+                "{ restorecon -R -F -D $target || { $putBack; false; }; }"
             ).joinToString(" && "),
-            swap
+            RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, 10234, token)
         )
-        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, staging, -1, 7) }
-        assertEquals("am force-stop $pkg", RootDataCommands.forceStop(pkg))
-        assertEquals("rm -rf $staging", RootDataCommands.remove(staging))
+        // Nothing of the swap removes the old data: that is for the finish, once every part is in place.
+        assertFalse(RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, 10234, token).contains("rm -rf $old $staging"))
+        assertEquals(putBack, RootDataCommands.unswap(AppBackup.DATA_USER, 0, pkg, token))
+        assertEquals("rm -rf $old $staging", RootDataCommands.finish(AppBackup.DATA_USER, 0, token))
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.swap(AppBackup.DATA_USER, 0, pkg, -1, token) }
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.swap(AppBackup.DATA_USER, 0, "org.example app", 1, token) }
+        assertThrows(IllegalArgumentException::class.java) { RootDataCommands.finish(AppBackup.DATA_USER, 0, "x") }
     }
 }

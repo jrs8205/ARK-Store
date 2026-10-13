@@ -7,6 +7,7 @@ import javax.crypto.SecretKey
 import kotlin.random.Random
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,9 +18,8 @@ class DataCryptTest {
     private val chunk = 1024
     private val iterations = 1000
 
-    private fun encrypt(plain: ByteArray, password: CharArray = this.password): ByteArray {
+    private fun encrypt(plain: ByteArray, password: CharArray = this.password, salt: ByteArray = DataCrypt.newSalt()): ByteArray {
         val out = ByteArrayOutputStream()
-        val salt = DataCrypt.newSalt()
         val key = DataCrypt.deriveKey(password, salt, iterations)
         DataCrypt.encrypt(out, key, salt, iterations, chunk).use { it.write(plain) }
         return out.toByteArray()
@@ -53,6 +53,28 @@ class DataCryptTest {
     }
 
     @Test
+    fun everyFileHasAKeyOfItsOwn() {
+        // The files of one run share the password's key and salt; each is encrypted with a
+        // key drawn from the file's own id, so that no nonce is ever used twice with one key.
+        val salt = DataCrypt.newSalt()
+        val master = DataCrypt.deriveKey(password, salt, iterations)
+        val a = DataCrypt.readHeader(ByteArrayInputStream(encrypt(byteArrayOf(1), salt = salt)))
+        val b = DataCrypt.readHeader(ByteArrayInputStream(encrypt(byteArrayOf(2), salt = salt)))
+        assertEquals(DataCrypt.FILE_ID_BYTES, a.fileId.size)
+        assertFalse(a.fileId.contentEquals(b.fileId))
+        assertFalse(DataCrypt.fileKey(master, a.fileId).encoded.contentEquals(DataCrypt.fileKey(master, b.fileId).encoded))
+        assertArrayEquals(DataCrypt.fileKey(master, a.fileId).encoded, DataCrypt.fileKey(master, a.fileId).encoded)
+        assertFalse(DataCrypt.fileKey(master, a.fileId).encoded.contentEquals(master.encoded))
+        assertThrows(IllegalArgumentException::class.java) { DataCrypt.fileKey(master, ByteArray(4)) }
+        // Two files of one key and one plain text: the same place in each is sealed differently.
+        val plain = ByteArray(chunk * 2) { 5 }
+        val one = encrypt(plain, salt = salt)
+        val two = encrypt(plain, salt = salt)
+        val first = DataCrypt.HEADER_BYTES + 4
+        assertFalse(one.copyOfRange(first, first + chunk).contentEquals(two.copyOfRange(first, first + chunk)))
+    }
+
+    @Test
     fun aWrongPasswordIsToldApartFromAnythingElse() {
         val cipher = encrypt(Random(1).nextBytes(chunk * 3))
         assertThrows(WrongPasswordException::class.java) { decrypt(cipher, "wrong".toCharArray()) }
@@ -80,6 +102,31 @@ class DataCryptTest {
         assertThrows(IOException::class.java) { decrypt("PK\u0003\u0004 nonsense".toByteArray()) }
         val wrongMagic = cipher.copyOf().also { it[0] = 'X'.code.toByte() }
         assertThrows(IOException::class.java) { decrypt(wrongMagic) }
+    }
+
+    @Test
+    fun theStreamTellsWhenItHasReadTheLastChunk() {
+        val plain = Random(3).nextBytes(chunk * 2)
+        val cipher = encrypt(plain)
+        val keyFor: (ByteArray, Int) -> SecretKey = { s, i -> DataCrypt.deriveKey(password, s, i) }
+        val opened = DataCrypt.decrypt(ByteArrayInputStream(cipher), keyFor)
+        assertFalse(opened.whole)
+        val buffer = ByteArray(chunk * 2)
+        var read = 0
+        while (read < buffer.size) read += opened.read(buffer, read, buffer.size - read)
+        // The data is all there, but the last chunk, which says so, has not been opened yet.
+        assertArrayEquals(plain, buffer)
+        assertFalse(opened.whole)
+        assertEquals(-1, opened.read())
+        assertTrue(opened.whole)
+        // Without the last chunk the data is all there just the same, and the end is refused.
+        val withoutEnd = cipher.copyOf(cipher.size - 4 - DataCrypt.TAG_BYTES)
+        val cut = DataCrypt.decrypt(ByteArrayInputStream(withoutEnd), keyFor)
+        read = 0
+        while (read < buffer.size) read += cut.read(buffer, read, buffer.size - read)
+        assertArrayEquals(plain, buffer)
+        assertFalse(cut.whole)
+        assertThrows(IOException::class.java) { cut.read() }
     }
 
     @Test
@@ -114,6 +161,7 @@ class DataCryptTest {
         assertArrayEquals(salt, header.salt)
         assertEquals(iterations, header.iterations)
         assertEquals(chunk, header.chunkBytes)
+        assertEquals(DataCrypt.FILE_ID_BYTES, header.fileId.size)
         assertEquals("", header.bound)
         assertEquals(DataCrypt.SALT_BYTES, salt.size)
     }

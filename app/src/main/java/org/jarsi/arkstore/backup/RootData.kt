@@ -1,6 +1,5 @@
 package org.jarsi.arkstore.backup
 
-import android.os.Process
 import android.util.Log
 import java.io.IOException
 import java.io.InputStream
@@ -23,6 +22,9 @@ internal object RootDataCommands {
     private val BUSYBOXES = listOf("/data/adb/magisk/busybox", "/data/adb/ksu/bin/busybox", "/data/adb/ap/bin/busybox")
 
     private val EXCLUDED = listOf("cache", "code_cache", "lib")
+
+    /** The last line [parts] prints, which says the listing ran to its end. */
+    const val PARTS_END = "arkstore-parts-end"
 
     /** The folder of the data [part] of every app of user [userId]: the system's own, reached as root, not the store's. */
     @Suppress("SdCardPath")
@@ -74,7 +76,8 @@ internal object RootDataCommands {
 
     /**
      * Prints, for each of [packages], the parts that hold anything worth taking, one line each:
-     * "part package". A folder holding nothing but the caches and the libraries is not a part.
+     * "part package", and [PARTS_END] last of all, so that a listing that was never run to its
+     * end, as when root was refused, is told from one of apps that have no data.
      */
     fun parts(userId: Int, packages: List<String>): String {
         require(packages.isNotEmpty()) { "No packages" }
@@ -85,18 +88,27 @@ internal object RootDataCommands {
                 "[ -d $dir ] && [ -n \"\$(find $dir -mindepth 1 -maxdepth 1 $excluded 2>/dev/null | head -n 1)\" ] && echo \"$part $pkg\""
             }
         }
-        return lines.joinToString("; ") + "; true"
+        return lines.joinToString("; ") + "; echo $PARTS_END"
     }
 
-    /** The parts [parts] printed, by package, in the order of [AppBackup.DATA_PARTS]. */
-    fun partsFrom(output: String): Map<String, List<String>> {
+    /**
+     * The parts [parts] printed, by package, in the order of [AppBackup.DATA_PARTS]; null when
+     * the listing did not run to its end.
+     */
+    fun partsFrom(output: String): Map<String, List<String>>? {
         val found = HashMap<String, MutableList<String>>()
+        var ended = false
         for (line in output.lineSequence()) {
             val words = line.trim().split(' ')
+            if (words.size == 1 && words[0] == PARTS_END) {
+                ended = true
+                continue
+            }
             if (words.size != 2 || words[0] !in AppBackup.DATA_PARTS || !AppBackup.isPackageName(words[1])) continue
             val list = found.getOrPut(words[1]) { ArrayList(2) }
             if (words[0] !in list) list += words[0]
         }
+        if (!ended) return null
         return found.mapValues { (_, parts) -> parts.sortedBy { AppBackup.DATA_PARTS.indexOf(it) } }
     }
 
@@ -107,8 +119,15 @@ internal object RootDataCommands {
         return "$tar -c -f - -C ${userDir(part, userId)} $excludes $pkg"
     }
 
-    /** The folder a restore of [part] is unpacked into first: beside the apps' folders, so a move into place is a rename. */
-    fun staging(part: String, userId: Int, number: Int): String = "${userDir(part, userId)}/.arkstore-restore-$number"
+    /**
+     * The folder a restore of [part] is unpacked into first: beside the apps' folders, so a
+     * move into place is a rename. [token] names the restore, see [RootData.token], so that no
+     * two restores, nor one and what an earlier one left behind, share a folder.
+     */
+    fun staging(part: String, userId: Int, token: String): String = "${userDir(part, userId)}/.arkstore-restore-${checkedToken(token)}"
+
+    /** Where the app's data as it was is kept while the restore [token] puts the new in place. */
+    fun old(part: String, userId: Int, token: String): String = "${userDir(part, userId)}/.arkstore-old-${checkedToken(token)}"
 
     /** Makes [staging] afresh and unpacks the tar on the input into it. */
     fun extract(tar: String, staging: String): String =
@@ -142,28 +161,49 @@ internal object RootDataCommands {
     }
 
     /**
-     * Puts the unpacked data of [packageName] in [staging] in the place of the app's data,
-     * owned by the app ([uid]) and labelled as the system labels an app's data, keeping the
-     * app's link to its native libraries. The old data is kept until the new is in place.
+     * Puts the unpacked data of [packageName] in the staging folder of the restore [token]
+     * in the place of the app's data, owned by the app ([uid]) and labelled as the system
+     * labels an app's data, keeping the app's link to its native libraries. The old data is
+     * moved aside and kept, see [old]: a step that fails puts it back, and [finish] removes
+     * it once every part of the app's data is in place.
      */
-    fun swap(part: String, userId: Int, packageName: String, staging: String, uid: Int, number: Int): String {
+    fun swap(part: String, userId: Int, packageName: String, uid: Int, token: String): String {
         require(uid >= 0) { "Not a uid" }
         val pkg = checked(packageName)
         val target = "${userDir(part, userId)}/$pkg"
-        val fresh = "$staging/$pkg"
-        val old = "${userDir(part, userId)}/.arkstore-old-$number"
+        val fresh = "${staging(part, userId, token)}/$pkg"
+        val old = old(part, userId, token)
         return listOf(
+            "chown -R -h $uid:$uid $fresh",
             "rm -rf $old",
             "{ [ ! -e $target ] || mv $target $old; }",
-            "{ mv $fresh $target || { mv $old $target; false; }; }",
+            "{ mv $fresh $target || { [ ! -e $old ] || mv $old $target; false; }; }",
             "{ [ ! -L $old/lib ] || [ -e $target/lib ] || mv $old/lib $target/lib; }",
-            "chown -R -h $uid:$uid $target",
-            "restorecon -R -F -D $target",
-            "rm -rf $old $staging"
+            "{ restorecon -R -F -D $target || { ${putBack(target, old)}; false; }; }"
         ).joinToString(" && ")
     }
 
-    fun forceStop(packageName: String): String = "am force-stop ${checked(packageName)}"
+    /** Takes the data [swap] put in place out again and puts the old back, as far as it is there. */
+    fun unswap(part: String, userId: Int, packageName: String, token: String): String {
+        val target = "${userDir(part, userId)}/${checked(packageName)}"
+        return putBack(target, old(part, userId, token))
+    }
+
+    /** The old data at [old] back in the place of [target], with the link to the libraries. */
+    private fun putBack(target: String, old: String): String = listOf(
+        "{ [ ! -e $old ] || [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; }",
+        "rm -rf $target",
+        "{ [ ! -e $old ] || mv $old $target; }"
+    ).joinToString(" && ")
+
+    /** Removes what the restore [token] of [part] left beside the apps' folders: the old data and the staging folder. */
+    fun finish(part: String, userId: Int, token: String): String =
+        "rm -rf ${old(part, userId, token)} ${staging(part, userId, token)}"
+
+    fun forceStop(packageName: String, userId: Int): String {
+        require(userId >= 0) { "Not a user" }
+        return "am force-stop --user $userId ${checked(packageName)}"
+    }
 
     fun remove(staging: String): String = "rm -rf $staging"
 
@@ -172,7 +212,13 @@ internal object RootDataCommands {
         return packageName
     }
 
+    private fun checkedToken(token: String): String {
+        require(TOKEN.matches(token)) { "Not a token" }
+        return token
+    }
+
     private val TOOL_PATH = Regex("[A-Za-z0-9_./-]+")
+    private val TOKEN = Regex("[0-9]{1,20}-[0-9]{1,9}")
 }
 
 /** Takes an app's own data as root and puts it back; see [RootDataCommands] for the commands. */
@@ -183,9 +229,7 @@ object RootData {
     private const val PROGRESS_STEP_BYTES = 1024 * 1024L
 
     /** The user the store runs as; an app's data lives under the user's folders. */
-    val userId: Int get() = Process.myUid() / PER_USER_RANGE
-
-    private const val PER_USER_RANGE = 100_000
+    val userId: Int get() = Root.userId
 
     private val restores = AtomicInteger(0)
 
@@ -196,6 +240,7 @@ object RootData {
     suspend fun tar(): String? {
         tarFound?.let { return it }
         val ran = Root.run(RootDataCommands.findTar(), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return null
+        if (ran.cut) return null
         return RootDataCommands.tarFrom(ran.out)?.also { tarFound = it }
     }
 
@@ -203,20 +248,29 @@ object RootData {
     suspend fun sizes(packages: List<String>): Map<String, Long> {
         if (packages.isEmpty()) return emptyMap()
         val ran = Root.run(RootDataCommands.sizes(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return emptyMap()
-        if (ran.exit != 0) Log.w(TAG, "du ended with ${ran.exit}: ${ran.err.take(200)}")
+        if (ran.exit != 0 || ran.cut) Log.w(TAG, "du ended with ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}")
         return RootDataCommands.sizesFrom(ran.out, userId).also { Log.i(TAG, "Sizes of ${it.size} of ${packages.size} apps read") }
     }
 
-    /** The parts of the data of each of [packages] that hold anything worth taking. */
-    suspend fun parts(packages: List<String>): Map<String, List<String>> {
+    /**
+     * The parts of the data of each of [packages] that hold anything worth taking; null when
+     * the listing could not be had whole, which is not the same as apps that have no data.
+     */
+    suspend fun parts(packages: List<String>): Map<String, List<String>>? {
         if (packages.isEmpty()) return emptyMap()
-        val ran = Root.run(RootDataCommands.parts(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return emptyMap()
-        if (ran.exit != 0) Log.w(TAG, "find ended with ${ran.exit}: ${ran.err.take(200)}")
-        return RootDataCommands.partsFrom(ran.out).also { Log.i(TAG, "Parts of ${it.size} of ${packages.size} apps found") }
+        val ran = Root.run(RootDataCommands.parts(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
+        if (ran == null || ran.exit != 0 || ran.cut) {
+            Log.w(TAG, "The data could not be listed: ${if (ran == null) "no root" else "exit ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}"}")
+            return null
+        }
+        val parts = RootDataCommands.partsFrom(ran.out)
+        if (parts == null) Log.w(TAG, "The listing of the data did not run to its end: ${ran.err.take(200)}")
+        else Log.i(TAG, "Parts of ${parts.size} of ${packages.size} apps found")
+        return parts
     }
 
     suspend fun forceStop(packageName: String) {
-        Root.run(RootDataCommands.forceStop(packageName), TOOL_TIMEOUT_MS, global = true)
+        Root.run(RootDataCommands.forceStop(packageName, userId), TOOL_TIMEOUT_MS, global = true)
     }
 
     /**
@@ -252,16 +306,26 @@ object RootData {
         return total
     }
 
+    /** A part of an app's data unpacked beside the app's folder and checked, waiting to be put in place by [swap]. */
+    class Staged internal constructor(val part: String, val packageName: String, val token: String) {
+        /** Whether [swap] has put it in place and cleared up after it. */
+        @Volatile internal var finished = false
+    }
+
+    /** A name for a restore that no other restore has had, now or in an earlier run of the store: the time and a count. */
+    private fun token(): String = "${System.currentTimeMillis()}-${restores.incrementAndGet()}"
+
     /**
-     * Puts the tar on [source] in the place of the data [part] of [packageName], owned by
-     * [uid]: unpacked beside the app's folder first and checked, then moved into place. A
-     * tar that reaches outside the app's folder is refused, see [TarCheck]. Whatever goes
-     * wrong, nothing of the unpacking is left behind.
+     * Unpacks the tar on [source], the data [part] of [packageName], beside the app's folder
+     * and checks it: a tar that reaches outside the app's folder is refused, see [TarCheck],
+     * and the unpacked folder must hold the app's folder alone, with no link leading out of
+     * it. Nothing of the app's own data is touched. Whatever goes wrong, nothing of the
+     * unpacking is left behind.
      */
     @Throws(IOException::class)
-    suspend fun restore(tar: String, part: String, packageName: String, uid: Int, source: InputStream) {
-        val number = restores.incrementAndGet()
-        val staging = RootDataCommands.staging(part, userId, number)
+    suspend fun stage(tar: String, part: String, packageName: String, source: InputStream): Staged {
+        val token = token()
+        val staging = RootDataCommands.staging(part, userId, token)
         try {
             var checked: Throwable? = null
             val extracted = Root.run(RootDataCommands.extract(tar, staging), null, global = true, stdin = { out ->
@@ -272,7 +336,11 @@ object RootData {
                     throw e
                 }
             })
-            checked?.let { throw IOException("The data of $packageName was not put back: ${it.message}", it) }
+            checked?.let {
+                // A wrong password is told apart from the rest, for the user to try again.
+                if (it is WrongPasswordException) throw it
+                throw IOException("The data of $packageName was not put back: ${it.message}", it)
+            }
             when (extracted) {
                 Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
                 is Root.Outcome.Ran -> if (extracted.exit != 0) {
@@ -281,27 +349,76 @@ object RootData {
             }
             val listed = Root.run(RootDataCommands.listStaging(staging), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
-            if (listed.exit != 0 || !RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
+            if (listed.exit != 0 || listed.cut || !RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
                 throw IOException("The archive of $packageName does not hold the app's folder alone")
             }
             val links = Root.run(RootDataCommands.listLinks(staging), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
-            if (links.exit != 0 || !RootDataCommands.linksStayIn(links.out, staging, packageName)) {
+            if (links.exit != 0 || links.cut || !RootDataCommands.linksStayIn(links.out, staging, packageName)) {
                 throw IOException("The archive of $packageName has a link that leads out of the app's folder")
             }
-            forceStop(packageName)
-            val swapped = Root.run(RootDataCommands.swap(part, userId, packageName, staging, uid, number), TOOL_TIMEOUT_MS, global = true)
-            when (swapped) {
-                Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
-                is Root.Outcome.Ran -> if (swapped.exit != 0) {
-                    throw IOException("The data of $packageName could not be put in place: ${swapped.err.trim().lines().firstOrNull().orEmpty().take(200)}")
+        } catch (e: Throwable) {
+            withContext(NonCancellable) { remove(staging) }
+            throw e
+        }
+        return Staged(part, packageName, token)
+    }
+
+    /**
+     * Puts [staged], every part of the data of [packageName] that was staged, in the place of
+     * the app's data, owned by [uid], the app stopped first. The old data is kept aside until
+     * every part is in place; a part that fails puts the parts before it back as they were,
+     * so that the app is left with the data it had, never with parts of two.
+     */
+    @Throws(IOException::class)
+    suspend fun swap(staged: List<Staged>, packageName: String, uid: Int) {
+        if (staged.isEmpty()) return
+        forceStop(packageName)
+        val swapped = ArrayList<Staged>(staged.size)
+        try {
+            for (part in staged) {
+                val ran = Root.run(RootDataCommands.swap(part.part, userId, packageName, uid, part.token), TOOL_TIMEOUT_MS, global = true)
+                when (ran) {
+                    Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
+                    is Root.Outcome.Ran -> if (ran.exit != 0) {
+                        throw IOException("The data of $packageName could not be put in place: ${ran.err.trim().lines().firstOrNull().orEmpty().take(200)}")
+                    }
+                }
+                swapped += part
+            }
+        } catch (e: Throwable) {
+            withContext(NonCancellable) {
+                for (part in swapped.asReversed()) {
+                    val back = Root.run(RootDataCommands.unswap(part.part, userId, packageName, part.token), TOOL_TIMEOUT_MS, global = true)
+                    if (back !is Root.Outcome.Ran || back.exit != 0) {
+                        // The old data stays where it was put aside, for whoever comes to look.
+                        Log.e(TAG, "The old ${part.part} of $packageName could not be put back; it is kept at ${RootDataCommands.old(part.part, userId, part.token)}")
+                        part.finished = true
+                    }
                 }
             }
-        } finally {
-            withContext(NonCancellable) {
-                val removed = Root.run(RootDataCommands.remove(staging), TOOL_TIMEOUT_MS, global = true)
-                if (removed !is Root.Outcome.Ran || removed.exit != 0) Log.w(TAG, "Could not remove $staging")
+            throw e
+        }
+        withContext(NonCancellable) {
+            for (part in staged) {
+                val cleared = Root.run(RootDataCommands.finish(part.part, userId, part.token), TOOL_TIMEOUT_MS, global = true)
+                if (cleared !is Root.Outcome.Ran || cleared.exit != 0) Log.w(TAG, "Could not clear up after the restore of ${part.part} of $packageName")
+                part.finished = true
             }
         }
+    }
+
+    /** Removes the staging folders of [staged] that [swap] has not cleared up; the app's data is not touched. */
+    suspend fun discard(staged: List<Staged>) {
+        withContext(NonCancellable) {
+            for (part in staged) {
+                if (!part.finished) remove(RootDataCommands.staging(part.part, userId, part.token))
+            }
+        }
+    }
+
+    private suspend fun remove(staging: String) {
+        val removed = Root.run(RootDataCommands.remove(staging), TOOL_TIMEOUT_MS, global = true)
+        if (removed !is Root.Outcome.Ran || removed.exit != 0) Log.w(TAG, "Could not remove $staging")
     }
 }

@@ -50,6 +50,19 @@ class TarCheckTest {
         return out.toByteArray()
     }
 
+    /** The records of a pax header, each "length key=value\n", the length counted in bytes as tar counts it. */
+    private fun pax(vararg records: Pair<String, String>): ByteArray {
+        val out = ByteArrayOutputStream()
+        for ((k, v) in records) {
+            val body = " $k=$v\n".toByteArray()
+            var length = body.size + 1
+            while (length.toString().length + body.size != length) length++
+            out.write(length.toString().toByteArray())
+            out.write(body)
+        }
+        return out.toByteArray()
+    }
+
     private fun pass(bytes: ByteArray): ByteArray = TarCheck(ByteArrayInputStream(bytes), root).use { it.readBytes() }
 
     private fun refused(bytes: ByteArray): IOException =
@@ -126,31 +139,39 @@ class TarCheckTest {
     }
 
     @Test
-    fun longNamesOfTheGnuAndPaxKindsAreReadAsNames() {
+    fun longNamesOfTheGnuKindAreReadAsNamesAndPaxPathsAreRefused() {
         val long = "$root/" + "d/".repeat(60) + "file.txt"
         pass(tar(Item("././@LongLink", 'L', content = (long + "\u0000").toByteArray()), Item("$root/d", content = "x".toByteArray())))
         val evil = "../" + "d/".repeat(60) + "file.txt"
         refused(tar(Item("././@LongLink", 'L', content = (evil + "\u0000").toByteArray()), Item("$root/d", content = "x".toByteArray())))
-        fun pax(vararg records: Pair<String, String>): ByteArray {
-            val text = records.joinToString("") { (k, v) ->
-                val body = " $k=$v\n"
-                var length = body.length + 1
-                while (length.toString().length + body.length != length) length++
-                "$length$body"
-            }
-            return text.toByteArray()
-        }
-        pass(tar(Item("./PaxHeaders/x", 'x', content = pax("path" to long)), Item("$root/d", content = "x".toByteArray())))
-        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("path" to "/etc/x")), Item("$root/d", content = "x".toByteArray())))
-        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("linkpath" to "/etc/x")), Item("$root/d", '2', link = "ok")))
-        // A pax name is used once: the entry after is named by its own header again.
+        val longLink = "../".repeat(1) + "d/".repeat(60) + "file.txt"
+        pass(tar(Item("$root/d/", '5'), Item("././@LongLink", 'K', content = (longLink + "\u0000").toByteArray()), Item("$root/d/l", '2', link = "x")))
+        // A long name is used once: the entry after is named by its own header again.
         refused(
             tar(
-                Item("./PaxHeaders/x", 'x', content = pax("path" to "$root/ok")),
+                Item("././@LongLink", 'L', content = ("$root/ok\u0000").toByteArray()),
                 Item("$root/d", content = "x".toByteArray()),
                 Item("../evil", content = "x".toByteArray())
             )
         )
+        // A pax path, a link target or a size is read by one tar and not by another, and the
+        // one that reads it takes the first of two, or one with a prefix: all are refused.
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("path" to long)), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("path" to "$root/ok")), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("RHT.path" to "$root/ok")), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("linkpath" to "$root/d")), Item("$root/d", content = "x".toByteArray()), Item("$root/l", '1', link = "$root/d")))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("size" to "10")), Item("$root/x", content = ByteArray(10))))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("GNU.sparse.name" to "../x")), Item("$root/x", content = ByteArray(10))))
+        refused(tar(Item("./PaxHeaders/g", 'g', content = pax("path" to "$root/x")), Item("$root/x", content = ByteArray(10))))
+        refused(tar(Item("./PaxHeaders/g", 'g', content = pax("RHT.linkpath" to "$root/x")), Item("$root/x", content = ByteArray(10))))
+        // Records of other kinds are let be, their lengths counted in bytes as tar counts them.
+        pass(tar(Item("./PaxHeaders/x", 'x', content = pax("mtime" to "1700000000.5", "RHT.security.selinux" to "u:object_r:app_data_file:s0")), Item("$root/d", content = "x".toByteArray())))
+        pass(tar(Item("./PaxHeaders/x", 'x', content = pax("comment" to "ääkköset", "atime" to "1")), Item("$root/d", content = "x".toByteArray())))
+        pass(tar(Item("./PaxHeaders/g", 'g', content = pax("comment" to "hi")), Item("$root/x", content = ByteArray(10))))
+        // A record with its length counted in characters is not a record.
+        val wrong = " comment=ääkköset\n".let { body -> "${body.length + 2}$body".toByteArray() }
+        refused(tar(Item("./PaxHeaders/x", 'x', content = wrong), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = "nonsense".toByteArray()), Item("$root/d", content = "x".toByteArray())))
     }
 
     @Test
@@ -213,15 +234,37 @@ class TarCheckTest {
         // A link with a size: some tars skip the bytes, some read them as the next header.
         refused(tar(Item("$root/link", '2', link = "x", size = 512)))
         refused(tar(Item("$root/link", '1', link = "$root/x", size = 512)))
+        // A folder with a size likewise: tar takes a folder's size as nothing, and would read
+        // the bytes as headers, which could hide a header from the check.
+        val hidden = tar(Item("$root/evil", '1', link = "/data/user/0/other.app/secret"), end = false).copyOf(512)
+        refused(tar(Item("$root/", '5', content = hidden)))
+        refused(tar(Item("$root/d/", '5', size = 512)))
+        // A file with a link target is made as a hard link to the target, whatever its type says.
+        refused(tar(Item("$root/files/x", '0', link = "/data/user/0/other.app/secret")))
+        refused(tar(Item("$root/files/x", '0', link = "$root/files/y"), Item("$root/files/y")))
+        refused(tar(Item("$root/files/x", '7', link = "$root/files/y"), Item("$root/files/y")))
+        refused(tar(Item("$root/", '5', link = "x")))
+        // A file named with a slash at its end is made as a folder, its size taken as nothing.
+        refused(tar(Item("$root/files/dir/", '0', content = ByteArray(10))))
+        refused(tar(Item("$root/files/dir/", '0')))
+        // A header without the magic is of the oldest kind: tar reads it as a file whatever
+        // its type says, and reads a long name or a pax header as a file as well.
+        val noMagic = tar(Item("$root/d/", '5'))
+        for (i in 257 until 263) noMagic[i] = 0
+        refused(fixChecksum(noMagic))
+        val noMagicLong = tar(Item("././@LongLink", 'L', content = ("$root/x\u0000").toByteArray()), Item("$root/d", content = "x".toByteArray()))
+        for (i in 257 until 263) noMagicLong[i] = 0
+        refused(fixChecksum(noMagicLong))
+        // Bytes after the fields, which one tar counts into the checksum and another does not.
+        val padded = tar(Item("$root/x", content = ByteArray(10)))
+        padded[505] = 1
+        refused(fixChecksum(padded))
         // A prefix in a header that is not POSIX ustar: in a GNU header those bytes are other things.
         val notUstar = tar(Item("x", prefix = root))
-        notUstar[257] = 0
+        notUstar[262] = ' '.code.toByte()
+        notUstar[263] = ' '.code.toByte()
+        notUstar[264] = 0
         refused(fixChecksum(notUstar))
-        val gnu = tar(Item("x", prefix = root))
-        gnu[262] = ' '.code.toByte()
-        gnu[263] = ' '.code.toByte()
-        gnu[264] = 0
-        refused(fixChecksum(gnu))
         val gnuNoPrefix = tar(Item("$root/x", content = ByteArray(10)))
         gnuNoPrefix[262] = ' '.code.toByte()
         gnuNoPrefix[263] = ' '.code.toByte()
@@ -233,17 +276,6 @@ class TarCheckTest {
         for (i in 125 until 136) base256[i] = 0
         base256[135] = 10
         refused(fixChecksum(base256))
-        // A size in a pax header, and a path in a global one.
-        fun pax(vararg records: Pair<String, String>): ByteArray = records.joinToString("") { (k, v) ->
-            val body = " $k=$v\n"
-            var length = body.length + 1
-            while (length.toString().length + body.length != length) length++
-            "$length$body"
-        }.toByteArray()
-        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("size" to "10")), Item("$root/x", content = ByteArray(10))))
-        refused(tar(Item("./PaxHeaders/x", 'x', content = pax("GNU.sparse.name" to "../x")), Item("$root/x", content = ByteArray(10))))
-        refused(tar(Item("./PaxHeaders/g", 'g', content = pax("path" to "$root/x")), Item("$root/x", content = ByteArray(10))))
-        pass(tar(Item("./PaxHeaders/g", 'g', content = pax("comment" to "hi")), Item("$root/x", content = ByteArray(10))))
         // Data after the end of the archive, which tar would not read.
         val ended = tar(Item("$root/x", content = ByteArray(10)))
         refused(ended + tar(Item("../evil", content = ByteArray(10))))
@@ -269,7 +301,12 @@ class TarCheckTest {
         refused("not a tar at all, not even close to a header".toByteArray() + ByteArray(600))
         val badSum = whole.copyOf().also { it[0] = 'x'.code.toByte() }
         refused(badSum)
-        // An archive that ends without the two empty blocks, but after a whole entry, is let through: tar takes it.
-        assertTrue(pass(tar(Item("$root/a", content = "x".toByteArray()), end = false)).isNotEmpty())
+        // An archive that ends without the two empty blocks was cut short, even after a whole
+        // entry: an archive taken whole always has them.
+        refused(tar(Item("$root/a", content = "x".toByteArray()), end = false))
+        refused(whole.copyOf(whole.size - 1024))
+        refused(whole.copyOf(whole.size - 512))
+        assertTrue(pass(whole).isNotEmpty())
+        assertTrue(pass(ByteArray(1024)).isNotEmpty())
     }
 }
