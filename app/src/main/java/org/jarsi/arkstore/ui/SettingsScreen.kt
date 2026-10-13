@@ -360,7 +360,7 @@ private fun RootSettings(viewModel: StoreViewModel) {
         label = stringResource(R.string.root_switch),
         description = stringResource(R.string.root_description),
         checked = on || root is RootUiState.Checking,
-        enabled = root !is RootUiState.Checking,
+        enabled = root !is RootUiState.Checking && root !is RootUiState.Missing,
         onCheckedChange = viewModel::setRootEnabled
     )
     val status = when (val state = root) {

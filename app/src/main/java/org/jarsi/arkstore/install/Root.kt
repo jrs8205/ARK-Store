@@ -73,6 +73,13 @@ object Root {
         }
     }
 
+    /**
+     * Whether the device has a `su` at all, without asking it for anything: a root app
+     * prints the usage of `su` without asking the user, so the settings can tell a device
+     * that is not rooted from one that is before root is turned on.
+     */
+    suspend fun present(): Boolean = hasSu()
+
     /** Whether a `su` can be started at all, whatever it then says. */
     private suspend fun hasSu(): Boolean = withContext(Dispatchers.IO) {
         try {
@@ -103,15 +110,20 @@ object Root {
      * [stdout] may read its output, which is otherwise gathered into [Outcome.Ran.out]. A cancel
      * of the coroutine kills the command; so does [timeoutMs] running out, which counts as
      * [Outcome.NoRoot] (null for no limit, for a stream that takes as long as it takes).
+     * A [global] command runs in the system's own mount namespace rather than the store's,
+     * where Android shows an app nothing of the other apps' data folders; Magisk, KernelSU
+     * and APatch all know `--mount-master` for it.
      */
     suspend fun run(
         command: String,
         timeoutMs: Long?,
         stdin: ((OutputStream) -> Unit)? = null,
-        stdout: ((InputStream) -> Unit)? = null
+        stdout: ((InputStream) -> Unit)? = null,
+        global: Boolean = false
     ): Outcome = withContext(Dispatchers.IO) {
         val process = try {
-            ProcessBuilder("su", "-c", command).start()
+            val args = if (global) listOf("su", "--mount-master", "-c", command) else listOf("su", "-c", command)
+            ProcessBuilder(args).start()
         } catch (e: IOException) {
             Log.i(TAG, "su could not be started: ${e.message}")
             return@withContext Outcome.NoRoot
@@ -126,6 +138,7 @@ object Root {
                 Log.w(TAG, "su took too long and was killed: ${command.take(40)}")
                 Outcome.NoRoot
             } else {
+                if (ran.exit != 0) Log.i(TAG, "su -c ${command.take(40)} ended with ${ran.exit}: ${ran.err.trim().take(120)}")
                 ran
             }
         } finally {

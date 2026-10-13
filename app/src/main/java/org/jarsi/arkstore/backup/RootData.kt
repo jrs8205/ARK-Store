@@ -24,7 +24,8 @@ internal object RootDataCommands {
 
     private val EXCLUDED = listOf("cache", "code_cache", "lib")
 
-    /** The folder of the data [part] of every app of user [userId]. */
+    /** The folder of the data [part] of every app of user [userId]: the system's own, reached as root, not the store's. */
+    @Suppress("SdCardPath")
     fun userDir(part: String, userId: Int): String {
         require(userId >= 0) { "Not a user" }
         return when (part) {
@@ -194,26 +195,28 @@ object RootData {
     /** The `tar` command of this device, or null when root cannot be had or there is no `tar`. */
     suspend fun tar(): String? {
         tarFound?.let { return it }
-        val ran = Root.run(RootDataCommands.findTar(), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran ?: return null
+        val ran = Root.run(RootDataCommands.findTar(), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return null
         return RootDataCommands.tarFrom(ran.out)?.also { tarFound = it }
     }
 
     /** The size of the data of each of [packages], in bytes, as far as it could be read. */
     suspend fun sizes(packages: List<String>): Map<String, Long> {
         if (packages.isEmpty()) return emptyMap()
-        val ran = Root.run(RootDataCommands.sizes(userId, packages), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran ?: return emptyMap()
-        return RootDataCommands.sizesFrom(ran.out, userId)
+        val ran = Root.run(RootDataCommands.sizes(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return emptyMap()
+        if (ran.exit != 0) Log.w(TAG, "du ended with ${ran.exit}: ${ran.err.take(200)}")
+        return RootDataCommands.sizesFrom(ran.out, userId).also { Log.i(TAG, "Sizes of ${it.size} of ${packages.size} apps read") }
     }
 
     /** The parts of the data of each of [packages] that hold anything worth taking. */
     suspend fun parts(packages: List<String>): Map<String, List<String>> {
         if (packages.isEmpty()) return emptyMap()
-        val ran = Root.run(RootDataCommands.parts(userId, packages), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran ?: return emptyMap()
-        return RootDataCommands.partsFrom(ran.out)
+        val ran = Root.run(RootDataCommands.parts(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return emptyMap()
+        if (ran.exit != 0) Log.w(TAG, "find ended with ${ran.exit}: ${ran.err.take(200)}")
+        return RootDataCommands.partsFrom(ran.out).also { Log.i(TAG, "Parts of ${it.size} of ${packages.size} apps found") }
     }
 
     suspend fun forceStop(packageName: String) {
-        Root.run(RootDataCommands.forceStop(packageName), TOOL_TIMEOUT_MS)
+        Root.run(RootDataCommands.forceStop(packageName), TOOL_TIMEOUT_MS, global = true)
     }
 
     /**
@@ -225,7 +228,7 @@ object RootData {
     suspend fun archive(tar: String, part: String, packageName: String, sink: OutputStream, onBytes: (Long) -> Unit): Long {
         forceStop(packageName)
         var total = 0L
-        val ran = Root.run(RootDataCommands.archive(tar, part, userId, packageName), null, stdout = { input ->
+        val ran = Root.run(RootDataCommands.archive(tar, part, userId, packageName), null, global = true, stdout = { input ->
             val buffer = ByteArray(BUFFER_BYTES)
             var told = 0L
             while (true) {
@@ -261,7 +264,7 @@ object RootData {
         val staging = RootDataCommands.staging(part, userId, number)
         try {
             var checked: Throwable? = null
-            val extracted = Root.run(RootDataCommands.extract(tar, staging), null, stdin = { out ->
+            val extracted = Root.run(RootDataCommands.extract(tar, staging), null, global = true, stdin = { out ->
                 try {
                     TarCheck(source, packageName).copyTo(out, BUFFER_BYTES)
                 } catch (e: IOException) {
@@ -276,18 +279,18 @@ object RootData {
                     throw IOException("tar failed for $packageName: ${extracted.err.trim().lines().firstOrNull().orEmpty().take(200)}")
                 }
             }
-            val listed = Root.run(RootDataCommands.listStaging(staging), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran
+            val listed = Root.run(RootDataCommands.listStaging(staging), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
             if (listed.exit != 0 || !RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
                 throw IOException("The archive of $packageName does not hold the app's folder alone")
             }
-            val links = Root.run(RootDataCommands.listLinks(staging), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran
+            val links = Root.run(RootDataCommands.listLinks(staging), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
             if (links.exit != 0 || !RootDataCommands.linksStayIn(links.out, staging, packageName)) {
                 throw IOException("The archive of $packageName has a link that leads out of the app's folder")
             }
             forceStop(packageName)
-            val swapped = Root.run(RootDataCommands.swap(part, userId, packageName, staging, uid, number), TOOL_TIMEOUT_MS)
+            val swapped = Root.run(RootDataCommands.swap(part, userId, packageName, staging, uid, number), TOOL_TIMEOUT_MS, global = true)
             when (swapped) {
                 Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
                 is Root.Outcome.Ran -> if (swapped.exit != 0) {
@@ -296,7 +299,7 @@ object RootData {
             }
         } finally {
             withContext(NonCancellable) {
-                val removed = Root.run(RootDataCommands.remove(staging), TOOL_TIMEOUT_MS)
+                val removed = Root.run(RootDataCommands.remove(staging), TOOL_TIMEOUT_MS, global = true)
                 if (removed !is Root.Outcome.Ran || removed.exit != 0) Log.w(TAG, "Could not remove $staging")
             }
         }

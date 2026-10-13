@@ -489,16 +489,27 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Asks the root app again while root is on, so the settings tell how it stands now. */
+    /**
+     * Looks at root again as the settings open: while root is on, the root app is asked, so
+     * the settings tell how it stands now; while it is off, only whether the device has a
+     * `su` at all is looked at, without asking anyone, so a device that is not rooted shows
+     * the switch greyed out.
+     */
     fun refreshRoot() {
         val context = getApplication<Application>()
-        if (!Root.enabled(context) || _root.value is RootUiState.Checking) return
+        if (_root.value is RootUiState.Checking) return
         viewModelScope.launch {
-            val check = Root.check()
-            if (!Root.enabled(context)) return@launch
-            _root.value = when (check) {
-                is RootCheck.Granted -> RootUiState.On(check.provider)
-                RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused
+            if (Root.enabled(context)) {
+                val check = Root.check()
+                if (!Root.enabled(context)) return@launch
+                _root.value = when (check) {
+                    is RootCheck.Granted -> RootUiState.On(check.provider)
+                    RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused
+                }
+            } else {
+                val present = Root.present()
+                if (Root.enabled(context) || _root.value is RootUiState.Checking) return@launch
+                if (!present) _root.value = RootUiState.Missing else if (_root.value is RootUiState.Missing) _root.value = RootUiState.Off
             }
         }
     }
