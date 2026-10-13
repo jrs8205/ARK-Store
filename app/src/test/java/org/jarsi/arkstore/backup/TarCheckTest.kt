@@ -183,6 +183,29 @@ class TarCheckTest {
                 Item("$root/d/late", content = "x".toByteArray())
             )
         )
+        // A folder, a file or another link where a link was made: tar may keep the link and use it.
+        refused(
+            tar(
+                Item("$root/d", '2', link = "."),
+                Item("$root/d/", '5'),
+                Item("$root/d/late", content = "x".toByteArray())
+            )
+        )
+        refused(
+            tar(
+                Item("$root/f", '2', link = "x"),
+                Item("$root/f", content = "x".toByteArray())
+            )
+        )
+        refused(
+            tar(
+                Item("$root/f", '2', link = "x"),
+                Item("$root/f", '2', link = "y")
+            )
+        )
+        // A name or a target with a line break in it would make a line of its own in a listing.
+        refused(tar(Item("$root/a\nb", content = "x".toByteArray())))
+        refused(tar(Item("$root/l", '2', link = "a\nb")))
     }
 
     @Test

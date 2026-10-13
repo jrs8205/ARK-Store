@@ -16,6 +16,7 @@ import org.jarsi.arkstore.backup.BackupCandidate
 import org.jarsi.arkstore.backup.BackupFolder
 import org.jarsi.arkstore.backup.BackupManager
 import org.jarsi.arkstore.backup.BackupState
+import org.jarsi.arkstore.backup.DataChoice
 import org.jarsi.arkstore.backup.Installers
 import org.jarsi.arkstore.backup.Selection
 
@@ -91,6 +92,47 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Whether the store's settings file in the folder is brought back too. */
     val importSettings: StateFlow<Boolean> = _importSettings.asStateFlow()
 
+    private val _dataAvailable = MutableStateFlow(false)
+    /** Whether the apps' own data can be taken and put back: root is on and the device has a `tar`. */
+    val dataAvailable: StateFlow<Boolean> = _dataAvailable.asStateFlow()
+
+    private val _includeData = MutableStateFlow(true)
+    /** Whether the backup takes the apps' own data, when it can. */
+    val includeData: StateFlow<Boolean> = _includeData.asStateFlow()
+
+    private val _password = MutableStateFlow("")
+    /** The password the data is encrypted with; empty for none. */
+    val password: StateFlow<String> = _password.asStateFlow()
+
+    private val _restoreData = MutableStateFlow(true)
+    /** Whether the restore puts the apps' own data back, when the backup has it and it can. */
+    val restoreData: StateFlow<Boolean> = _restoreData.asStateFlow()
+
+    private val _restorePassword = MutableStateFlow("")
+    /** The password the backup's data was encrypted with. */
+    val restorePassword: StateFlow<String> = _restorePassword.asStateFlow()
+
+    fun setIncludeData(include: Boolean) {
+        _includeData.value = include
+    }
+
+    fun setPassword(password: String) {
+        _password.value = password
+    }
+
+    fun setRestoreData(restore: Boolean) {
+        _restoreData.value = restore
+    }
+
+    fun setRestorePassword(password: String) {
+        _restorePassword.value = password
+    }
+
+    /** Asks whether the data can be taken, afresh: root may have been turned on or off meanwhile. */
+    fun checkDataAvailable() {
+        viewModelScope.launch { _dataAvailable.value = BackupManager.dataAvailable(context) }
+    }
+
     init {
         // Once a restore is over, the rule chooses afresh: an app just brought back is not
         // chosen again for the next try, whatever was said before.
@@ -143,6 +185,13 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
             if (!candidateTurns.isLatest(turn)) return@launch
             _candidates.value = list
             chooseForBackup(list)
+            // The sizes of the data come from root, and take a moment; the list stands without them meanwhile.
+            val available = BackupManager.dataAvailable(context)
+            _dataAvailable.value = available
+            if (!available) return@launch
+            val sizes = BackupManager.dataSizes(list.map { it.entry.packageName })
+            if (!candidateTurns.isLatest(turn)) return@launch
+            _candidates.value = list.map { it.copy(dataSize = sizes[it.entry.packageName]) }
         }
     }
 
@@ -170,13 +219,19 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     fun startBackup(settingsJson: String): Boolean {
         val tree = _tree.value ?: return false
         val chosen = chosenForBackup().ifEmpty { return false }
-        return BackupManager.backup(context, tree, chosen, settingsJson)
+        return BackupManager.backup(context, tree, chosen, settingsJson, dataChoice())
     }
 
     /** Begins writing the chosen apps to the zip file [uri], made for it; false when nothing was begun. */
     fun startZipBackup(uri: Uri, settingsJson: String): Boolean {
         val chosen = chosenForBackup().ifEmpty { return false }
-        return BackupManager.backupZip(context, uri, chosen, settingsJson)
+        return BackupManager.backupZip(context, uri, chosen, settingsJson, dataChoice())
+    }
+
+    /** What the backup does with the data: takes it when it can and the user has not said no. */
+    private fun dataChoice(): DataChoice {
+        val include = _dataAvailable.value && _includeData.value
+        return DataChoice(include, if (include) _password.value.toCharArray() else null)
     }
 
     private fun chosenForBackup(): List<BackupCandidate> =
@@ -259,7 +314,9 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
         val settings = folder.settings
         if (_importSettings.value && settings != null) onImportSettings(settings)
         if (chosen.isEmpty()) return settings != null && _importSettings.value
-        return BackupManager.restore(context, folder, chosen)
+        val include = _dataAvailable.value && _restoreData.value && chosen.any { it.entry.data.isNotEmpty() }
+        val data = DataChoice(include, if (include) _restorePassword.value.toCharArray() else null)
+        return BackupManager.restore(context, folder, chosen, data)
     }
 
     fun cancel() = BackupManager.cancel()

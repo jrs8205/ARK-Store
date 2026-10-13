@@ -332,4 +332,19 @@
     <string name="backup_event_restored">handed to the system %1$d, failed %2$d</string>
     <string name="backup_event_cancelled">cancelled</string>
     <string name="backup_event_failed">failed</string>
+    <string name="backup_include_data">Also the apps\' own data</string>
+    <string name="backup_include_data_detail">As root: the settings, databases and files of each app, about %1$s in all. The caches are left out.</string>
+    <string name="backup_password_label">Password for the data</string>
+    <string name="backup_password_hint">The data is encrypted with it. It is not kept anywhere: without it the data cannot be brought back.</string>
+    <string name="backup_password_empty">Without a password the data is saved as it is, logins and all. Keep the backup somewhere safe, or give a password.</string>
+    <string name="backup_data_size">data %1$s</string>
+    <string name="restore_include_data">Also bring back the apps\' own data</string>
+    <string name="restore_include_data_detail">As root, for the apps that have it in the backup. Their data on this device is replaced.</string>
+    <string name="restore_data_needs_root">The backup holds the apps\' own data too. Bringing it back needs root; see the settings.</string>
+    <string name="restore_password_label">Password of the data</string>
+    <string name="restore_data">with data</string>
+    <string name="restore_data_encrypted">with data, encrypted</string>
+    <string name="backup_data_failed">The data of these apps was not saved: %1$s</string>
+    <string name="restore_data_failed">The data of these apps was not brought back: %1$s</string>
+    <string name="restore_wrong_password">The password is not the one the data was encrypted with.</string>
 </resources>

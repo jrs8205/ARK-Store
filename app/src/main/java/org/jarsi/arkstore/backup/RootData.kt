@@ -116,13 +116,17 @@ internal object RootDataCommands {
     /** Prints what [staging] holds at its top, one line each. */
     fun listStaging(staging: String): String = "find $staging -mindepth 1 -maxdepth 1"
 
-    /** Prints where every link under [staging] leads, as the device itself resolves it, one line each. */
-    fun listLinks(staging: String): String = "find $staging -type l -exec readlink -f {} \\;"
+    /**
+     * Prints where every link under [staging] leads, as the device itself resolves it, one
+     * line each; a line of "?" for one the device could not resolve.
+     */
+    fun listLinks(staging: String): String =
+        "find $staging -type l -exec sh -c 'readlink -f \"\$1\" || echo ?' - {} \\;"
 
     /**
      * Whether every link [listLinks] printed leads into the folder of [packageName] under
      * [staging], where a link checked against the archive alone could still have been led
-     * astray by another link.
+     * astray by another link. One that could not be resolved does not.
      */
     fun linksStayIn(output: String, staging: String, packageName: String): Boolean {
         val folder = "$staging/${checked(packageName)}"
@@ -274,12 +278,12 @@ object RootData {
             }
             val listed = Root.run(RootDataCommands.listStaging(staging), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
-            if (!RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
+            if (listed.exit != 0 || !RootDataCommands.stagingHoldsOnly(listed.out, staging, packageName)) {
                 throw IOException("The archive of $packageName does not hold the app's folder alone")
             }
             val links = Root.run(RootDataCommands.listLinks(staging), TOOL_TIMEOUT_MS) as? Root.Outcome.Ran
                 ?: throw IOException("Root could not be had for the data of $packageName")
-            if (!RootDataCommands.linksStayIn(links.out, staging, packageName)) {
+            if (links.exit != 0 || !RootDataCommands.linksStayIn(links.out, staging, packageName)) {
                 throw IOException("The archive of $packageName has a link that leads out of the app's folder")
             }
             forceStop(packageName)

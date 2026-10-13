@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,10 +37,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.backup.AppBackup
+import org.jarsi.arkstore.backup.BackupCandidate
 import org.jarsi.arkstore.backup.BackupEntry
 import org.jarsi.arkstore.backup.BackupError
 import org.jarsi.arkstore.backup.BackupState
@@ -57,10 +64,14 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     val candidates by viewModel.candidates.collectAsStateWithLifecycle()
     val selected by viewModel.selected.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val dataAvailable by viewModel.dataAvailable.collectAsStateWithLifecycle()
+    val includeData by viewModel.includeData.collectAsStateWithLifecycle()
+    val password by viewModel.password.collectAsStateWithLifecycle()
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val running = state is BackupState.Running
+    val withData = dataAvailable && includeData
     var noPicker by rememberSaveable { mutableStateOf(false) }
     // A save to a folder not chosen yet asks for one first, and goes on once it is chosen.
     var saveWhenChosen by rememberSaveable { mutableStateOf(false) }
@@ -76,6 +87,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
     }
     // Read on coming here and again after every install: the versions and files change with them.
     LaunchedEffect(installedChanged) { viewModel.loadCandidates() }
+    LaunchedEffect(Unit) { viewModel.checkDataAvailable() }
     StorePage(title = stringResource(R.string.action_backup_apps), onBack = onBack, scrolling = false) {
         SourceLine(
             text = when {
@@ -109,23 +121,53 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
             val chosen = list.filter { it.entry.packageName in selected }
             SelectionBar(
                 count = chosen.size,
-                bytes = chosen.sumOf { it.entry.size },
+                bytes = chosen.sumOf { it.entry.size + if (withData) dataBytes(it) else 0 },
                 enabled = !running,
                 onAll = { viewModel.selectAll(true) },
                 onNone = { viewModel.selectAll(false) }
             )
+            if (dataAvailable) {
+                CheckRow(
+                    checked = includeData,
+                    enabled = !running,
+                    onCheckedChange = viewModel::setIncludeData,
+                    title = stringResource(R.string.backup_include_data),
+                    detail = stringResource(
+                        R.string.backup_include_data_detail,
+                        Formatter.formatShortFileSize(context, chosen.sumOf { dataBytes(it) })
+                    ),
+                    note = null,
+                    noteIsError = false
+                )
+                if (includeData) {
+                    PasswordField(
+                        value = password,
+                        onValueChange = viewModel::setPassword,
+                        enabled = !running,
+                        label = stringResource(R.string.backup_password_label),
+                        supporting = stringResource(
+                            if (password.isEmpty()) R.string.backup_password_empty else R.string.backup_password_hint
+                        ),
+                        warn = password.isEmpty()
+                    )
+                }
+            }
             LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 items(list, key = { it.entry.packageName }) { candidate ->
                     val entry = candidate.entry
+                    val data = candidate.dataSize?.takeIf { withData }?.let {
+                        stringResource(R.string.backup_data_size, Formatter.formatShortFileSize(context, it))
+                    }
                     CheckRow(
                         checked = entry.packageName in selected && candidate.readable,
                         enabled = candidate.readable && !running,
                         onCheckedChange = { viewModel.toggle(entry.packageName) },
                         title = entry.label,
-                        detail = listOf(
+                        detail = listOfNotNull(
                             version(entry),
                             installerName(entry.installer),
-                            Formatter.formatShortFileSize(context, entry.size)
+                            Formatter.formatShortFileSize(context, entry.size),
+                            data
                         ).joinToString(" · "),
                         note = if (candidate.readable) null else stringResource(R.string.backup_unreadable),
                         noteIsError = false
@@ -180,6 +222,9 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val folderError by viewModel.folderError.collectAsStateWithLifecycle()
     val selected by viewModel.restoreSelected.collectAsStateWithLifecycle()
     val importSettings by viewModel.importSettings.collectAsStateWithLifecycle()
+    val dataAvailable by viewModel.dataAvailable.collectAsStateWithLifecycle()
+    val restoreData by viewModel.restoreData.collectAsStateWithLifecycle()
+    val restorePassword by viewModel.restorePassword.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
@@ -198,6 +243,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     LaunchedEffect(tree, zip, readRequests) { viewModel.loadFolder() }
     // An install that has gone through changes what the backup has to offer this device.
     LaunchedEffect(installedChanged) { if (installedChanged > 0) viewModel.refreshStatuses() }
+    LaunchedEffect(Unit) { viewModel.checkDataAvailable() }
     StorePage(title = stringResource(R.string.action_restore_apps), onBack = onBack, scrolling = false) {
         val read = folder
         SourceLine(
@@ -260,13 +306,43 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
             }
             else -> {
                 val chosen = read.entries.filter { it.status.selectable && it.entry.packageName in selected }
+                val hasData = read.entries.any { it.entry.data.isNotEmpty() }
+                val withData = hasData && dataAvailable && restoreData
                 SelectionBar(
                     count = chosen.size,
-                    bytes = chosen.sumOf { it.entry.size },
+                    bytes = chosen.sumOf { it.entry.size + if (withData) it.entry.dataSize else 0 },
                     enabled = !running,
                     onAll = { viewModel.selectAllRestore(true) },
                     onNone = { viewModel.selectAllRestore(false) }
                 )
+                if (hasData && dataAvailable) {
+                    CheckRow(
+                        checked = restoreData,
+                        enabled = !running,
+                        onCheckedChange = viewModel::setRestoreData,
+                        title = stringResource(R.string.restore_include_data),
+                        detail = stringResource(R.string.restore_include_data_detail),
+                        note = null,
+                        noteIsError = false
+                    )
+                    if (restoreData && chosen.any { row -> row.entry.data.any { it.encrypted } }) {
+                        PasswordField(
+                            value = restorePassword,
+                            onValueChange = viewModel::setRestorePassword,
+                            enabled = !running,
+                            label = stringResource(R.string.restore_password_label),
+                            supporting = null,
+                            warn = false
+                        )
+                    }
+                } else if (hasData) {
+                    Text(
+                        text = stringResource(R.string.restore_data_needs_root),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                }
                 LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
                     if (read.settings != null) {
                         item(key = AppBackup.SETTINGS_NAME) {
@@ -289,12 +365,18 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                             install != null -> stringResource(R.string.restore_installing)
                             else -> statusText(row.status)
                         }
+                        val data = when {
+                            entry.data.isEmpty() -> null
+                            entry.data.any { it.encrypted } -> stringResource(R.string.restore_data_encrypted)
+                            else -> stringResource(R.string.restore_data)
+                        }
                         CheckRow(
                             checked = row.status.selectable && entry.packageName in selected,
                             enabled = row.status.selectable && !running && install == null,
                             onCheckedChange = { viewModel.toggleRestore(entry.packageName) },
                             title = entry.label,
-                            detail = listOf(version(entry), Formatter.formatShortFileSize(context, entry.size)).joinToString(" · "),
+                            detail = listOfNotNull(version(entry), Formatter.formatShortFileSize(context, entry.size), data)
+                                .joinToString(" · "),
                             note = note,
                             noteIsError = install is InstallState.Failed
                         )
@@ -491,6 +573,25 @@ private fun JobFooter(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+                if (state.dataFailed.isNotEmpty()) {
+                    Text(
+                        text = stringResource(
+                            if (state.restoring) R.string.restore_data_failed else R.string.backup_data_failed,
+                            state.dataFailed.joinToString(", ")
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                if (state.wrongPassword) {
+                    Text(
+                        text = stringResource(R.string.restore_wrong_password),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
                 if (!state.indexWritten) IndexNotWritten()
                 StoreOutlinedButton(
                     onClick = {
@@ -544,6 +645,46 @@ private fun IndexNotWritten() {
 }
 
 private fun version(entry: BackupEntry): String = entry.versionName ?: entry.versionCode.toString()
+
+/** About how much data [candidate] has, as far as root has told; nothing until then. */
+private fun dataBytes(candidate: BackupCandidate): Long = candidate.dataSize ?: 0L
+
+/** A field for the password of the data, shown as dots, with a line under it that may [warn]. */
+@Composable
+private fun PasswordField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    enabled: Boolean,
+    label: String,
+    supporting: String?,
+    warn: Boolean
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        label = { Text(label) },
+        singleLine = true,
+        visualTransformation = PasswordVisualTransformation(),
+        supportingText = supporting?.let { text ->
+            {
+                Text(
+                    text = text,
+                    color = if (warn) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        keyboardOptions = KeyboardOptions(
+            capitalization = KeyboardCapitalization.None,
+            autoCorrectEnabled = false,
+            keyboardType = KeyboardType.Password,
+            imeAction = ImeAction.Done
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+    )
+}
 
 @Composable
 private fun installerName(installer: String?): String =

@@ -317,4 +317,19 @@
     <string name="backup_event_restored">annettu järjestelmälle %1$d, epäonnistui %2$d</string>
     <string name="backup_event_cancelled">keskeytetty</string>
     <string name="backup_event_failed">epäonnistui</string>
+    <string name="backup_include_data">Myös sovellusten omat tiedot</string>
+    <string name="backup_include_data_detail">Rootilla: jokaisen sovelluksen asetukset, tietokannat ja tiedostot, yhteensä noin %1$s. Välimuistit jäävät pois.</string>
+    <string name="backup_password_label">Tietojen salasana</string>
+    <string name="backup_password_hint">Tiedot salataan sillä. Sitä ei tallenneta mihinkään: ilman sitä tietoja ei saa takaisin.</string>
+    <string name="backup_password_empty">Ilman salasanaa tiedot tallennetaan sellaisinaan kirjautumisineen. Säilytä varmuuskopio turvallisessa paikassa tai anna salasana.</string>
+    <string name="backup_data_size">tiedot %1$s</string>
+    <string name="restore_include_data">Palauta myös sovellusten omat tiedot</string>
+    <string name="restore_include_data_detail">Rootilla niille sovelluksille, joiden tiedot ovat varmuuskopiossa. Niiden tiedot tällä laitteella korvataan.</string>
+    <string name="restore_data_needs_root">Varmuuskopiossa on myös sovellusten omat tiedot. Niiden palautus vaatii root-oikeudet; katso asetukset.</string>
+    <string name="restore_password_label">Tietojen salasana</string>
+    <string name="restore_data">tiedot mukana</string>
+    <string name="restore_data_encrypted">tiedot mukana, salattu</string>
+    <string name="backup_data_failed">Näiden sovellusten tietoja ei tallennettu: %1$s</string>
+    <string name="restore_data_failed">Näiden sovellusten tietoja ei palautettu: %1$s</string>
+    <string name="restore_wrong_password">Salasana ei ole se, jolla tiedot salattiin.</string>
 </resources>

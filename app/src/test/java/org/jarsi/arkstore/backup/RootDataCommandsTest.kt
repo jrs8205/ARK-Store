@@ -82,7 +82,11 @@ class RootDataCommandsTest {
             RootDataCommands.extract("tar", staging)
         )
         assertEquals("find $staging -mindepth 1 -maxdepth 1", RootDataCommands.listStaging(staging))
-        assertEquals("find $staging -type l -exec readlink -f {} \\;", RootDataCommands.listLinks(staging))
+        assertEquals(
+            "find $staging -type l -exec sh -c 'readlink -f \"\$1\" || echo ?' - {} \\;",
+            RootDataCommands.listLinks(staging)
+        )
+        assertFalse(RootDataCommands.linksStayIn("$staging/$pkg/a\n?\n", staging, pkg))
         assertTrue(RootDataCommands.linksStayIn("", staging, pkg))
         assertTrue(RootDataCommands.linksStayIn("$staging/$pkg/files/a\n$staging/$pkg\n", staging, pkg))
         assertFalse(RootDataCommands.linksStayIn("$staging/$pkg/files/a\n/data/user/0\n", staging, pkg))

@@ -119,15 +119,13 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         val parts = checkName(name)
         val path = parts.joinToString("/")
         if (parts.size == 1 && type != '5') throw IOException("The archive has the app's folder as something other than a folder")
+        // Once a link, always a link: a tar that finds one where it would make a folder uses
+        // the folder the link leads to, and one that finds one where it would make a file may
+        // write through it.
+        if (path in symlinks) throw IOException("The archive makes something where it made a link: $name")
         when (type) {
-            '0', '\u0000', '7' -> {
-                regularFiles += path
-                symlinks -= path
-            }
-            '5' -> {
-                regularFiles -= path
-                symlinks -= path
-            }
+            '0', '\u0000', '7' -> regularFiles += path
+            '5' -> regularFiles -= path
             '2' -> {
                 // A link holds no data; a tar that read it as holding some would read the
                 // headers after it elsewhere than here.
@@ -140,7 +138,6 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
                 if (size != 0L) throw IOException("The archive has a link with data: $name")
                 checkLink(parts, link, symbolic = false)
                 regularFiles += path
-                symlinks -= path
             }
             else -> throw IOException("The archive holds something that is not a file: type '$type' at $name")
         }
@@ -194,7 +191,9 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
 
     /** The parts of [path] as it stands in the archive, with no empty parts and no `.`; null when it is not allowed. */
     private fun parts(path: String): List<String>? {
-        if (path.isEmpty() || path.startsWith("/") || '\\' in path || '\u0000' in path) return null
+        // A control character in a name could make a line of its own in what the device
+        // lists of the unpacked folder, which is checked line by line.
+        if (path.isEmpty() || path.startsWith("/") || '\\' in path || path.any { it < ' ' }) return null
         val parts = path.split('/').filter { it.isNotEmpty() && it != "." }
         if (parts.isEmpty() || parts.any { it == ".." }) return null
         return parts
@@ -225,7 +224,7 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
      */
     private fun checkLink(parts: List<String>, link: String, symbolic: Boolean) {
         val name = parts.joinToString("/")
-        if (link.isEmpty() || link.startsWith("/") || '\\' in link || '\u0000' in link) {
+        if (link.isEmpty() || link.startsWith("/") || '\\' in link || link.any { it < ' ' }) {
             throw IOException("The archive links to a path that is not allowed: $name -> $link")
         }
         if (!symbolic) {
