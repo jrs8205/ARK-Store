@@ -49,12 +49,14 @@ class RootDataCommandsTest {
     @Test
     fun thePartsWorthTakingAreThoseWithMoreThanCachesInThem() {
         val command = RootDataCommands.parts(0, listOf("org.a"))
-        assertTrue(command.contains("[ -d /data/user/0/org.a ]"))
-        assertTrue(command.contains("find /data/user/0/org.a -mindepth 1 -maxdepth 1 ! -name cache ! -name code_cache ! -name lib"))
-        assertTrue(command.contains("echo \"data org.a\""))
+        assertTrue(command.contains("if [ -d /data/user/0/org.a ]; then "))
+        assertTrue(command.contains("f=\$(find /data/user/0/org.a -mindepth 1 -maxdepth 1 ! -name cache ! -name code_cache ! -name lib 2>&1) || echo ${RootDataCommands.PARTS_ERROR}; "))
+        assertTrue(command.contains("[ -n \"\$f\" ] && echo \"data org.a\"; fi"))
         assertTrue(command.contains("echo \"data_de org.a\""))
         // The listing says when it has run to its end: one that was never run says nothing.
         assertTrue(command.endsWith("; echo ${RootDataCommands.PARTS_END}"))
+        // A folder that could not be listed is not one without data.
+        assertNull(RootDataCommands.partsFrom("data org.a\n${RootDataCommands.PARTS_ERROR}\n${RootDataCommands.PARTS_END}\n"))
         assertEquals(
             mapOf("org.a" to listOf("data", "data_de"), "org.b" to listOf("data_de")),
             RootDataCommands.partsFrom("data_de org.a\ndata org.a\ndata_de org.b\nfind: oops\ncache org.c\ndata not.a package\n${RootDataCommands.PARTS_END}\n")
@@ -116,8 +118,9 @@ class RootDataCommandsTest {
         val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, token)
         val target = "/data/user/0/$pkg"
         val old = "/data/user/0/.arkstore-old-$token"
-        val putBack = "{ [ ! -e $old ] || [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && " +
-            "rm -rf $target && { [ ! -e $old ] || mv $old $target; }"
+        // Nothing is put back without the old: the data in place is then the app's own, never moved.
+        val putBack = "{ [ ! -e $old ] || { { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && " +
+            "rm -rf $target && mv $old $target; }; }"
         assertEquals(
             listOf(
                 "chown -R -h 10234:10234 $staging/$pkg",

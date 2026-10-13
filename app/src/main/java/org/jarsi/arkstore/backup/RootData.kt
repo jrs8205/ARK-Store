@@ -26,6 +26,9 @@ internal object RootDataCommands {
     /** The last line [parts] prints, which says the listing ran to its end. */
     const val PARTS_END = "arkstore-parts-end"
 
+    /** A line [parts] prints when a folder could not be listed: the listing is then not to be trusted. */
+    const val PARTS_ERROR = "arkstore-parts-error"
+
     /** The folder of the data [part] of every app of user [userId]: the system's own, reached as root, not the store's. */
     @Suppress("SdCardPath")
     fun userDir(part: String, userId: Int): String {
@@ -76,8 +79,10 @@ internal object RootDataCommands {
 
     /**
      * Prints, for each of [packages], the parts that hold anything worth taking, one line each:
-     * "part package", and [PARTS_END] last of all, so that a listing that was never run to its
-     * end, as when root was refused, is told from one of apps that have no data.
+     * "part package"; [PARTS_ERROR] for a folder that could not be listed, since what `find`
+     * could not read is not the same as nothing; and [PARTS_END] last of all, so that a
+     * listing that was never run to its end, as when root was refused, is told from one of
+     * apps that have no data.
      */
     fun parts(userId: Int, packages: List<String>): String {
         require(packages.isNotEmpty()) { "No packages" }
@@ -85,7 +90,8 @@ internal object RootDataCommands {
             packages.map { pkg ->
                 val dir = "${userDir(part, userId)}/${checked(pkg)}"
                 val excluded = EXCLUDED.joinToString(" ") { "! -name $it" }
-                "[ -d $dir ] && [ -n \"\$(find $dir -mindepth 1 -maxdepth 1 $excluded 2>/dev/null | head -n 1)\" ] && echo \"$part $pkg\""
+                "if [ -d $dir ]; then f=\$(find $dir -mindepth 1 -maxdepth 1 $excluded 2>&1) || echo $PARTS_ERROR; " +
+                    "[ -n \"\$f\" ] && echo \"$part $pkg\"; fi"
             }
         }
         return lines.joinToString("; ") + "; echo $PARTS_END"
@@ -93,13 +99,14 @@ internal object RootDataCommands {
 
     /**
      * The parts [parts] printed, by package, in the order of [AppBackup.DATA_PARTS]; null when
-     * the listing did not run to its end.
+     * the listing did not run to its end, or a folder could not be listed.
      */
     fun partsFrom(output: String): Map<String, List<String>>? {
         val found = HashMap<String, MutableList<String>>()
         var ended = false
         for (line in output.lineSequence()) {
             val words = line.trim().split(' ')
+            if (words.size == 1 && words[0] == PARTS_ERROR) return null
             if (words.size == 1 && words[0] == PARTS_END) {
                 ended = true
                 continue
@@ -189,12 +196,13 @@ internal object RootDataCommands {
         return putBack(target, old(part, userId, token))
     }
 
-    /** The old data at [old] back in the place of [target], with the link to the libraries. */
-    private fun putBack(target: String, old: String): String = listOf(
-        "{ [ ! -e $old ] || [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; }",
-        "rm -rf $target",
-        "{ [ ! -e $old ] || mv $old $target; }"
-    ).joinToString(" && ")
+    /**
+     * The old data at [old] back in the place of [target], with the link to the libraries.
+     * Without the old there is nothing to put back, and [target] is left as it is: it is then
+     * the app's own data, never moved, or the old put back already.
+     */
+    private fun putBack(target: String, old: String): String =
+        "{ [ ! -e $old ] || { { [ ! -L $target/lib ] || [ -e $old/lib ] || mv $target/lib $old/lib; } && rm -rf $target && mv $old $target; }; }"
 
     /** Removes what the restore [token] of [part] left beside the apps' folders: the old data and the staging folder. */
     fun finish(part: String, userId: Int, token: String): String =
@@ -225,6 +233,9 @@ internal object RootDataCommands {
 object RootData {
     private const val TAG = "RootData"
     private const val TOOL_TIMEOUT_MS = 60_000L
+
+    /** Putting the old data back or clearing up is a few moves and removals; large data takes its time. */
+    private const val CLEAR_TIMEOUT_MS = 10 * 60_000L
     private const val BUFFER_BYTES = 64 * 1024
     private const val PROGRESS_STEP_BYTES = 1024 * 1024L
 
@@ -377,19 +388,23 @@ object RootData {
         val swapped = ArrayList<Staged>(staged.size)
         try {
             for (part in staged) {
-                val ran = Root.run(RootDataCommands.swap(part.part, userId, packageName, uid, part.token), TOOL_TIMEOUT_MS, global = true)
+                // Counted as begun before its command runs: a command cut short by a cancel
+                // or a failure may have moved the data already, and is put back all the same.
+                swapped += part
+                // No limit on the time: the ownership and the labels of large data take a
+                // while, and a cancel kills the command as it is.
+                val ran = Root.run(RootDataCommands.swap(part.part, userId, packageName, uid, part.token), null, global = true)
                 when (ran) {
                     Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
                     is Root.Outcome.Ran -> if (ran.exit != 0) {
                         throw IOException("The data of $packageName could not be put in place: ${ran.err.trim().lines().firstOrNull().orEmpty().take(200)}")
                     }
                 }
-                swapped += part
             }
         } catch (e: Throwable) {
             withContext(NonCancellable) {
                 for (part in swapped.asReversed()) {
-                    val back = Root.run(RootDataCommands.unswap(part.part, userId, packageName, part.token), TOOL_TIMEOUT_MS, global = true)
+                    val back = Root.run(RootDataCommands.unswap(part.part, userId, packageName, part.token), CLEAR_TIMEOUT_MS, global = true)
                     if (back !is Root.Outcome.Ran || back.exit != 0) {
                         // The old data stays where it was put aside, for whoever comes to look.
                         Log.e(TAG, "The old ${part.part} of $packageName could not be put back; it is kept at ${RootDataCommands.old(part.part, userId, part.token)}")
@@ -401,7 +416,7 @@ object RootData {
         }
         withContext(NonCancellable) {
             for (part in staged) {
-                val cleared = Root.run(RootDataCommands.finish(part.part, userId, part.token), TOOL_TIMEOUT_MS, global = true)
+                val cleared = Root.run(RootDataCommands.finish(part.part, userId, part.token), CLEAR_TIMEOUT_MS, global = true)
                 if (cleared !is Root.Outcome.Ran || cleared.exit != 0) Log.w(TAG, "Could not clear up after the restore of ${part.part} of $packageName")
                 part.finished = true
             }
@@ -418,7 +433,7 @@ object RootData {
     }
 
     private suspend fun remove(staging: String) {
-        val removed = Root.run(RootDataCommands.remove(staging), TOOL_TIMEOUT_MS, global = true)
+        val removed = Root.run(RootDataCommands.remove(staging), CLEAR_TIMEOUT_MS, global = true)
         if (removed !is Root.Outcome.Ran || removed.exit != 0) Log.w(TAG, "Could not remove $staging")
     }
 }

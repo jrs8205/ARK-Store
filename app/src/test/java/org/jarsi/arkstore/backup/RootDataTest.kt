@@ -103,15 +103,37 @@ class RootDataTest {
         val b = RootData.stage("tar", AppBackup.DATA_USER_DE, pkg, ByteArrayInputStream(archive()))
         assertThrows(IOException::class.java) { runBlocking { RootData.swap(listOf(a, b), pkg, 10123) } }
         assertEquals(2, swaps().size)
-        val back = unswaps().single()
-        assertTrue(back.contains("/data/user/0/$pkg"))
-        assertTrue(back.contains(".arkstore-old-${a.token}"))
-        assertTrue(commands.indexOf(back) > commands.indexOf(swaps()[1]))
+        // The part that failed is put back too: its command may have moved the data before it failed.
+        val back = unswaps()
+        assertEquals(2, back.size)
+        assertTrue(back[0].contains("/data/user_de/0/$pkg") && back[0].contains(".arkstore-old-${b.token}"))
+        assertTrue(back[1].contains("/data/user/0/$pkg") && back[1].contains(".arkstore-old-${a.token}"))
+        assertTrue(commands.indexOf(back[0]) > commands.indexOf(swaps()[1]))
         // The old data is never removed on this way out; the staging folders are, once discarded.
         assertEquals(0, finishes().size)
         RootData.discard(listOf(a, b))
         val removed = commands.filter { it.startsWith("rm -rf /data/user") && ".arkstore-restore-" in it && "mkdir" !in it }
         assertEquals(2, removed.size)
+    }
+
+    @Test
+    fun aSwapCutShortIsPutBackAsWell() = runBlocking {
+        // Root lost in the middle of the second part: the first is put back, and so is the second.
+        device()
+        val a = RootData.stage("tar", AppBackup.DATA_USER, pkg, ByteArrayInputStream(archive()))
+        val b = RootData.stage("tar", AppBackup.DATA_USER_DE, pkg, ByteArrayInputStream(archive()))
+        val before = Root.transport!!
+        Root.transport = { command, stdin, stdout, global ->
+            if (command.startsWith("chown") && "/data/user_de/" in command) {
+                commands += command
+                Root.Outcome.NoRoot
+            } else {
+                before(command, stdin, stdout, global)
+            }
+        }
+        assertThrows(IOException::class.java) { runBlocking { RootData.swap(listOf(a, b), pkg, 10123) } }
+        assertEquals(2, unswaps().size)
+        assertEquals(0, finishes().size)
     }
 
     @Test

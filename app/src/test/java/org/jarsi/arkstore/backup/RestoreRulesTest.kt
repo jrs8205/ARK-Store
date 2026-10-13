@@ -89,8 +89,10 @@ class RestoreRulesTest {
         // A choice is remembered by what the user did last.
         assertEquals(Selection(chosen = setOf("c"), dropped = setOf("b")), Selection().toggled("c", true).toggled("b", false))
         assertEquals(Selection(chosen = emptySet(), dropped = setOf("c")), Selection().toggled("c", true).toggled("c", false))
-        assertEquals(Selection(chosen = setOf("a", "c"), dropped = emptySet()), said.all(listOf("a", "c"), true))
-        assertEquals(Selection(chosen = emptySet(), dropped = setOf("a", "c")), said.all(listOf("a", "c"), false))
+        // All or none of the keys given, the word on the others standing: a choice of all the
+        // apps on the screen leaves the apps off it as they were.
+        assertEquals(Selection(chosen = setOf("b", "d", "a", "c"), dropped = emptySet()), said.all(listOf("a", "c"), true))
+        assertEquals(Selection(chosen = setOf("b", "d"), dropped = setOf("c", "a")), said.all(listOf("a", "c"), false))
     }
 
     @Test

@@ -407,9 +407,11 @@ data class Selection(val chosen: Set<String> = emptySet(), val dropped: Set<Stri
     fun toggled(key: String, on: Boolean): Selection =
         if (on) Selection(chosen + key, dropped - key) else Selection(chosen - key, dropped + key)
 
-    /** The user's word on every one of [keys] at once, which stands in for whatever was said before. */
-    fun all(keys: Collection<String>, on: Boolean): Selection =
-        if (on) Selection(keys.toSet(), emptySet()) else Selection(emptySet(), keys.toSet())
+    /** The user's word on every one of [keys] at once, which stands in for what was said of them before; the rest stands. */
+    fun all(keys: Collection<String>, on: Boolean): Selection {
+        val set = keys.toSet()
+        return if (on) Selection(chosen + set, dropped - set) else Selection(chosen - set, dropped + set)
+    }
 
     companion object {
         /**

@@ -189,22 +189,27 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
 
     /**
      * The records of a pax header: each "length key=value\n", the length counted in bytes,
-     * as tar counts it, not in characters.
+     * as tar counts it, not in characters. A record is read in this one shape only: digits,
+     * one space, a key with no blank in it, and a line break at the end. tar skips any run
+     * of blanks after the length, and a record laid out otherwise would be read two ways.
      */
     private fun paxRecords(bytes: ByteArray): List<Pair<String, String>> {
         val records = ArrayList<Pair<String, String>>()
         var at = 0
         while (at < bytes.size) {
             var space = at
-            while (space < bytes.size && bytes[space] != ' '.code.toByte()) space++
-            if (space == bytes.size) throw IOException("Not a pax header")
+            while (space < bytes.size && bytes[space] >= '0'.code.toByte() && bytes[space] <= '9'.code.toByte()) space++
+            if (space == at || space == bytes.size || bytes[space] != ' '.code.toByte()) throw IOException("Not a pax header")
             val length = String(bytes, at, space - at, Charsets.US_ASCII).toIntOrNull() ?: throw IOException("Not a pax header")
-            if (length <= 0 || at + length > bytes.size || space + 1 > at + length) throw IOException("Not a pax header")
-            val record = String(bytes, space + 1, at + length - space - 1, Charsets.UTF_8).trimEnd('\n')
+            val end = at + length
+            if (end > bytes.size || space + 2 >= end || bytes[end - 1] != '\n'.code.toByte()) throw IOException("Not a pax header")
+            val record = String(bytes, space + 1, end - space - 2, Charsets.UTF_8)
             val equals = record.indexOf('=')
-            if (equals < 0) throw IOException("Not a pax header")
-            records += record.substring(0, equals) to record.substring(equals + 1)
-            at += length
+            if (equals <= 0) throw IOException("Not a pax header")
+            val key = record.substring(0, equals)
+            if (key.any { it <= ' ' }) throw IOException("Not a pax header")
+            records += key to record.substring(equals + 1)
+            at = end
         }
         return records
     }

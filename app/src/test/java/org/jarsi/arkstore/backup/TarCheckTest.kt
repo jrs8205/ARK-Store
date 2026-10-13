@@ -172,6 +172,14 @@ class TarCheckTest {
         val wrong = " comment=ääkköset\n".let { body -> "${body.length + 2}$body".toByteArray() }
         refused(tar(Item("./PaxHeaders/x", 'x', content = wrong), Item("$root/d", content = "x".toByteArray())))
         refused(tar(Item("./PaxHeaders/x", 'x', content = "nonsense".toByteArray()), Item("$root/d", content = "x".toByteArray())))
+        // A record laid out otherwise than "length key=value" and a line break: two blanks after
+        // the length, which tar skips and reads the path behind; a blank in the key; no line break.
+        fun laidOut(text: String): ByteArray = text.toByteArray().let { body -> "${body.size + 3}$body".toByteArray() }
+        refused(tar(Item("./PaxHeaders/x", 'x', content = laidOut("  path=$root/ok\n")), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = laidOut(" path =$root/ok\n")), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = laidOut(" comment=hi\n").dropLast(1).toByteArray() + "x".toByteArray()), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = laidOut(" =hi\n")), Item("$root/d", content = "x".toByteArray())))
+        refused(tar(Item("./PaxHeaders/x", 'x', content = ("+" + String(pax("comment" to "hi"))).toByteArray()), Item("$root/d", content = "x".toByteArray())))
     }
 
     @Test

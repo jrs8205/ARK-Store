@@ -831,10 +831,14 @@ object BackupManager {
                     val upToDate = AppBackup.isUpToDate(stored, byName.mapValues { it.value.size }, entry)
                     val wanted = parts?.get(entry.packageName).orEmpty()
                     val oldData = byName.values.filter { AppBackup.isDataName(it.name) }
+                    // Data kept from before is kept for the app it was taken from alone: the
+                    // entry's signers are what a restore holds data in the clear to, and an
+                    // app signed by someone else gets nothing of the old one's.
+                    val sameApp = stored != null && stored.signers.toSet() == entry.signers.toSet()
                     // The files up to date, and the data either not asked for, with none
                     // left over from before, or not to be had, so that what is there stays:
                     // the folder is as it should be. The data is taken afresh whenever it can be.
-                    if (upToDate && (dataLost || (run == null && oldData.isEmpty()))) {
+                    if (upToDate && ((dataLost && sameApp) || (run == null && oldData.isEmpty()))) {
                         skipped++
                         written[entry.packageName] = stored ?: entry
                         done += entry.size
@@ -870,7 +874,7 @@ object BackupManager {
                     var archives = emptyList<BackupData>()
                     if (dataLost) {
                         // What the folder holds of the data stays, and the entry goes on naming it.
-                        archives = stored?.data?.filter { it.name in byName }.orEmpty()
+                        archives = if (sameApp) stored!!.data.filter { it.name in byName } else emptyList()
                     } else if (run != null && wanted.isNotEmpty()) {
                         try {
                             archives = writeData(docs, folderId, byName, entry, run, wanted) { sofar ->
