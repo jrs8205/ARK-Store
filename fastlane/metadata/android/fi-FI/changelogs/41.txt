@@ -1,0 +1,1 @@
+Rootatulla laitteella root-oikeuden voi ottaa käyttöön asetuksista: asennukset, päivitykset ja poistot tapahtuvat kysymättä, ja varmuuskopioon voi ottaa mukaan sovellusten omat tiedot, salasanalla salattuina jos salasanan antaa. Varmuuskopio- ja palautussivulla sovelluslista täyttää sivun, ja sitä voi hakea.

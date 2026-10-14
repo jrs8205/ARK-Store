@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.0-beta.4
+
+- On a rooted device (Magisk, KernelSU or APatch) root can be turned on in the settings:
+  installs, updates, removals and restores then go through without Android asking. Root is
+  asked for when it is first needed; if it is refused or missing, the usual prompts are used
+  and the settings say so
+- With root on, a backup can include the apps' own data. It goes next to the APK files as an
+  archive, encrypted with a password if one is given, and a restore puts it back only into
+  the app it was taken from, signed with the same key, and only whole: every part is checked
+  before any is put in place, and the old data is kept until all are
+- The backup and restore pages give the list of apps the whole page, with a search above it
+  and the choices around it: all, none or only the apps not from Play, and on the restore
+  page only the missing ones
+
 ## 1.9.0-beta.3
 
 - The text on the settings, backup and restore pages is in the theme's own colour again. With
