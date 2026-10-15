@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0
+
+- Everything from the 1.9.0 betas below: the installed apps backed up to a folder or to one
+  zip file and restored from either, on this or another device, with a list of the recent
+  backups and restores; the settings as a page of their own; and on a rooted device, root
+  for installs, updates and removals without Android asking, and the apps' own data in a
+  backup, encrypted with a password if one is given
+
 ## 1.9.0-beta.4
 
 - On a rooted device (Magisk, KernelSU or APatch) root can be turned on in the settings:
