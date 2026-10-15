@@ -1,0 +1,1 @@
+Back up the installed apps to a folder of your choosing, as their APK files, and restore them from it on this or another device: the settings tell of each app whether it is missing, behind or the same, and install what is chosen through the system's prompts. A second backup copies only what has changed. The settings are a page of their own.

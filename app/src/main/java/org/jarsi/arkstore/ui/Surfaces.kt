@@ -15,6 +15,8 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.RequiresApi
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
@@ -176,6 +178,18 @@ object Surfaces {
      * an OLED screen off.
      */
     internal fun takes(base: Color): Boolean = base != Color.Black
+
+    /** The colours of a page: what lies below its content, and the colour of its text. */
+    internal data class Page(val container: Color, val content: Color)
+
+    /**
+     * The colours of a page on [scheme]'s background, clear where the metal is drawn below it.
+     * Its text takes the colour of the background's own text: a clear container names none.
+     */
+    internal fun page(scheme: ColorScheme, metal: Boolean): Page {
+        val container = if (metal && takes(scheme.background)) Color.Transparent else scheme.background
+        return Page(container, scheme.contentColorFor(scheme.background))
+    }
 
     /**
      * Draws a small plate of a grey off screen and looks at a pixel of it: the shader must

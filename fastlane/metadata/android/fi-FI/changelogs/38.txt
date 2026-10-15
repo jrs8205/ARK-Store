@@ -1,0 +1,1 @@
+Varmuuskopioi asennetut sovellukset valitsemaasi kansioon APK-tiedostoina ja palauta ne sieltä tälle tai toiselle laitteelle: lista kertoo, mikä puuttuu, on vanhempi tai sama, ja asentaa valitut järjestelmän kehotteiden kautta. Toinen varmuuskopio kopioi vain muuttuneet. Asetukset on nyt oma sivunsa.

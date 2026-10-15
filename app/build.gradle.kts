@@ -20,8 +20,8 @@ android {
         applicationId = "org.jarsi.arkstore"
         minSdk = 26
         targetSdk = 37
-        versionCode = 37
-        versionName = "1.8.0"
+        versionCode = 41
+        versionName = "1.9.0-beta.4"
 
         // The GitHub account that is a source on every new installation.
         buildConfigField("String", "GITHUB_OWNER", "\"jrs8205\"")
@@ -104,6 +104,11 @@ android {
                 signingConfig = signingConfigs.getByName("release")
             }
         }
+    }
+
+    testOptions {
+        // The root and data code logs as it goes; the log is a stub in a unit test.
+        unitTests.isReturnDefaultValues = true
     }
 
     buildFeatures {

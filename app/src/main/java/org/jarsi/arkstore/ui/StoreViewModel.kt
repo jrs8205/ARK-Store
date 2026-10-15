@@ -34,6 +34,8 @@ import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.InstallManager
+import org.jarsi.arkstore.install.Root
+import org.jarsi.arkstore.install.RootCheck
 import org.jarsi.arkstore.work.AutoUpdate
 
 data class AppRow(
@@ -70,6 +72,20 @@ enum class SourceError { INVALID, DUPLICATE, NOT_FOUND, NOT_OPEN, NETWORK, RATE_
 enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 
 enum class TransferError { NOT_A_BACKUP, FAILED }
+
+/** How root stands in the settings: off, being asked for, on, or refused one way or another. */
+sealed interface RootUiState {
+    data object Off : RootUiState
+    data object Checking : RootUiState
+    /** Root is on; [provider] names the root app when it was asked this time. */
+    data class On(val provider: String?) : RootUiState
+    /** Root is on, but the root app refused it just now: installs go the ordinary way. */
+    data object OnButRefused : RootUiState
+    /** The root app refused, so root was not turned on. */
+    data object Denied : RootUiState
+    /** There is no `su` on this device. */
+    data object Missing : RootUiState
+}
 
 /** What came of the last export or import, see [Backup]. */
 data class TransferUiState(
@@ -337,6 +353,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The settings as [exportTo] writes them, for a backup of the apps to keep alongside. */
+    fun settingsJson(): String = backup().toJson().toString(2)
+
     private fun backup(): Backup {
         val context = getApplication<Application>()
         val ui = context.getSharedPreferences(PREFS_UI, Context.MODE_PRIVATE)
@@ -438,6 +457,62 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissFailure(fullName: String) = InstallManager.dismissFailure(fullName)
+
+    private val _root = MutableStateFlow<RootUiState>(
+        if (Root.enabled(application)) RootUiState.On(null) else RootUiState.Off
+    )
+    /** Whether root is turned on, and what the root app said when it was last asked. */
+    val root: StateFlow<RootUiState> = _root.asStateFlow()
+
+    /**
+     * Turns root on or off. Turning it on asks the root app first, which asks the user; the
+     * setting is kept only when root was given.
+     */
+    fun setRootEnabled(on: Boolean) {
+        val context = getApplication<Application>()
+        if (!on) {
+            Root.setEnabled(context, false)
+            _root.value = RootUiState.Off
+            return
+        }
+        _root.value = RootUiState.Checking
+        viewModelScope.launch {
+            _root.value = when (val check = Root.check()) {
+                is RootCheck.Granted -> {
+                    Root.setEnabled(context, true)
+                    Root.markLost(context, false)
+                    RootUiState.On(check.provider)
+                }
+                RootCheck.Denied -> RootUiState.Denied
+                RootCheck.Missing -> RootUiState.Missing
+            }
+        }
+    }
+
+    /**
+     * Looks at root again as the settings open: while root is on, the root app is asked, so
+     * the settings tell how it stands now; while it is off, only whether the device has a
+     * `su` at all is looked at, without asking anyone, so a device that is not rooted shows
+     * the switch greyed out.
+     */
+    fun refreshRoot() {
+        val context = getApplication<Application>()
+        if (_root.value is RootUiState.Checking) return
+        viewModelScope.launch {
+            if (Root.enabled(context)) {
+                val check = Root.check()
+                if (!Root.enabled(context)) return@launch
+                _root.value = when (check) {
+                    is RootCheck.Granted -> RootUiState.On(check.provider)
+                    RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused
+                }
+            } else {
+                val present = Root.present()
+                if (Root.enabled(context) || _root.value is RootUiState.Checking) return@launch
+                if (!present) _root.value = RootUiState.Missing else if (_root.value is RootUiState.Missing) _root.value = RootUiState.Off
+            }
+        }
+    }
 
     /**
      * Called whenever the app comes to the foreground: re-reads the installed versions (the user

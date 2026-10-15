@@ -8,6 +8,7 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.pm.PackageInfoCompat
 import java.io.File
 import java.io.IOException
@@ -33,8 +34,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.coroutineContext
+import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.ApkInfo
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
@@ -160,12 +163,27 @@ internal fun stale(states: Map<String, InstallState>, sessions: Map<String, Int>
 internal fun dismissed(states: Map<String, InstallState>, repo: String): Map<String, InstallState> =
     if (states[repo] is InstallState.Failed) states - repo else states
 
-/** Downloads release APKs and hands them to the system package installer. */
+/** What the key of an install from files on the device begins with; no name of the catalogue does. */
+internal const val LOCAL_PREFIX = "backup:"
+
+/**
+ * The key under which files of the device's own, of [packageName], are installed: apart from
+ * the names of the catalogue ("owner/repo", "fdroid:org.example" and the like), so that such
+ * an install is never taken for a row of the list.
+ */
+internal fun localKey(packageName: String): String = LOCAL_PREFIX + packageName
+
+internal fun isLocal(key: String): Boolean = key.startsWith(LOCAL_PREFIX)
+
+/** Downloads release APKs, or takes files from the device, and hands them to the system package installer. */
 object InstallManager {
     private const val TAG = "InstallManager"
     private const val MAX_DOWNLOADS = 3
     private const val PROMPT_GRACE_MS = 3 * 60 * 1000L
     private const val STALE_GRACE_MS = 3 * 1000L
+
+    /** The session id of a root install that got no session: `pm` refused to make one. */
+    private const val NO_SESSION = -1
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -185,9 +203,19 @@ object InstallManager {
      * What was committed for each repository, kept until the system reports the outcome,
      * with the number of the [attempt] it was, see [InstallJob.id].
      */
-    private data class Committed(val app: StoreApp, val packageName: String, val sessionId: Int, val attempt: Int)
+    private data class Committed(
+        val app: StoreApp?,
+        val packageName: String,
+        val sessionId: Int,
+        val attempt: Int,
+        /** Made through `pm` as root: the system reports nothing of it, the command's own verdict settles it. */
+        val root: Boolean = false
+    )
 
     private val committed = ConcurrentHashMap<String, Committed>()
+
+    /** The names of the installs from files on the device, which the catalogue knows nothing of. */
+    private val labels = ConcurrentHashMap<String, String>()
 
     /** The attempt on its way for each repository, for [cancel]. */
     private val jobs = ConcurrentHashMap<String, InstallJob>()
@@ -211,6 +239,10 @@ object InstallManager {
 
     fun isBusy(repo: String): Boolean = _states.value[repo].isOnItsWay()
 
+    /** The name to show for the install of [key]: the catalogue's, or the one given with files of the device. */
+    fun titleOf(context: Context, key: String): String =
+        labels[key] ?: CatalogRepository.get(context).titleOf(key)
+
     /**
      * Downloads and installs [app], unless an install of it is already on its way; returns
      * whether this one was begun. From the [foreground], the download is kept going by a
@@ -231,28 +263,48 @@ object InstallManager {
         foreground: Boolean,
         onBegun: (attempt: Int) -> Unit = {}
     ): InstallJob? {
-        val appContext = context.applicationContext
-        if (!reserve(app.fullName)) return null
-        _activeJobs.update { it + 1 }
-        if (foreground) InstallService.start(appContext)
-
         // A file of this attempt's own: the cleanup of an earlier attempt of the same app,
         // cancelled a moment ago, must not take the file of this one.
         val target = File(
-            File(appContext.cacheDir, "apk"),
+            File(context.applicationContext.cacheDir, "apk"),
             "${attempts.incrementAndGet()}-${CatalogRules.downloadName(app.fullName)}"
         )
+        return begin(context, app.fullName, foreground, target, onBegun) { appContext, install ->
+            downloadAndInstall(appContext, app, target, install)
+        }
+    }
+
+    /**
+     * Begins the attempt of [key] that [body] carries out, unless one is already on its way;
+     * returns the attempt begun, or null when none was. [target] is the file, or the directory
+     * of files, the attempt works on, deleted when the attempt settles. [onBegun] is told the
+     * attempt's number before it runs: what the caller is told is this attempt's, whatever
+     * becomes of it, and not read afterwards from a map that may by then hold a later attempt.
+     */
+    private fun begin(
+        context: Context,
+        key: String,
+        foreground: Boolean,
+        target: File,
+        onBegun: (attempt: Int) -> Unit,
+        body: suspend (appContext: Context, install: InstallJob) -> Unit
+    ): InstallJob? {
+        val appContext = context.applicationContext
+        if (!reserve(key)) return null
+        _activeJobs.update { it + 1 }
+        if (foreground) InstallService.start(appContext)
+
         lateinit var install: InstallJob
         install = InstallJob(
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
-                    downloadAndInstall(appContext, app, target, install)
+                    body(appContext, install)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     // Nothing here may take the process down or leave the app stuck as "installing".
-                    Log.w(TAG, "Install failed for ${app.fullName}", e)
-                    fail(install, app.fullName, InstallState.Failed(FailReason.INSTALL, e.message))
+                    Log.w(TAG, "Install failed for $key", e)
+                    fail(install, key, InstallState.Failed(FailReason.INSTALL, e.message))
                 }
             }
         )
@@ -260,19 +312,19 @@ object InstallManager {
         // when a cancel comes before the job's first turn and the body never runs. The
         // reservation is given up last: only then may a new attempt begin.
         install.onSettled { cancelled ->
-            // Once committed, the session holds its own copy of the file.
-            target.delete()
-            jobs.remove(app.fullName, install)
+            // Once committed, the session holds its own copy of the files.
+            target.deleteRecursively()
+            jobs.remove(key, install)
             _activeJobs.update { it - 1 }
             if (cancelled) {
                 // Only a download is cancelled, and only on purpose: nothing to show for it.
-                setState(app.fullName, null)
-                outcomes.tryEmit(Settled(app.fullName, install.id, Outcome.CANCELLED))
+                setState(key, null)
+                outcomes.tryEmit(Settled(key, install.id, Outcome.CANCELLED))
             }
         }
         onBegun(install.id)
         // Stored before it runs, so that a cancel cannot miss it.
-        jobs[app.fullName] = install
+        jobs[key] = install
         install.start()
         return install
     }
@@ -319,12 +371,61 @@ object InstallManager {
         app: StoreApp,
         timeoutMillis: Long,
         onBegun: (attempt: Int) -> Unit = {}
+    ): Outcome? = await(app.fullName, timeoutMillis, onBegun) { begun ->
+        begin(context, app, foreground = false, onBegun = begun)
+    }
+
+    /**
+     * Installs [packageName] from [files] in [dir], the base file first, as the attempt of
+     * [key] (see [localKey]), shown under [label], and waits for the outcome as
+     * [installAndAwait] does. The directory and everything in it are taken over here: the
+     * attempt begun deletes them when it settles, and when none begins, as when an attempt
+     * of [key] is already on its way, they are deleted before this returns. The store itself
+     * is not installed this way, so nothing waits for other installs here.
+     */
+    suspend fun installLocalAndAwait(
+        context: Context,
+        key: String,
+        label: String,
+        packageName: String,
+        dir: File,
+        files: List<File>,
+        timeoutMillis: Long,
+        onBegun: (attempt: Int) -> Unit = {}
+    ): Outcome? {
+        labels[key] = label
+        var begun = false
+        val outcome = await(key, timeoutMillis, { attempt ->
+            begun = true
+            onBegun(attempt)
+        }) { onBegunHere ->
+            begin(context, key, foreground = false, target = dir, onBegun = onBegunHere) { appContext, install ->
+                installLocal(appContext, key, packageName, files, install)
+            }
+        }
+        if (!begun) dir.deleteRecursively()
+        return outcome
+    }
+
+    /**
+     * Waits for the outcome of the attempt of [key] that [begin] begins: installed, waiting
+     * for the user to confirm (a notification asks them), or failed. Null when nothing was
+     * settled within [timeoutMillis]; the install itself goes on, and its outcome is handled
+     * as any other's. [onBegun] is told the number of the attempt begun, before the wait: a
+     * caller that wants to give it up may then cancel that attempt and no other, as one
+     * already on its way, which this call does not begin, is somebody else's.
+     */
+    private suspend fun await(
+        key: String,
+        timeoutMillis: Long,
+        onBegun: (attempt: Int) -> Unit,
+        begin: (onBegun: (attempt: Int) -> Unit) -> InstallJob?
     ): Outcome? = coroutineScope {
         // One already on its way settles on its own: a waiting confirmation is the user's to
         // give, and anything else is not worth waiting for twice.
-        if (isBusy(app.fullName)) {
-            val asked = confirmations.waiting().any { it.repo == app.fullName } ||
-                confirmations.next.value?.repo == app.fullName
+        if (isBusy(key)) {
+            val asked = confirmations.waiting().any { it.repo == key } ||
+                confirmations.next.value?.repo == key
             return@coroutineScope if (asked) Outcome.CONFIRMATION_NEEDED else null
         }
         // Listening before starting, so that an outcome settled at once is not missed; the
@@ -332,9 +433,9 @@ object InstallManager {
         // from a late one of an earlier attempt.
         val attempt = AtomicInteger(0)
         val outcome = async(start = CoroutineStart.UNDISPATCHED) {
-            outcomes.first { it.isOf(app.fullName, attempt.get()) }.outcome
+            outcomes.first { it.isOf(key, attempt.get()) }.outcome
         }
-        val begun = begin(context, app, foreground = false) {
+        val begun = begin {
             attempt.set(it)
             onBegun(it)
         }
@@ -345,6 +446,41 @@ object InstallManager {
         withTimeoutOrNull(timeoutMillis) { outcome.await() } ?: run {
             outcome.cancel()
             null
+        }
+    }
+
+    /**
+     * Checks [files] of the device, the base file first, and hands them to the system as
+     * [packageName]: the base file must be of that package, and must not be signed with a
+     * key the installed app has never had. No conflict is remembered: the files are not the
+     * catalogue's, and the catalogue's rows are not told anything by them.
+     */
+    private suspend fun installLocal(
+        appContext: Context,
+        key: String,
+        packageName: String,
+        files: List<File>,
+        install: InstallJob
+    ) {
+        setState(key, InstallState.Installing)
+        val archive = files.firstOrNull()?.let { readArchive(appContext, it) }
+        if (archive == null || archive.packageName != packageName) {
+            fail(install, key, InstallState.Failed(FailReason.INVALID_APK))
+            return
+        }
+        if (!signaturesMatch(appContext, archive)) {
+            fail(install, key, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
+            return
+        }
+        // From here on the attempt is the system's: a cancel is refused, and one that came
+        // first refuses this.
+        install.handOver()
+        try {
+            commit(appContext, key, null, packageName, files.map { it.name to it }, install.id)
+        } catch (e: Exception) {
+            Log.w(TAG, "Install session failed for $key", e)
+            committed.remove(key)
+            fail(install, key, InstallState.Failed(FailReason.INSTALL, e.message))
         }
     }
 
@@ -451,7 +587,7 @@ object InstallManager {
         setState(app.fullName, InstallState.Installing)
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         try {
-            commit(appContext, app, archive.packageName, target, install.id)
+            commit(appContext, app.fullName, app, archive.packageName, listOf("base.apk" to target), install.id)
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for ${app.fullName}", e)
             committed.remove(app.fullName)
@@ -482,7 +618,8 @@ object InstallManager {
             Log.w(TAG, "Could not list install sessions", e)
             null
         }
-        val sessions = committed.mapValues { it.value.sessionId }
+        // A session made as root is not among the store's own, and settles on its own.
+        val sessions = committed.filterValues { !it.root }.mapValues { it.value.sessionId }
         val candidates = stale(_states.value, sessions, alive() ?: return)
         if (candidates.isEmpty()) return
         delay(STALE_GRACE_MS)
@@ -585,7 +722,7 @@ object InstallManager {
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
                 val reason = conflictReason(message)
                 // The system can see a conflict that comparing the certificates here did not.
-                if (reason == FailReason.SIGNATURE_MISMATCH && attempted != null) {
+                if (reason == FailReason.SIGNATURE_MISMATCH && attempted?.app != null) {
                     InstalledApps.rememberConflict(context, attempted.app, attempted.packageName)
                 }
                 InstallState.Failed(reason, message) to Outcome.FAILED
@@ -626,11 +763,26 @@ object InstallManager {
         outcomes.tryEmit(Settled(repo, install.id, Outcome.FAILED))
     }
 
-    private fun commit(context: Context, app: StoreApp, packageName: String, apk: File, attempt: Int) {
+    /**
+     * Hands [files] to the system in one session, each under the name given with it: the base
+     * file as "base.apk", and the splits of a bundle under their own names, so that an app
+     * installed in parts is restored in parts. With root turned on, the session is made
+     * through `pm` as root instead, which asks the user nothing; when root cannot be had just
+     * now, the ordinary session is made after all.
+     */
+    private suspend fun commit(
+        context: Context,
+        key: String,
+        app: StoreApp?,
+        packageName: String,
+        files: List<Pair<String, File>>,
+        attempt: Int
+    ) {
+        if (Root.enabled(context) && commitAsRoot(context, key, app, packageName, files, attempt)) return
         val installer = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(packageName)
-        params.setSize(apk.length())
+        params.setSize(files.sumOf { it.second.length() })
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
         }
@@ -639,13 +791,88 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
-        committed[app.fullName] = Committed(app, packageName, sessionId, attempt)
+        committed[key] = Committed(app, packageName, sessionId, attempt)
         try {
-            write(context, installer, sessionId, app.fullName, apk)
+            write(context, installer, sessionId, key, files)
         } catch (e: Exception) {
             // Closing a session keeps what was copied into it; only abandoning frees the space.
             runCatching { installer.abandonSession(sessionId) }
             throw e
+        }
+    }
+
+    /**
+     * [commit] as root; false when root could not be had, in which case nothing was
+     * committed and the ordinary way is open. The verdict of `pm` is taken as the system's
+     * would be, so that whoever waits for the install is told the same way.
+     */
+    private suspend fun commitAsRoot(
+        context: Context,
+        key: String,
+        app: StoreApp?,
+        packageName: String,
+        files: List<Pair<String, File>>,
+        attempt: Int
+    ): Boolean {
+        if (Root.check() !is RootCheck.Granted) {
+            Log.w(TAG, "Root was not given; $key is installed the ordinary way")
+            Root.markLost(context, true)
+            return false
+        }
+        Root.markLost(context, false)
+        var sessionId: Int? = null
+        val result = RootInstaller.install(context.packageName, packageName, files) { id ->
+            sessionId = id
+            committed[key] = Committed(app, packageName, id, attempt, root = true)
+        }
+        return when (result) {
+            RootInstaller.Result.NoRoot -> {
+                Log.w(TAG, "Root was lost during the install of $key, which goes the ordinary way")
+                sessionId?.let { committed.remove(key, Committed(app, packageName, it, attempt, root = true)) }
+                Root.markLost(context, true)
+                false
+            }
+            is RootInstaller.Result.Done -> {
+                if (sessionId == null) {
+                    // No session was made: the verdict is the install's all the same.
+                    committed[key] = Committed(app, packageName, NO_SESSION, attempt, root = true)
+                }
+                onSessionResult(context, key, result.status, result.message, sessionId ?: NO_SESSION)
+                true
+            }
+        }
+    }
+
+    /**
+     * Removes [packageName] as root, without a word to the user; [onNoRoot] is called, on the
+     * main thread, when root cannot be had, for the caller to ask the system instead. A
+     * failure of the removal is told as a toast, as the system's dialog would tell it.
+     */
+    fun uninstall(context: Context, packageName: String, onNoRoot: () -> Unit) {
+        val appContext = context.applicationContext
+        scope.launch {
+            val result = if (Root.check() is RootCheck.Granted) RootInstaller.uninstall(packageName) else RootInstaller.Result.NoRoot
+            when (result) {
+                RootInstaller.Result.NoRoot -> {
+                    Root.markLost(appContext, true)
+                    withContext(Dispatchers.Main) { onNoRoot() }
+                }
+                is RootInstaller.Result.Done -> {
+                    Root.markLost(appContext, false)
+                    if (result.status == PackageInstaller.STATUS_SUCCESS) {
+                        notifyInstalledChanged()
+                    } else {
+                        Log.w(TAG, "Could not uninstall $packageName as root: ${result.message}")
+                        withContext(Dispatchers.Main) {
+                            Toast.makeText(
+                                appContext,
+                                appContext.getString(R.string.uninstall_failed, result.message ?: ""),
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -654,12 +881,14 @@ object InstallManager {
         installer: PackageInstaller,
         sessionId: Int,
         repo: String,
-        apk: File
+        files: List<Pair<String, File>>
     ) {
         installer.openSession(sessionId).use { session ->
-            session.openWrite("base.apk", 0, apk.length()).use { output ->
-                apk.inputStream().use { it.copyTo(output, 64 * 1024) }
-                session.fsync(output)
+            for ((name, file) in files) {
+                session.openWrite(name, 0, file.length()).use { output ->
+                    file.inputStream().use { it.copyTo(output, 64 * 1024) }
+                    session.fsync(output)
+                }
             }
             val intent = Intent(context, InstallReceiver::class.java)
                 .setAction(InstallReceiver.ACTION_STATUS)

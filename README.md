@@ -136,7 +136,11 @@ following a developer who has not added it.
   requests an hour per network without a token. A GitHub token given in the settings lifts
   that limit; it stays on the device, outside backups, and goes to GitHub alone.
 - The sources, bookmarks and settings can be exported to a file and imported on another
-  device.
+  device. The apps installed from outside Google Play can be backed up as their APK files to
+  a folder or a zip file, and installed back from either.
+- On a rooted device (Magisk, KernelSU or APatch), root can be turned on in the settings:
+  installs, updates, removals and restores then go through without Android asking, and a
+  backup can include the apps' own data, encrypted with a password if you give one.
 - Accessible: screen reader labels, text that scales, contrast of at least 7:1 (WCAG AAA),
   haptics that follow the system setting.
 - In 17 languages: English, Finnish, German, Spanish, French, Italian, Portuguese, Russian,

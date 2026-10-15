@@ -1,5 +1,58 @@
 # Changelog
 
+## 1.9.0-beta.4
+
+- On a rooted device (Magisk, KernelSU or APatch) root can be turned on in the settings:
+  installs, updates, removals and restores then go through without Android asking. Root is
+  asked for when it is first needed; if it is refused or missing, the usual prompts are used
+  and the settings say so
+- With root on, a backup can include the apps' own data. It goes next to the APK files as an
+  archive, encrypted with a password if one is given, and a restore puts it back only into
+  the app it was taken from, signed with the same key, and only whole: every part is checked
+  before any is put in place, and the old data is kept until all are
+- The backup and restore pages give the list of apps the whole page, with a search above it
+  and the choices around it: all, none or only the apps not from Play, and on the restore
+  page only the missing ones
+
+## 1.9.0-beta.3
+
+- The text on the settings, backup and restore pages is in the theme's own colour again. With
+  the metal surfaces on, the text that had no colour of its own was drawn black, and on a dark
+  theme it could not be seen
+
+## 1.9.0-beta.2
+
+- The backup can be saved to one zip file as well as to a folder: a single file for moving
+  to another phone or to a cloud service such as Google Drive, which lets an app save a file
+  but not choose a folder. The zip is written whole each time; a folder stays up to date and
+  copies only what has changed. The settings and the backup page say so in a few words
+- Restore from a zip file as from a folder, a folder zipped by hand too: the list of what it
+  holds is read from the head of a zip the store wrote, and each app's files are taken out
+  in turn while it is installed
+- The settings tell of the recent backups and restores: when, to or from where, how many
+  apps of what size, and how each went
+- The folder is asked for when a backup is saved to one, not as soon as the page opens
+
+## 1.9.0-beta.1
+
+- The installed apps can be backed up to a folder: in the settings, under App backup, choose
+  a folder on the device, on a card or in a cloud service the file picker shows, and the apps
+  installed from outside Google Play are copied to it as their APK files, one folder per app
+  with the splits of a bundle, each with a note of what it is, and an index of them all. The
+  list shows every app with its installer and size, those not from Google Play chosen to
+  begin with. A second backup to the same folder copies only what has changed; an app
+  removed from the device stays in the folder until it is deleted there. The store's own
+  settings file goes along. The apps' own data is not part of it
+- Restore from such a folder, on this or another device: the page reads the folder and tells
+  of each app whether it is missing, behind, the same, newer, signed with another key or in
+  need of a newer Android, and installs what is chosen one after the other through the
+  system's own prompts; the sources, bookmarks and settings in the folder can be brought
+  back at the same time
+- The settings are a page of their own, with the way back at the top, instead of a sheet
+  pulled up over the list; the backup and the restore open from it
+- An install can come from files on the device, several to one session, not only from a
+  download
+
 ## 1.8.0
 
 - Several updates at once go in order. Three files are downloaded at a time and the rest
