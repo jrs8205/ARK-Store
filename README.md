@@ -301,6 +301,13 @@ keyPassword=...
 
 Without that file the release build is left unsigned.
 
+## Support development
+
+If ARK-Store is useful to you, you can support its development:
+
+- [GitHub Sponsors](https://github.com/sponsors/jrs8205) — monthly or one-time
+- [Buy Me a Coffee](https://buymeacoffee.com/jrs8205) — no sign-up needed
+
 ## License
 
 ARK-Store is licensed under the [GNU General Public License v3](LICENSE).
