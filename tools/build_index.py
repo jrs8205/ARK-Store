@@ -112,6 +112,10 @@ AUTO_MAX_LOOKUPS = 500
 # apps and a run started soon after this one need a share of, so a run stops examining once
 # it has made this many requests; what is left over is examined by the next run.
 AUTO_MAX_REQUESTS = 600
+# Examining a repository reads parts of its APKs, and how long that takes depends on the network:
+# a whole run has taken from ten to almost thirty minutes. The job has thirty, and the index is
+# published only at its end, so examining stops after this long; the rest waits for the next run.
+AUTO_MAX_SECONDS = 12 * 60
 AUTO_MAX_NOTES = 800
 # A repository that has not been pushed to is still examined again now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
@@ -1188,17 +1192,22 @@ def prune_icons(directory, folder="icons"):
 
 
 def discover():
+    """The repositories carrying the store topic, and whether GitHub said its answer was complete."""
     repos = []
+    complete = True
     for page in range(1, MAX_SEARCH_PAGES + 1):
         query = urllib.parse.quote("topic:%s archived:false" % TOPIC)
         result = api("/search/repositories?q=%s&sort=updated&per_page=%d&page=%d" % (query, PAGE_SIZE, page))
         items = result.get("items", [])
         repos.extend(items)
+        # A search that runs out of time answers with what it found so far and says so.
+        if result.get("incomplete_results"):
+            complete = False
         if len(items) < PAGE_SIZE:
             break
         # The search API allows fewer requests per minute than the rest.
         time.sleep(2)
-    return repos
+    return repos, complete
 
 
 def discover_candidates(today):
@@ -1286,6 +1295,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
     asked about again: its previous entry, or its absence, still stands. Returns the entries
     and the new state. icons is passed on to build_app.
     """
+    deadline = time.monotonic() + AUTO_MAX_SECONDS
     candidates = [
         repo for repo in discover_candidates(today)
         if repo["full_name"] not in published
@@ -1315,12 +1325,17 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
     new_state = {}
     lookups = 0
     requests_before = api_requests
+    out_of_time = False
     for repo in candidates:
         full_name = repo["full_name"]
         pushed_at = repo.get("pushed_at") or ""
         previous = previous_auto.get(full_name)
         looked = False
-        if full_name not in examine or api_requests - requests_before >= AUTO_MAX_REQUESTS:
+        if full_name in examine and not out_of_time and time.monotonic() >= deadline:
+            out_of_time = True
+            print("examining stopped after %d minutes; the rest waits for the next run"
+                  % (AUTO_MAX_SECONDS // 60), file=sys.stderr)
+        if full_name not in examine or out_of_time or api_requests - requests_before >= AUTO_MAX_REQUESTS:
             # Unchanged, or out of budget for this run: keep what is known.
             app = previous
             if app:
@@ -1795,7 +1810,8 @@ def main():
 
     apps = []
     failed = 0
-    for repo in discover():
+    found, complete = discover()
+    for repo in found:
         if not listable(repo):
             continue
         full_name = repo["full_name"]
@@ -1814,6 +1830,16 @@ def main():
                 full_name, app["tag"], len(app["apks"]),
                 ", beta %s" % app["beta"]["tag"] if app.get("beta") else "",
             ))
+
+    if previous_apps and (not found or not complete):
+        # GitHub's search now and then answers with nothing, or with part of its results and a
+        # note that they are incomplete. An app is never dropped over that: one the search did
+        # not return keeps its previous entry until a complete answer leaves it out.
+        returned = {repo["full_name"] for repo in found}
+        kept = [app for name, app in previous_apps.items() if name not in returned]
+        print("the search %s; %d previously published apps kept"
+              % ("was incomplete" if found else "found nothing", len(kept)), file=sys.stderr)
+        apps.extend(kept)
 
     apps.sort(key=lambda app: app["fullName"].lower())
 

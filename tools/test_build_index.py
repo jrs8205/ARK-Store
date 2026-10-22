@@ -1611,6 +1611,39 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual(mocked.call_count, 2)
         self.assertEqual(sorted(state), ["o/app0", "o/app1"])
 
+    def test_examining_stops_when_its_time_is_up(self):
+        candidates = [self.candidate("o/app%d" % i) for i in range(5)]
+        previous = {"o/app4": self.entry("o/app4")}
+        clock = [1000.0]
+
+        def build_app(repo, *args, **kwargs):
+            clock[0] += build_index.AUTO_MAX_SECONDS / 2
+            return self.entry(repo["full_name"])
+
+        with mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
+            apps, state, mocked = self.run_auto(candidates, build_app, previous=previous)
+        self.assertEqual(mocked.call_count, 2)
+        self.assertEqual(sorted(state), ["o/app0", "o/app1"])
+        # One left over keeps its previous entry until a later run examines it.
+        self.assertEqual([app["fullName"] for app in apps], ["o/app0", "o/app1", "o/app4"])
+
+
+class DiscoverTest(unittest.TestCase):
+    def test_says_whether_the_search_was_complete(self):
+        answers = [{"items": [REPO], "incomplete_results": False}, {"items": [], "incomplete_results": True}]
+        for answer, complete in zip(answers, (True, False)):
+            with mock.patch.object(build_index, "api", return_value=answer):
+                self.assertEqual(build_index.discover(), (answer["items"], complete))
+
+    def test_reads_every_page(self):
+        first = {"items": [dict(REPO, full_name="o/a%d" % i) for i in range(build_index.PAGE_SIZE)]}
+        second = {"items": [REPO], "incomplete_results": True}
+        with mock.patch.object(build_index, "api", side_effect=[first, second]), \
+                mock.patch.object(build_index.time, "sleep"):
+            repos, complete = build_index.discover()
+        self.assertEqual(len(repos), build_index.PAGE_SIZE + 1)
+        self.assertFalse(complete)
+
 
 class MainTest(unittest.TestCase):
     KNOWN = {"fullName": "owner/app", "tag": "v1", "apks": [{"id": 7}]}
@@ -1627,7 +1660,8 @@ class MainTest(unittest.TestCase):
             raise urllib.error.URLError("down")
         return release(asset_id=8)
 
-    def run_main(self, previous, candidates=(), previous_auto=None, repo=REPO, api=None, manifest=None):
+    def run_main(self, previous, candidates=(), previous_auto=None, repo=REPO, api=None, manifest=None,
+                 found=None, complete=True):
         """Runs main while GitHub cannot be reached, so that only what the previous files
         hold can be listed, unless api and manifest say what GitHub and the APKs answer.
         Returns the index and the list of automatically found apps."""
@@ -1642,7 +1676,8 @@ class MainTest(unittest.TestCase):
             argv = ["build_index.py", "--previous", paths["previous.json"],
                     "--previous-auto", paths["previous-auto.json"],
                     "--output", paths["index.json"], "--auto-output", paths["auto.json"]]
-            with mock.patch.object(build_index, "discover", return_value=[repo]), \
+            with mock.patch.object(build_index, "discover",
+                                   return_value=([repo] if found is None else found, complete)), \
                     mock.patch.object(build_index, "discover_candidates",
                                       return_value=list(candidates)), \
                     mock.patch.object(build_index, "api", side_effect=api or self.api), \
@@ -1690,6 +1725,28 @@ class MainTest(unittest.TestCase):
                          {"en": {"description": RAW + "en-US/full_description.txt?at=20260101000000",
                                  "screenshots": []}})
         self.assertEqual(asked[-1], "/repos/owner/app/git/trees/main?recursive=1")
+
+    BETA = {"fullName": "owner/beta", "tag": "v0.1-beta", "apks": [{"id": 5}], "betaOnly": True}
+
+    def test_search_that_finds_nothing_keeps_the_published_apps(self):
+        # GitHub's search now and then answers with no repositories at all.
+        index, _ = self.run_main({"apps": [self.KNOWN], "betaApps": [self.BETA]}, found=[])
+        self.assertEqual(index["apps"], [self.KNOWN])
+        self.assertEqual(index["betaApps"], [self.BETA])
+
+    def test_incomplete_search_keeps_the_apps_it_did_not_return(self):
+        index, _ = self.run_main({"apps": [self.KNOWN], "betaApps": [self.BETA]}, complete=False)
+        self.assertEqual(index["apps"], [self.KNOWN])
+        self.assertEqual(index["betaApps"], [self.BETA])
+
+    def test_complete_search_drops_an_app_that_lost_the_topic(self):
+        gone = {"fullName": "owner/gone", "tag": "v2", "apks": [{"id": 3}]}
+        index, _ = self.run_main({"apps": [self.KNOWN, gone]})
+        self.assertEqual(index["apps"], [self.KNOWN])
+
+    def test_search_that_finds_nothing_with_no_previous_index_lists_nothing(self):
+        index, _ = self.run_main({}, found=[])
+        self.assertEqual((index["apps"], index["betaApps"]), ([], []))
 
     def test_previous_list_inside_an_old_index_is_still_used(self):
         _, auto = self.run_main(
