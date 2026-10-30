@@ -6,11 +6,14 @@ open-source license that GitHub recognises and its newest full release has an AP
 The app downloads the resulting file instead of asking the GitHub API about every repository,
 which keeps it clear of the API's request limit however many apps there are.
 
-Only the standard library is used. Set GITHUB_TOKEN to raise the API request limit.
+Only the standard library is used. Set GITHUB_TOKEN to raise the API request limit; the
+search for apps nobody published needs it.
 """
 
 import argparse
 import calendar
+import collections
+import concurrent.futures
 import functools
 import hashlib
 import json
@@ -25,6 +28,7 @@ import urllib.request
 import zlib
 
 API = "https://api.github.com"
+GRAPHQL_API = "https://api.github.com/graphql"
 MANIFEST_FILE = b"AndroidManifest.xml"
 RESOURCES_FILE = b"resources.arsc"
 TOPIC = "arkstore"
@@ -92,37 +96,66 @@ RAW_ADDRESS = "https://raw.githubusercontent.com"
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
 # users who ask for them. To keep that list fresh and reasonably trustworthy, a repository
 # must have been pushed to within AUTO_PUSHED_DAYS, have at least AUTO_MIN_STARS stars, and
-# its newest full release must be at most AUTO_RELEASE_DAYS old.
+# its newest full release must be at most AUTO_RELEASE_DAYS old. Together the searches cover
+# every repository with the android topic, every Kotlin repository, and the Java, Dart and
+# other repositories that mention Android in their name, description, topics or README.
 AUTO_QUERIES = (
-    "topic:android language:Kotlin",
-    "topic:android language:Java",
-    "topic:android language:Dart",
-    "topic:android-app",
+    "topic:android",
+    "topic:android-app -topic:android",
+    "language:Kotlin -topic:android",
+    "language:Java -topic:android android in:name,description,topics,readme",
+    "language:Dart -topic:android android in:name,description,topics,readme",
+    "-topic:android -language:Kotlin -language:Java -language:Dart android in:name,description,topics",
 )
 AUTO_PUSHED_DAYS = 30
 AUTO_RELEASE_DAYS = 180
 AUTO_MIN_STARS = 20
+# GitHub answers a search with at most this many pages of PAGE_SIZE repositories. A query that
+# matches more is asked by ranges of stars until every range fits (see search_repositories).
+# The search API allows thirty requests a minute, so the searches of a run are paused between
+# and capped; with the cap used up, what was found so far has to do.
 AUTO_SEARCH_PAGES = 10
-# Each repository costs one API request, and a workflow run has a limited number of them, so
-# only this many are examined per run. Repositories that have not changed since they were
-# last examined cost nothing, so the list fills up over a few runs and then stays current.
+AUTO_MAX_SEARCHES = 170
+SEARCH_PAUSE_SECONDS = 2
+# Whether the newest full release of a repository has changed is asked of GitHub's GraphQL
+# API, GRAPHQL_BATCH repositories to a query, GRAPHQL_WORKERS queries at a time (see
+# release_fingerprints). Of each repository the GRAPHQL_RELEASES newest releases are read,
+# among which the newest full release is nearly always found (see fingerprint). The token of a
+# workflow run has a thousand points an hour, apart from its requests; a query for a hundred
+# repositories costs a few points and takes some seconds, so a run asks about this many
+# repositories at most and stops when fewer than AUTO_POINTS_RESERVE points are left for the
+# run that follows within the hour.
+GRAPHQL_BATCH = 100
+GRAPHQL_RELEASES = 5
+GRAPHQL_WORKERS = 4
+# A query that fails, as with a gateway timeout, is asked once more after this pause.
+GRAPHQL_RETRY_SECONDS = 5
+AUTO_MAX_CHECKS = 2500
+AUTO_POINTS_RESERVE = 250
+# Only a repository whose release has changed is examined: its releases are listed and the
+# files of the newest read, which costs requests. The token of a workflow run is allowed 1000
+# requests an hour, which the published apps and a run started soon after this one need a
+# share of, so a run stops examining once it has made AUTO_MAX_REQUESTS requests, when GitHub
+# says fewer than AUTO_REQUESTS_RESERVE are left, or after AUTO_MAX_LOOKUPS repositories; what
+# is left over is examined by the next run.
 AUTO_MAX_LOOKUPS = 500
-# A repository whose first page of releases holds nothing but prereleases costs a second
-# request. The token of a workflow run is allowed 1000 requests an hour, which the published
-# apps and a run started soon after this one need a share of, so a run stops examining once
-# it has made this many requests; what is left over is examined by the next run.
-AUTO_MAX_REQUESTS = 600
-# Examining a repository reads parts of its APKs, and how long that takes depends on the network:
-# a whole run has taken from ten to almost thirty minutes. The job has thirty, and the index is
-# published only at its end, so examining stops after this long; the rest waits for the next run.
-AUTO_MAX_SECONDS = 12 * 60
+AUTO_MAX_REQUESTS = 450
+AUTO_REQUESTS_RESERVE = 120
+# Examining a repository reads parts of its APKs, and how long that takes depends on the
+# network. The job has forty minutes, the lists of the other catalogues may need twenty of
+# them, and the index is published only at the end, so the searches and the examining
+# together stop after this long; the rest waits for the next run.
+AUTO_MAX_SECONDS = 15 * 60
 AUTO_MAX_NOTES = 800
-# A repository that has not been pushed to is still examined again now and then: a release's
+# A repository that has not been pushed to is still asked about now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
-# later without any push. One examined within AUTO_SETTLE_HOURS of its last push is looked at
-# on every run, any other once in AUTO_RECHECK_HOURS.
+# later without any push. One checked within AUTO_SETTLE_HOURS of its last push is checked
+# again on every run, any other once in AUTO_RECHECK_HOURS. A listed app is examined anew
+# once in AUTO_REFRESH_HOURS even when its release looks the same, for its download counts,
+# its metadata and any file replaced by one of the same name and size.
 AUTO_SETTLE_HOURS = 2
 AUTO_RECHECK_HOURS = 24
+AUTO_REFRESH_HOURS = 7 * 24
 
 # The app files an app under the category named by a topic "arkstore-<category>". Nobody has
 # chosen one for an automatically found app, so its category is guessed from the words of its
@@ -192,23 +225,45 @@ ARCHITECTURE_MARKERS = (
 
 
 api_requests = 0
+# How many requests GitHub said were left of the hour's allowance after the last request that
+# counted against it, or None before the first.
+api_remaining = None
+
+
+def api_headers():
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": USER_AGENT,
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    return headers
 
 
 def api(path):
-    global api_requests  # pylint: disable=global-statement
+    global api_requests, api_remaining  # pylint: disable=global-statement
     api_requests += 1
-    request = urllib.request.Request(
-        API + path,
-        headers={
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-            "User-Agent": USER_AGENT,
-        },
-    )
-    token = os.environ.get("GITHUB_TOKEN")
-    if token:
-        request.add_header("Authorization", "Bearer " + token)
+    request = urllib.request.Request(API + path, headers=api_headers())
     with urllib.request.urlopen(request, timeout=30) as response:
+        # Searches have an allowance of their own, told the same way; only the one the other
+        # requests share is kept.
+        if response.headers.get("X-RateLimit-Resource", "core") == "core":
+            remaining = response.headers.get("X-RateLimit-Remaining") or ""
+            if remaining.isdigit():
+                api_remaining = int(remaining)
+        return json.load(response)
+
+
+def graphql(query):
+    """Asks GitHub's GraphQL API, which has an allowance of its own, apart from the requests."""
+    request = urllib.request.Request(
+        GRAPHQL_API,
+        data=json.dumps({"query": query}).encode("utf-8"),
+        headers=dict(api_headers(), **{"Content-Type": "application/json"}),
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
         return json.load(response)
 
 
@@ -1210,25 +1265,227 @@ def discover():
     return repos, complete
 
 
+def search_page(query, page, budget):
+    """One page of a search for repositories, or None when it could not be had. budget, a
+    list holding the number of searches still allowed in this run, is counted down. GitHub
+    refuses searches that come too often; the pause it asks for is taken once, and a second
+    refusal empties the budget, so that the searching of this run ends."""
+    refused = False
+    while budget[0] > 0:
+        budget[0] -= 1
+        # The search API allows fewer requests per minute than the rest: one is sent only
+        # once SEARCH_PAUSE_SECONDS have passed since the last, however long that one took.
+        started = time.monotonic()
+        try:
+            result = api("/search/repositories?q=%s&sort=stars&order=desc&per_page=%d&page=%d"
+                         % (query, PAGE_SIZE, page))
+            time.sleep(max(0.0, SEARCH_PAUSE_SECONDS - (time.monotonic() - started)))
+        except urllib.error.HTTPError as error:
+            if error.code not in (403, 429):
+                raise
+            if refused:
+                print("the search API refuses; searching stops for this run", file=sys.stderr)
+                budget[0] = 0
+                return None
+            refused = True
+            wait = (error.headers.get("Retry-After") if error.headers else None) or ""
+            time.sleep(min(int(wait), 60) if wait.isdigit() else 60)
+            continue
+        return result
+    return None
+
+
+def search(query, budget, found, whole):
+    """One search for repositories, read into found page by page as far as GitHub gives them
+    and budget (see search_page) lets. Returns how many repositories the search matches and
+    whether all of them were read. Without whole, a search that matches more than GitHub
+    gives for one search is left after its first page, for the caller to ask in parts."""
+    total = 0
+    for page in range(1, AUTO_SEARCH_PAGES + 1):
+        result = search_page(query, page, budget)
+        if result is None:
+            return total, False
+        total = result.get("total_count", 0)
+        items = result.get("items", [])
+        for repo in items:
+            found.setdefault(repo["full_name"], repo)
+        # A search that runs out of time answers with what it found so far and says so.
+        if result.get("incomplete_results"):
+            return total, False
+        if total > AUTO_SEARCH_PAGES * PAGE_SIZE and not whole:
+            return total, False
+        if len(items) < PAGE_SIZE or page * PAGE_SIZE >= total:
+            return total, True
+    return total, total <= AUTO_SEARCH_PAGES * PAGE_SIZE
+
+
+def search_repositories(base, since, budget, found):
+    """Every repository that matches base among those pushed to since the given day, with
+    AUTO_MIN_STARS stars or more and not archived, read into found. GitHub gives at most
+    AUTO_SEARCH_PAGES pages for one search, so when the query matches more, it is asked by
+    ranges of stars, each halved until it fits; a range of one star that still does not fit
+    is read as far as GitHub gives it. Returns whether everything was read."""
+    complete = True
+    ranges = [(AUTO_MIN_STARS, None)]
+    while ranges:
+        low, high = ranges.pop()
+        stars = ">=%d" % low if high is None else "%d..%d" % (low, high)
+        query = urllib.parse.quote("%s pushed:>=%s archived:false stars:%s" % (base, since, stars))
+        splittable = high is None or high > low
+        total, whole = search(query, budget, found, whole=not splittable)
+        if whole:
+            continue
+        if total > AUTO_SEARCH_PAGES * PAGE_SIZE and splittable and budget[0] > 0:
+            # Most repositories have few stars, so the lower half is the narrower one; a
+            # range without an upper end is cut where the stars double.
+            if high is None:
+                ranges.append((low * 2, None))
+                ranges.append((low, low * 2 - 1))
+            else:
+                middle = (low + high) // 2
+                ranges.append((middle + 1, high))
+                ranges.append((low, middle))
+        else:
+            complete = False
+    return complete
+
+
 def discover_candidates(today):
     """Repositories that might be Android apps worth offering, most starred first."""
     since = time.strftime("%Y-%m-%d", time.gmtime(today - AUTO_PUSHED_DAYS * 86400))
     found = {}
+    budget = [AUTO_MAX_SEARCHES]
+    complete = True
     for base in AUTO_QUERIES:
-        query = urllib.parse.quote(
-            "%s pushed:>=%s stars:>=%d archived:false" % (base, since, AUTO_MIN_STARS)
-        )
-        for page in range(1, AUTO_SEARCH_PAGES + 1):
-            result = api("/search/repositories?q=%s&sort=stars&order=desc&per_page=%d&page=%d"
-                         % (query, PAGE_SIZE, page))
-            items = result.get("items", [])
-            for repo in items:
-                found.setdefault(repo["full_name"], repo)
-            time.sleep(2)
-            if len(items) < PAGE_SIZE:
-                break
+        if not search_repositories(base, since, budget, found):
+            complete = False
+    if not complete:
+        print("the searches were not read whole; %d repositories found" % len(found), file=sys.stderr)
     return sorted(found.values(), key=lambda repo: -repo.get("stargazers_count", 0))
 
+
+def release_fingerprint(tag, published_at):
+    """A text that changes with a release's tag and date of publication."""
+    return "%s %s" % (tag, published_at or "")
+
+
+def fingerprint_of(app):
+    """The fingerprint of the release an index entry describes."""
+    return release_fingerprint(app.get("tag"), app.get("publishedAt"))
+
+
+def fingerprint(repository, not_before):
+    """What the newest full release of a repository looks like: the fingerprint of the most
+    recently published release among those read that is neither a draft nor a prerelease,
+    and how many files it has. build_app takes the first full release of the list GitHub's
+    REST API gives, newest published first; the GraphQL API orders releases only by the date
+    of the commit they were made from, so the GRAPHQL_RELEASES newest by that are read and
+    the most recently published full one among them is taken, which is the same release but
+    for a repository whose newest release was made from an older commit than several others.
+    The fingerprint is "" when there is nothing to install: no full release among the few a
+    repository has, or one published before not_before. When every release read is a draft
+    or a prerelease, the full one may lie deeper than was read; such a repository gets a
+    fingerprint marked with "?" from the most recently published release, so that it is
+    examined whenever that changes, and build_app decides."""
+    nodes = ((repository or {}).get("releases") or {}).get("nodes") or []
+
+    def published(release):
+        return parse_time(release.get("publishedAt")) or 0
+
+    full = [release for release in nodes if not release.get("isDraft") and not release.get("isPrerelease")]
+    if not full:
+        if len(nodes) < GRAPHQL_RELEASES:
+            return "", None
+        newest = max(nodes, key=published)
+        return "? " + release_fingerprint(newest.get("tagName"), newest.get("publishedAt")), None
+    release = max(full, key=published)
+    published = parse_time(release.get("publishedAt"))
+    if published is None or published < not_before:
+        return "", None
+    assets = (release.get("releaseAssets") or {}).get("totalCount")
+    return release_fingerprint(release.get("tagName"), release.get("publishedAt")), assets
+
+
+def release_fingerprints(names, not_before, deadline=None):
+    """What the newest full release of each named repository looks like (see fingerprint),
+    asked of GitHub GRAPHQL_BATCH repositories to a query and GRAPHQL_WORKERS queries at a
+    time. A repository GitHub does not answer for is left out, as is every one not asked
+    about before the points or the time ran out; a repository that no longer exists is
+    answered "" like one with nothing to install."""
+    answers = {}
+    names = list(names)
+    batches = [names[start:start + GRAPHQL_BATCH] for start in range(0, len(names), GRAPHQL_BATCH)]
+    with concurrent.futures.ThreadPoolExecutor(GRAPHQL_WORKERS) as pool:
+        for start in range(0, len(batches), GRAPHQL_WORKERS):
+            if deadline is not None and time.monotonic() >= deadline:
+                break
+            round_ = batches[start:start + GRAPHQL_WORKERS]
+            results = list(pool.map(ask_releases, round_))
+            remaining = None
+            stop = False
+            for batch, result in zip(round_, results):
+                if result is None:
+                    stop = True
+                    continue
+                answered, limit = read_releases(batch, result, not_before, answers)
+                if not answered:
+                    print("release check answered nothing: %s" % str(result.get("errors") or "")[:200],
+                          file=sys.stderr)
+                    stop = True
+                if limit.get("remaining") is not None:
+                    remaining = limit["remaining"] if remaining is None else min(remaining, limit["remaining"])
+            if remaining is not None and remaining < AUTO_POINTS_RESERVE:
+                print("GraphQL points nearly used up; the rest waits for the next run", file=sys.stderr)
+                break
+            if stop:
+                break
+    return answers
+
+
+def ask_releases(batch):
+    """One query for the newest releases of the repositories in batch, as GitHub answers it,
+    or None when it could not be had in two tries."""
+    fields = []
+    for i, name in enumerate(batch):
+        owner, _, repo = name.partition("/")
+        fields.append("r%d: repository(owner: %s, name: %s) { ...releases }"
+                      % (i, json.dumps(owner), json.dumps(repo)))
+    query = (
+        "fragment releases on Repository { releases(first: %d, orderBy: {field: CREATED_AT, direction: DESC}) "
+        "{ nodes { tagName publishedAt isDraft isPrerelease releaseAssets { totalCount } } } } "
+        "query { rateLimit { cost remaining } %s }" % (GRAPHQL_RELEASES, " ".join(fields))
+    )
+    for attempt in range(2):
+        try:
+            return graphql(query)
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            print("release check failed: %s" % error, file=sys.stderr)
+            if attempt == 0:
+                time.sleep(GRAPHQL_RETRY_SECONDS)
+    return None
+
+
+def read_releases(batch, result, not_before, answers):
+    """Reads the answer to ask_releases for batch into answers; returns how many repositories
+    it answered for and what it said of the rate limit. An error names the field it
+    concerns: one that says the repository is gone is an answer, any other leaves the
+    repository unanswered, and one that names no field concerns the whole query."""
+    data = result.get("data") or {}
+    failed = set()
+    for error in result.get("errors") or []:
+        path = error.get("path") or []
+        if not path:
+            failed.update("r%d" % i for i in range(len(batch)))
+        elif error.get("type") != "NOT_FOUND":
+            failed.add(path[0])
+    answered = 0
+    for i, name in enumerate(batch):
+        alias = "r%d" % i
+        if alias in failed or alias not in data:
+            continue
+        answers[name] = fingerprint(data[alias], not_before)
+        answered += 1
+    return answered, data.get("rateLimit") or {}
 
 def recent_enough(app, today):
     """Whether the release an entry describes is at most AUTO_RELEASE_DAYS old."""
@@ -1236,24 +1493,31 @@ def recent_enough(app, today):
     return published is not None and today - published <= AUTO_RELEASE_DAYS * 86400
 
 
+Known = collections.namedtuple("Known", "pushed_at examined_at listed release assets checked_at")
+
+
 def examined(state, full_name):
-    """What state holds about a repository: the pushed_at it had when it was last examined,
-    the time of that examination and whether it was listed as a result. State written before
-    the time was recorded holds the pushed_at alone; such a repository counts as examined
-    long ago."""
+    """What state holds about a repository: the pushed_at it had when it was last checked,
+    when it was last examined and whether it was listed then, the fingerprint of the release
+    seen at that examination or a later check ("" for none, None when no check has been
+    made) with the number of files it had (None when not known), and when it was last
+    checked. State written before releases were checked holds no fingerprint, and one written
+    before the time was recorded holds the pushed_at alone; such a repository counts as
+    checked long ago."""
     value = state.get(full_name)
     if isinstance(value, dict):
-        return value.get("pushedAt"), value.get("examinedAt", 0), bool(value.get("listed"))
-    return value, 0, False
+        examined_at = value.get("examinedAt", 0)
+        return Known(value.get("pushedAt"), examined_at, bool(value.get("listed")),
+                     value.get("release"), value.get("assets"), value.get("checkedAt", examined_at))
+    return Known(value, 0, False, None, None, 0)
 
 
-def recheck_due(pushed_at, examined_at, today):
-    """Whether a repository that has not been pushed to since it was examined is due for
+def recheck_due(pushed_at, checked_at, today):
+    """Whether a repository that has not been pushed to since it was last checked is due for
     another look. See AUTO_SETTLE_HOURS."""
     pushed = parse_time(pushed_at)
-    settling = pushed is not None and examined_at - pushed < AUTO_SETTLE_HOURS * 3600
-    return settling or today - examined_at >= AUTO_RECHECK_HOURS * 3600
-
+    settling = pushed is not None and checked_at - pushed < AUTO_SETTLE_HOURS * 3600
+    return settling or today - checked_at >= AUTO_RECHECK_HOURS * 3600
 
 def guess_category(topics, description):
     """The category the words of a repository's topics and description point to, or None.
@@ -1290,89 +1554,143 @@ def with_category(topics, description):
 def build_auto_apps(published, previous_auto, state, today, icons=None):
     """Builds the list of automatically found apps.
 
-    state records, for each repository, the pushed_at it had when it was last examined and
-    when that was. A repository that has not changed and is not due for another look is not
-    asked about again: its previous entry, or its absence, still stands. Returns the entries
-    and the new state. icons is passed on to build_app.
+    The repositories the searches return are asked about in two steps. First, for those
+    pushed to since they were last checked, and those due for another look, GitHub is asked
+    what their newest full release looks like (see release_fingerprints), many at a time and
+    cheaply. Then only a repository whose release has changed since it was last examined, or
+    that never was, is examined: its releases are listed and the files of the newest read.
+    For every other repository the previous entry, or its absence, still stands.
+
+    state records, for each repository, the pushed_at it had when it was last checked, the
+    fingerprint of the release seen then and when it was checked and examined. An entry whose
+    repository the searches did not return this time is kept while its last known push and
+    its release are recent enough: GitHub's searches now and then leave out what they
+    returned the time before. Returns the entries and the new state. icons is passed on to
+    build_app.
     """
     deadline = time.monotonic() + AUTO_MAX_SECONDS
+    not_before = today - AUTO_RELEASE_DAYS * 86400
+    found = discover_candidates(today)
     candidates = [
-        repo for repo in discover_candidates(today)
+        repo for repo in found
         if repo["full_name"] not in published
         and TOPIC not in (repo.get("topics") or [])
         and listable(repo)
     ]
 
-    # The budget goes to repositories that have changed first, most starred first, and then
-    # to unchanged ones due for another look, the longest unexamined first.
+    # Checks go to repositories that have changed first, most starred first, and then to
+    # those due for another look, the longest unchecked first.
     changed = []
     due = []
     for repo in candidates:
         full_name = repo["full_name"]
-        pushed_at, examined_at, listed = examined(state, full_name)
-        if pushed_at != (repo.get("pushed_at") or ""):
+        known = examined(state, full_name)
+        if known.release is None or known.pushed_at != (repo.get("pushed_at") or ""):
             changed.append(full_name)
-        elif listed and full_name not in previous_auto:
+        elif known.listed and full_name not in previous_auto:
             # State says the app was listed, yet the previous list does not have it: the two
             # files did not come from the same run. Leaving the repository alone would keep
             # the app out until its next push.
             changed.append(full_name)
-        elif recheck_due(pushed_at, examined_at, today):
-            due.append((examined_at, full_name))
-    examine = set((changed + [name for _, name in sorted(due)])[:AUTO_MAX_LOOKUPS])
+        elif recheck_due(known.pushed_at, known.checked_at, today) \
+                or (known.listed and today - known.examined_at >= AUTO_REFRESH_HOURS * 3600):
+            due.append((known.checked_at, full_name))
+    asked = (changed + [name for _, name in sorted(due)])[:AUTO_MAX_CHECKS]
+    releases = release_fingerprints(asked, not_before, deadline)
 
     apps = []
     new_state = {}
     lookups = 0
     requests_before = api_requests
     out_of_time = False
+
+    def may_examine():
+        nonlocal out_of_time
+        if lookups >= AUTO_MAX_LOOKUPS or api_requests - requests_before >= AUTO_MAX_REQUESTS:
+            return False
+        if api_remaining is not None and api_remaining < AUTO_REQUESTS_RESERVE:
+            return False
+        if not out_of_time and time.monotonic() >= deadline:
+            out_of_time = True
+            print("examining stopped after %d minutes; the rest waits for the next run"
+                  % (AUTO_MAX_SECONDS // 60), file=sys.stderr)
+        return not out_of_time
+
     for repo in candidates:
         full_name = repo["full_name"]
         pushed_at = repo.get("pushed_at") or ""
         previous = previous_auto.get(full_name)
-        looked = False
-        if full_name in examine and not out_of_time and time.monotonic() >= deadline:
-            out_of_time = True
-            print("examining stopped after %d minutes; the rest waits for the next run"
-                  % (AUTO_MAX_SECONDS // 60), file=sys.stderr)
-        if full_name not in examine or out_of_time or api_requests - requests_before >= AUTO_MAX_REQUESTS:
-            # Unchanged, or out of budget for this run: keep what is known.
-            app = previous
-            if app:
-                # Stars and topics come with the search result, so they are always current.
-                app = dict(app, stars=repo.get("stargazers_count", 0), topics=repo.get("topics") or [])
+        known = examined(state, full_name)
+        # Stars and topics come with the search result, so they are always current.
+        current = dict(previous, stars=repo.get("stargazers_count", 0),
+                       topics=repo.get("topics") or []) if previous else None
+        release, assets = releases.get(full_name, (None, None))
+        # When the entry is settled, the time of the examination it rests on; None keeps the
+        # state as it was, so that the repository is looked at again next time.
+        settled = None
+        if release is None:
+            # Not asked about this time, or not answered: what is known stands.
+            app = current
+        elif release == "":
+            # Nothing to install: no full release, or none recent enough.
+            app = None
+            settled = known.examined_at
         else:
-            lookups += 1
-            try:
-                # Beta versions of these apps are never offered, so a prerelease is not
-                # worth the requests that reading its files takes.
-                app = build_app(
-                    repo, known_apks(previous), not_before=today - AUTO_RELEASE_DAYS * 86400,
-                    with_prerelease=False, icons=icons,
-                    metadata_of=functools.partial(app_metadata, previous=previous),
-                )
-                looked = True
-            except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
-                print("%s: %s" % (full_name, error), file=sys.stderr)
-                app = previous
-            if app and looked:
-                app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
+            # The same release with the same files as when last examined; a file added to the
+            # release since, as an APK often is a while after the release, is a change. An
+            # entry from before releases were checked tells its release, not its files.
+            same = (release == known.release and (known.assets is None or assets == known.assets)) or (
+                known.release is None and previous is not None and release == fingerprint_of(previous))
+            fresh = not known.listed or today - known.examined_at < AUTO_REFRESH_HOURS * 3600
+            if same and fresh and (previous is not None or not known.listed):
+                app = current
+                settled = known.examined_at
+            elif not may_examine():
+                # Out of budget for this run: keep what is known.
+                app = current
+            else:
+                lookups += 1
+                try:
+                    # Beta versions of these apps are never offered, so a prerelease is not
+                    # worth the requests that reading its files takes.
+                    app = build_app(
+                        repo, known_apks(previous), not_before=not_before, with_prerelease=False,
+                        icons=icons, metadata_of=functools.partial(app_metadata, previous=previous),
+                    )
+                    if app:
+                        app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
+                    settled = int(today)
+                except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
+                    print("%s: %s" % (full_name, error), file=sys.stderr)
+                    app = current
         listed = bool(app) and recent_enough(app, today)
         if listed:
             # From the topics as GitHub gives them, so the category is added once however
             # many runs an entry is carried through.
             topics = with_category(repo.get("topics") or [], repo.get("description"))
             apps.append(dict(app, topics=topics))
-        if looked:
-            new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": int(today), "listed": listed}
+        if settled is not None:
+            new_state[full_name] = {"pushedAt": pushed_at, "examinedAt": settled, "checkedAt": int(today),
+                                    "listed": listed, "release": release, "assets": assets}
         elif full_name in state:
-            # What state says stays as it was, so a repository that was passed over or
-            # could not be reached is looked at next time.
             new_state[full_name] = state[full_name]
-    apps.sort(key=lambda app: app["fullName"].lower())
-    print("%d automatically found apps, %d repositories examined" % (len(apps), lookups))
-    return apps, new_state
 
+    # Entries the searches did not return this time.
+    returned = {repo["full_name"] for repo in found}
+    unseen = 0
+    for full_name, previous in previous_auto.items():
+        if full_name in returned or full_name in published:
+            continue
+        pushed = parse_time(examined(state, full_name).pushed_at)
+        if pushed is None or today - pushed > AUTO_PUSHED_DAYS * 86400 or not recent_enough(previous, today):
+            continue
+        apps.append(previous)
+        new_state[full_name] = state[full_name]
+        unseen += 1
+    apps.sort(key=lambda app: app["fullName"].lower())
+    print("%d automatically found apps: %d repositories checked, %d examined, %d kept unseen"
+          % (len(apps), len(releases), lookups, unseen))
+    return apps, new_state
 
 def license_of(repo):
     spdx = (repo.get("license") or {}).get("spdx_id")

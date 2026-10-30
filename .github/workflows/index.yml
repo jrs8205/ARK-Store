@@ -28,7 +28,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
       # A release runs this workflow at its tag, which may be on another branch. The index is
       # always built with the script on main.
@@ -58,9 +58,13 @@ jobs:
 
       # The icons read from the APKs are files beside the lists, carried from run to run and
       # published at ICONS_URL; the lists refer to them by that address.
+      # The token of the run is allowed a thousand requests and a thousand GraphQL points an
+      # hour, which the search for apps nobody published lives within. A fine-grained personal
+      # access token with no permissions, kept as the secret INDEX_TOKEN, is allowed five
+      # thousand of each and is used when set.
       - name: Build the index
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.INDEX_TOKEN || secrets.GITHUB_TOKEN }}
           ICONS_URL: https://raw.githubusercontent.com/${{ github.repository }}/index/icons
         run: |
           mkdir -p out/icons
