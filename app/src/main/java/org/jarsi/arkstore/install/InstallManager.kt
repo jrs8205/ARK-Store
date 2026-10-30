@@ -14,6 +14,7 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -179,7 +180,16 @@ internal fun isLocal(key: String): Boolean = key.startsWith(LOCAL_PREFIX)
 object InstallManager {
     private const val TAG = "InstallManager"
     private const val MAX_DOWNLOADS = 3
-    private const val PROMPT_GRACE_MS = 3 * 60 * 1000L
+    /**
+     * How long after its prompt closed an install is given to settle before the prompt counts
+     * as left without an answer. The system reports a refusal at once and a go-ahead within
+     * seconds for most apps; a prompt that the user left open or put aside reports nothing.
+     */
+    private const val PROMPT_GRACE_MS = 20 * 1000L
+    /** Where the confirmations the system waits for are written down, see [restorePending]. */
+    private const val PREFS_PENDING = "pending_installs"
+    /** A session made this recently may be one this process is still writing down. */
+    private const val LEFTOVER_AGE_MS = 60 * 1000L
     private const val STALE_GRACE_MS = 3 * 1000L
 
     /** The session id of a root install that got no session: `pm` refused to make one. */
@@ -195,6 +205,16 @@ object InstallManager {
     internal data class Confirmation(val sessionId: Int, val prompt: Intent)
 
     internal val confirmations = InstallConfirmationQueue<Confirmation>()
+
+    /**
+     * The installs whose prompt was presented and left without an answer. The system still
+     * holds their files and waits; the screen offers each as a button that asks again, see
+     * [resumeConfirmation], so that nothing has to be downloaded anew.
+     */
+    val awaitingUser: StateFlow<Set<String>> get() = confirmations.unanswered
+
+    /** Whether the confirmations written down by an earlier process have been picked up. */
+    private val restored = AtomicBoolean(false)
 
     /** How many of the store's screens are showing; there can be one per window. */
     private val screens = AtomicInteger(0)
@@ -424,9 +444,7 @@ object InstallManager {
         // One already on its way settles on its own: a waiting confirmation is the user's to
         // give, and anything else is not worth waiting for twice.
         if (isBusy(key)) {
-            val asked = confirmations.waiting().any { it.repo == key } ||
-                confirmations.next.value?.repo == key
-            return@coroutineScope if (asked) Outcome.CONFIRMATION_NEEDED else null
+            return@coroutineScope if (confirmations.holds(key)) Outcome.CONFIRMATION_NEEDED else null
         }
         // Listening before starting, so that an outcome settled at once is not missed; the
         // attempt's number, known before anything of it can be settled, tells its outcome
@@ -602,7 +620,77 @@ object InstallManager {
      */
     internal fun onScreenStarted(context: Context) {
         screens.incrementAndGet()
-        scope.launch { failStale(context) }
+        scope.launch {
+            restorePending(context)
+            failStale(context)
+        }
+    }
+
+    /**
+     * Picks up where a process that ended left off, once per process. The confirmations
+     * written down by [rememberPending] whose sessions the system still holds are asked
+     * again, under those sessions, so that the downloads need not be made anew; one whose
+     * session is gone, or whose app is on its way again already, is forgotten. Sessions of
+     * the store that the system holds and nothing here knows of are left over from such a
+     * process too, and are let go, unless made so recently that they may be this process's
+     * own, still being written down.
+     */
+    private fun restorePending(context: Context) {
+        if (!restored.compareAndSet(false, true)) return
+        val installer = context.packageManager.packageInstaller
+        val now = System.currentTimeMillis()
+        val sessions = try {
+            installer.mySessions.associate {
+                it.sessionId to when {
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> it.createdMillis
+                    // Older Androids do not tell when a session was made. One not yet sealed
+                    // may be this process's own, still being written, and counts as made just
+                    // now; one sealed waits for the user or for the system, and is old.
+                    it.isSealed -> 0L
+                    else -> now
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not list install sessions", e)
+            return
+        }
+        val prefs = context.getSharedPreferences(PREFS_PENDING, Context.MODE_PRIVATE)
+        val known = mutableSetOf<Int>()
+        for ((repo, value) in prefs.all) {
+            if (_states.value[repo].isOnItsWay() || committed.containsKey(repo)) continue
+            val pending = PendingConfirmation.decode(repo, value as? String)
+            val prompt = pending?.let {
+                runCatching { Intent.parseUri(it.prompt, Intent.URI_INTENT_SCHEME) }.getOrNull()
+            }
+            if (pending == null || prompt == null || pending.sessionId !in sessions) {
+                prefs.edit().remove(repo).apply()
+                continue
+            }
+            known += pending.sessionId
+            pending.label?.let { labels[repo] = it }
+            committed[repo] = Committed(null, pending.packageName, pending.sessionId, attempts.incrementAndGet())
+            setState(repo, InstallState.Installing)
+            confirmations.enqueue(repo, Confirmation(pending.sessionId, prompt))
+            Log.i(TAG, "Install of $repo still waits for the user; asking again")
+        }
+        known += committed.values.filter { !it.root }.map { it.sessionId }
+        for (sessionId in leftoverSessions(sessions, known, now, LEFTOVER_AGE_MS)) {
+            Log.i(TAG, "Letting go of install session $sessionId that nobody waits for")
+            runCatching { installer.abandonSession(sessionId) }
+        }
+    }
+
+    private fun rememberPending(context: Context, repo: String, sessionId: Int, prompt: Intent) {
+        val packageName = committed[repo]?.packageName ?: return
+        val record = PendingConfirmation(
+            repo, sessionId, packageName, labels[repo], prompt.toUri(Intent.URI_INTENT_SCHEME)
+        )
+        context.getSharedPreferences(PREFS_PENDING, Context.MODE_PRIVATE).edit()
+            .putString(repo, record.encode()).apply()
+    }
+
+    private fun forgetPending(context: Context, repo: String) {
+        context.getSharedPreferences(PREFS_PENDING, Context.MODE_PRIVATE).edit().remove(repo).apply()
     }
 
     /**
@@ -635,13 +723,39 @@ object InstallManager {
     /**
      * The prompt of [repo]'s install, of the session [sessionId], has closed. Its outcome
      * arrives from the system, in time; a prompt left without an answer settles nothing, so
-     * after a while the confirmation is put behind the others, to be asked again later.
+     * after a while the confirmation is parked, for the screen to offer again as a button.
      */
     internal fun onPromptClosed(repo: String, sessionId: Int) {
         scope.launch {
             delay(PROMPT_GRACE_MS)
-            confirmations.abandon(repo) { it.sessionId == sessionId }
+            confirmations.park(repo) { it.sessionId == sessionId }
         }
+    }
+
+    /**
+     * The prompt of [repo]'s install, of the session [sessionId], is being opened from its
+     * notification. The confirmation becomes the one being presented, so that the screen
+     * does not open it too. Nothing tells when such a prompt closes, so it is treated like one
+     * closed now: parked after the grace, unless its result has come by then.
+     */
+    internal fun promptOpened(repo: String, sessionId: Int) {
+        if (confirmations.hold(repo)) onPromptClosed(repo, sessionId)
+    }
+
+    /** The user asks for the parked prompt of [repo] again; the screen presents it when it can. */
+    fun resumeConfirmation(repo: String) {
+        confirmations.resume(repo)
+    }
+
+    /**
+     * A screen of the store is in front, having opened the prompt of [prompted], if any. A
+     * confirmation being presented that this screen did not open has no prompt in front of it
+     * that the screen knows of: the prompt went down with a screen or a task that is gone,
+     * and nothing would ever report it closed. It is treated like one closed now.
+     */
+    internal fun onScreenResumed(prompted: String?) {
+        val open = confirmations.active() ?: return
+        if (open.repo != prompted) onPromptClosed(open.repo, open.value.sessionId)
     }
 
     /**
@@ -651,7 +765,7 @@ object InstallManager {
      */
     internal fun onScreenStopped(context: Context) {
         if (screens.decrementAndGet() > 0) return
-        confirmations.waiting().forEach {
+        (confirmations.waiting() + confirmations.parked()).forEach {
             InstallService.showReady(context, it.repo, it.value.sessionId, it.value.prompt)
         }
     }
@@ -675,6 +789,7 @@ object InstallManager {
         }
         setState(repo, InstallState.Installing)
         confirmations.enqueue(repo, Confirmation(sessionId, intent))
+        rememberPending(context, repo, sessionId, intent)
         if (screens.get() == 0) InstallService.showReady(context, repo, sessionId, intent)
         committed[repo]?.let { outcomes.tryEmit(Settled(repo, it.attempt, Outcome.CONFIRMATION_NEEDED)) }
     }
@@ -714,6 +829,7 @@ object InstallManager {
         }
         InstallService.cancelReady(context, repo)
         confirmations.remove(repo)
+        forgetPending(context, repo)
         val (state, outcome) = when (status) {
             PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
             // The user backed out of the system prompt; that is not an error worth showing.

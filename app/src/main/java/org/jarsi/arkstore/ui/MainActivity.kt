@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onResume()
+        InstallManager.onScreenResumed(promptedRepo)
     }
 
     override fun onStop() {
