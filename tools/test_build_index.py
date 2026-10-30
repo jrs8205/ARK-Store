@@ -3,11 +3,13 @@
 import hashlib
 import json
 import os
+import re
 import struct
 import tempfile
 import time
 import unittest
 import urllib.error
+import urllib.parse
 import zlib
 from unittest import mock
 
@@ -1458,17 +1460,48 @@ class CategoryTest(unittest.TestCase):
 
 class AutoAppsTest(unittest.TestCase):
     NOW = 1790000000
+    # The candidate was pushed to about 38 hours before NOW.
+    PUSHED = "2026-09-20T00:00:00Z"
+    HOUR = 3600
+    # What GitHub says the candidate's newest full release looks like, and its one file.
+    RELEASE = "v1 2026-09-01T00:00:00Z"
 
-    def candidate(self, name="other/app", pushed="2026-09-20T00:00:00Z", topics=("android",)):
+    def candidate(self, name="other/app", pushed=PUSHED, topics=("android",)):
         return dict(REPO, full_name=name, html_url="https://github.com/" + name,
                     pushed_at=pushed, topics=list(topics), stargazers_count=50)
 
     def entry(self, name="other/app", published="2026-09-01T00:00:00Z"):
         return {"fullName": name, "tag": "v1", "publishedAt": published, "releaseNotes": "n" * 5000,
-                "apks": [{"id": 1}], "stars": 1, "topics": []}
+                "apks": [{"id": 1, "name": "app.apk", "size": 100}], "stars": 1, "topics": []}
 
-    def run_auto(self, candidates, built, previous=None, state=None, published=()):
+    def known(self, checked, pushed=PUSHED, listed=False, release=RELEASE, examined=None, assets=-1):
+        """State as a check at the given time leaves it; the examination it rests on was at
+        the same time unless said otherwise, and the release had one file unless said otherwise."""
+        if assets == -1:
+            assets = 1 if release else None
+        return {"pushedAt": pushed, "examinedAt": checked if examined is None else examined,
+                "checkedAt": checked, "listed": listed, "release": release, "assets": assets}
+
+    def run_auto(self, candidates, built, previous=None, state=None, published=(), releases=None):
+        """Runs build_auto_apps over candidates, with GitHub answering the checks from
+        releases (name to fingerprint, or to a fingerprint with a number of files; RELEASE
+        with one file for every candidate unless given) and build_app returning built in
+        turn. The names asked about are kept in self.asked."""
+        if releases is None:
+            releases = {repo["full_name"]: self.RELEASE for repo in candidates}
+        self.asked = []
+
+        def answer(value):
+            if isinstance(value, tuple):
+                return value
+            return (value, 1 if value else None)
+
+        def fingerprints(names, not_before, deadline=None):
+            self.asked = list(names)
+            return {name: answer(releases[name]) for name in names if name in releases}
+
         with mock.patch.object(build_index, "discover_candidates", return_value=candidates), \
+                mock.patch.object(build_index, "release_fingerprints", side_effect=fingerprints), \
                 mock.patch.object(build_index, "build_app", side_effect=built) as build_app:
             apps, new_state = build_index.build_auto_apps(
                 set(published), previous or {}, state or {}, self.NOW)
@@ -1478,65 +1511,154 @@ class AutoAppsTest(unittest.TestCase):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry()])
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
         self.assertEqual(len(apps[0]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
-        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
+        self.assertEqual(state, {"other/app": self.known(self.NOW, listed=True)})
 
     def test_old_release_is_left_out_but_remembered(self):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry(published="2025-01-01T00:00:00Z")])
         self.assertEqual(apps, [])
-        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=False)})
+        self.assertEqual(state, {"other/app": self.known(self.NOW, listed=False)})
 
-    # The candidate was pushed to about 38 hours before NOW.
-    PUSHED = "2026-09-20T00:00:00Z"
-    HOUR = 3600
+    def test_repository_with_nothing_to_install_is_not_examined(self):
+        apps, state, build_app = self.run_auto([self.candidate()], [], releases={"other/app": ""})
+        build_app.assert_not_called()
+        self.assertEqual(apps, [])
+        self.assertEqual(state, {"other/app": self.known(self.NOW, release="", examined=0)})
 
-    def examined(self, at, pushed=PUSHED, listed=False):
-        return {"pushedAt": pushed, "examinedAt": at, "listed": listed}
-
-    def test_unchanged_repository_is_not_asked_about_again(self):
+    def test_release_that_lost_its_apk_drops_the_entry(self):
         previous = {"other/app": self.entry()}
-        known = self.examined(self.NOW - self.HOUR, listed=True)
+        known = self.known(self.NOW - self.HOUR, listed=True)
+        apps, state, build_app = self.run_auto(
+            [self.candidate(pushed="2026-09-21T00:00:00Z")], [], previous=previous,
+            state={"other/app": known}, releases={"other/app": ""})
+        build_app.assert_not_called()
+        self.assertEqual(apps, [])
+        self.assertFalse(state["other/app"]["listed"])
+        self.assertEqual(state["other/app"]["release"], "")
+
+    def test_pushed_repository_whose_release_is_the_same_is_not_examined(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True)
+        pushed = "2026-09-21T00:00:00Z"
+        apps, state, build_app = self.run_auto(
+            [self.candidate(pushed=pushed)], [], previous=previous, state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
+        build_app.assert_not_called()
+        # Stars come with the search result and are always current.
+        self.assertEqual(apps[0]["stars"], 50)
+        self.assertEqual(state, {"other/app": self.known(
+            self.NOW, pushed=pushed, listed=True, examined=self.NOW - self.HOUR)})
+
+    def test_pushed_repository_whose_release_changed_is_examined(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True, release="v0 2026-08-01T00:00:00Z")
+        apps, state, build_app = self.run_auto(
+            [self.candidate(pushed="2026-09-21T00:00:00Z")], [self.entry()], previous=previous,
+            state={"other/app": known})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state["other/app"]["release"], self.RELEASE)
+        self.assertEqual(state["other/app"]["examinedAt"], self.NOW)
+
+    def test_release_with_a_file_added_since_is_examined(self):
+        # The APK often follows the release a while later.
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True, assets=1)
+        _, state, build_app = self.run_auto(
+            [self.candidate(pushed="2026-09-21T00:00:00Z")], [self.entry()], previous=previous,
+            state={"other/app": known}, releases={"other/app": (self.RELEASE, 2)})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual(state["other/app"]["assets"], 2)
+
+    def test_unchanged_repository_is_not_asked_about(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True)
         apps, state, build_app = self.run_auto(
             [self.candidate()], [], previous=previous, state={"other/app": known})
+        self.assertEqual(self.asked, [])
         build_app.assert_not_called()
         self.assertEqual(apps[0]["stars"], 50)
         self.assertEqual(state, {"other/app": known})
 
-    def test_unchanged_repository_is_examined_again_after_a_day(self):
-        known = self.examined(self.NOW - (build_index.AUTO_RECHECK_HOURS + 1) * self.HOUR)
+    def test_unchanged_repository_is_asked_about_again_after_a_day(self):
+        known = self.known(self.NOW - (build_index.AUTO_RECHECK_HOURS + 1) * self.HOUR, release="")
         apps, state, build_app = self.run_auto(
             [self.candidate()], [self.entry()], state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
         self.assertEqual(build_app.call_count, 1)
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
-        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
+        self.assertEqual(state, {"other/app": self.known(self.NOW, listed=True)})
 
-    def test_repository_examined_right_after_a_push_is_examined_again(self):
+    def test_repository_checked_right_after_a_push_is_asked_again(self):
         # The release's APK may not have been attached yet when it was first looked at.
         pushed = "2026-09-21T13:00:00Z"
-        known = self.examined(self.NOW - self.HOUR, pushed)
+        known = self.known(self.NOW - self.HOUR, pushed, release="")
         _, _, build_app = self.run_auto(
             [self.candidate(pushed=pushed)], [self.entry()], state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
         self.assertEqual(build_app.call_count, 1)
 
-    def test_state_without_examination_time_is_examined_again(self):
+    def test_state_without_a_fingerprint_takes_the_one_that_matches_its_entry(self):
+        # State written before releases were checked: the entry tells what was examined.
+        previous = {"other/app": self.entry()}
+        known = {"pushedAt": self.PUSHED, "examinedAt": self.NOW - self.HOUR, "listed": True}
+        apps, state, build_app = self.run_auto(
+            [self.candidate()], [], previous=previous, state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
+        build_app.assert_not_called()
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state, {"other/app": self.known(self.NOW, listed=True, examined=self.NOW - self.HOUR)})
+
+    def test_state_without_a_fingerprint_is_examined_when_the_release_differs_from_its_entry(self):
+        previous = {"other/app": self.entry()}
+        known = {"pushedAt": self.PUSHED, "examinedAt": self.NOW - self.HOUR, "listed": True}
+        _, state, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], previous=previous, state={"other/app": known},
+            releases={"other/app": "v2 2026-09-10T00:00:00Z"})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual(state["other/app"]["release"], "v2 2026-09-10T00:00:00Z")
+
+    def test_state_holding_only_the_push_is_examined_again(self):
         _, state, build_app = self.run_auto(
             [self.candidate()], [self.entry()], state={"other/app": self.PUSHED})
         self.assertEqual(build_app.call_count, 1)
-        self.assertEqual(state, {"other/app": self.examined(self.NOW, listed=True)})
+        self.assertEqual(state, {"other/app": self.known(self.NOW, listed=True)})
 
     def test_listed_app_missing_from_the_previous_list_is_examined_again(self):
         # State and the list did not come from the same run.
-        known = self.examined(self.NOW - self.HOUR, listed=True)
+        known = self.known(self.NOW - self.HOUR, listed=True)
         apps, _, build_app = self.run_auto(
             [self.candidate()], [self.entry()], previous={}, state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
         self.assertEqual(build_app.call_count, 1)
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+
+    def test_listed_app_is_examined_anew_after_a_week(self):
+        # For its download counts and metadata, though the release looks the same.
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True,
+                           examined=self.NOW - (build_index.AUTO_REFRESH_HOURS + 1) * self.HOUR)
+        _, state, build_app = self.run_auto(
+            [self.candidate()], [self.entry()], previous=previous, state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual(state["other/app"]["examinedAt"], self.NOW)
+
+    def test_repository_github_did_not_answer_for_keeps_its_entry_and_state(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
+        apps, state, build_app = self.run_auto(
+            [self.candidate()], [], previous=previous, state={"other/app": known}, releases={})
+        build_app.assert_not_called()
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state, {"other/app": known})
 
     def test_metadata_of_an_examined_app_stands_while_it_is_not_pushed_to(self):
         metadata = {"en": {"screenshots": ["https://x/1.png"]}}
         previous = {"other/app": dict(self.entry(), pushedAt=self.PUSHED, metadataAt=self.PUSHED,
                                       metadataReader=build_index.METADATA_READER, metadata=metadata)}
+        known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
         _, _, build_app = self.run_auto(
-            [self.candidate()], [self.entry()], previous=previous, state={"other/app": self.examined(0)})
+            [self.candidate()], [self.entry()], previous=previous, state={"other/app": known})
         metadata_of = build_app.call_args.kwargs["metadata_of"]
         with mock.patch.object(build_index, "api") as api:
             self.assertEqual(metadata_of(dict(self.candidate(), default_branch="main")),
@@ -1547,23 +1669,22 @@ class AutoAppsTest(unittest.TestCase):
     def test_prereleases_are_not_looked_at(self):
         _, _, build_app = self.run_auto([self.candidate()], [self.entry()])
         self.assertFalse(build_app.call_args.kwargs["with_prerelease"])
+        self.assertEqual(build_app.call_args.kwargs["not_before"],
+                         self.NOW - build_index.AUTO_RELEASE_DAYS * 86400)
 
-    def test_changed_repositories_are_examined_before_those_merely_due(self):
-        limit = build_index.AUTO_MAX_LOOKUPS
+    def test_changed_repositories_are_asked_about_before_those_merely_due(self):
+        limit = build_index.AUTO_MAX_CHECKS
         due = [self.candidate("due/app%d" % i) for i in range(5)]
         changed = [self.candidate("new/app%d" % i) for i in range(limit)]
-        state = {repo["full_name"]: self.examined(0) for repo in due}
-        _, new_state, build_app = self.run_auto(
-            due + changed, [None] * limit, state=state)
-        self.assertEqual(build_app.call_count, limit)
-        examined = {call.args[0]["full_name"] for call in build_app.call_args_list}
-        self.assertEqual(examined, {repo["full_name"] for repo in changed})
+        state = {repo["full_name"]: self.known(0, release="") for repo in due}
+        _, new_state, _ = self.run_auto(due + changed, [], state=state, releases={})
+        self.assertEqual(set(self.asked), {repo["full_name"] for repo in changed})
         # Those passed over keep their state, so they are looked at on a later run.
-        self.assertEqual(new_state["due/app0"], self.examined(0))
+        self.assertEqual(new_state["due/app0"], self.known(0, release=""))
 
     def test_failed_lookup_keeps_the_previous_entry_and_state(self):
         previous = {"other/app": self.entry()}
-        known = self.examined(0)
+        known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
         apps, state, _ = self.run_auto(
             [self.candidate()], [OSError("down")], previous=previous, state={"other/app": known})
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
@@ -1572,12 +1693,14 @@ class AutoAppsTest(unittest.TestCase):
     def test_published_and_tagged_repositories_are_skipped(self):
         candidates = [self.candidate("a/published"), self.candidate("b/tagged", topics=("arkstore",))]
         apps, _, build_app = self.run_auto(candidates, [], published=["a/published"])
+        self.assertEqual(self.asked, [])
         build_app.assert_not_called()
         self.assertEqual(apps, [])
 
     def test_unlicensed_repository_is_skipped(self):
         candidate = dict(self.candidate(), license=None)
         apps, _, build_app = self.run_auto([candidate], [])
+        self.assertEqual(self.asked, [])
         build_app.assert_not_called()
 
     def test_examined_app_is_filed_under_a_category(self):
@@ -1587,7 +1710,7 @@ class AutoAppsTest(unittest.TestCase):
 
     def test_unchanged_app_is_filed_under_its_category_once(self):
         previous = {"other/app": dict(self.entry(), topics=["keyboard", "arkstore-personalization"])}
-        known = self.examined(self.NOW - self.HOUR, listed=True)
+        known = self.known(self.NOW - self.HOUR, listed=True)
         apps, _, _ = self.run_auto(
             [self.candidate(topics=("keyboard",))], [], previous=previous, state={"other/app": known})
         self.assertEqual(apps[0]["topics"], ["keyboard", "arkstore-personalization"])
@@ -1611,9 +1734,20 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual(mocked.call_count, 2)
         self.assertEqual(sorted(state), ["o/app0", "o/app1"])
 
+    def test_examining_stops_when_github_says_few_requests_are_left(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
+        with mock.patch.object(build_index, "api_remaining", build_index.AUTO_REQUESTS_RESERVE - 1):
+            apps, state, build_app = self.run_auto(
+                [self.candidate()], [self.entry()], previous=previous, state={"other/app": known})
+        build_app.assert_not_called()
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertEqual(state, {"other/app": known})
+
     def test_examining_stops_when_its_time_is_up(self):
         candidates = [self.candidate("o/app%d" % i) for i in range(5)]
         previous = {"o/app4": self.entry("o/app4")}
+        known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
         clock = [1000.0]
 
         def build_app(repo, *args, **kwargs):
@@ -1621,11 +1755,305 @@ class AutoAppsTest(unittest.TestCase):
             return self.entry(repo["full_name"])
 
         with mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
-            apps, state, mocked = self.run_auto(candidates, build_app, previous=previous)
+            apps, state, mocked = self.run_auto(candidates, build_app, previous=previous,
+                                                state={"o/app4": known})
         self.assertEqual(mocked.call_count, 2)
-        self.assertEqual(sorted(state), ["o/app0", "o/app1"])
-        # One left over keeps its previous entry until a later run examines it.
+        self.assertEqual(sorted(state), ["o/app0", "o/app1", "o/app4"])
+        # One left over keeps its previous entry and state until a later run examines it.
         self.assertEqual([app["fullName"] for app in apps], ["o/app0", "o/app1", "o/app4"])
+        self.assertEqual(state["o/app4"], known)
+
+    def test_entry_the_search_did_not_return_is_kept_while_its_push_is_recent(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True)
+        apps, state, _ = self.run_auto([], [], previous=previous, state={"other/app": known})
+        self.assertEqual(apps, [self.entry()])
+        self.assertEqual(state, {"other/app": known})
+
+    def test_entry_the_search_did_not_return_goes_when_its_push_or_release_is_old(self):
+        previous = {"other/app": self.entry()}
+        old_push = self.known(self.NOW - self.HOUR, pushed="2026-01-01T00:00:00Z", listed=True)
+        apps, state, _ = self.run_auto([], [], previous=previous, state={"other/app": old_push})
+        self.assertEqual((apps, state), ([], {}))
+        old_release = {"other/app": self.entry(published="2025-01-01T00:00:00Z")}
+        known = self.known(self.NOW - self.HOUR, listed=True)
+        apps, state, _ = self.run_auto([], [], previous=old_release, state={"other/app": known})
+        self.assertEqual((apps, state), ([], {}))
+        apps, _, _ = self.run_auto([], [], previous=previous, state={})
+        self.assertEqual(apps, [])
+
+    def test_entry_the_search_did_not_return_goes_when_its_app_is_published_now(self):
+        previous = {"other/app": self.entry()}
+        known = self.known(self.NOW - self.HOUR, listed=True)
+        apps, _, _ = self.run_auto([], [], previous=previous, state={"other/app": known},
+                                   published=["other/app"])
+        self.assertEqual(apps, [])
+
+
+class SearchTest(unittest.TestCase):
+    SINCE = "2026-09-01"
+
+    @staticmethod
+    def repos(count, stars):
+        return [dict(REPO, full_name="o/r%d_%d" % (stars, i), stargazers_count=stars) for i in range(count)]
+
+    @staticmethod
+    def fake_api(repos):
+        """A search API over repos that answers the stars qualifier of a query, most starred
+        first, and keeps the queries asked."""
+        queries = []
+
+        def api(path):
+            parts = urllib.parse.parse_qs(urllib.parse.urlsplit(path).query)
+            query = parts["q"][0]
+            queries.append(query)
+            match = re.search(r"stars:(?:>=(\d+)|(\d+)\.\.(\d+))", query)
+            low = int(match.group(1) or match.group(2))
+            high = None if match.group(1) else int(match.group(3))
+            matching = sorted(
+                [r for r in repos if r["stargazers_count"] >= low and (high is None or r["stargazers_count"] <= high)],
+                key=lambda r: -r["stargazers_count"])
+            start = (int(parts["page"][0]) - 1) * build_index.PAGE_SIZE
+            return {"total_count": len(matching), "incomplete_results": False,
+                    "items": matching[start:start + build_index.PAGE_SIZE]}
+
+        return api, queries
+
+    def search(self, repos, budget=None):
+        api, queries = self.fake_api(repos)
+        found = {}
+        budget = [build_index.AUTO_MAX_SEARCHES] if budget is None else budget
+        with mock.patch.object(build_index, "api", side_effect=api), \
+                mock.patch.object(build_index.time, "sleep"):
+            complete = build_index.search_repositories("topic:android", self.SINCE, budget, found)
+        return found, complete, queries
+
+    def test_search_that_fits_is_read_page_by_page(self):
+        found, complete, queries = self.search(self.repos(250, 20))
+        self.assertEqual((len(found), complete), (250, True))
+        self.assertEqual(len(queries), 3)
+        self.assertIn("topic:android pushed:>=2026-09-01 archived:false stars:>=20", queries)
+
+    def test_search_that_matches_more_than_github_gives_is_asked_by_ranges_of_stars(self):
+        repos = self.repos(900, 25) + self.repos(600, 50) + self.repos(50, 2000)
+        found, complete, queries = self.search(repos)
+        self.assertEqual((len(found), complete), (1550, True))
+        asked = [query.rsplit("stars:", 1)[1] for query in queries]
+        self.assertEqual(asked[0], ">=20")
+        self.assertEqual(asked.count("20..39"), 9)
+        self.assertEqual(asked.count(">=40"), 7)
+
+    def test_range_of_one_star_that_does_not_fit_is_read_as_far_as_github_gives(self):
+        found, complete, queries = self.search(self.repos(1100, 20))
+        self.assertEqual((len(found), complete), (1000, False))
+        asked = [query.rsplit("stars:", 1)[1] for query in queries]
+        # The ten pages of the range of one star, and one search for each halving and each
+        # empty range beside it.
+        self.assertEqual(asked.count("20..20"), build_index.AUTO_SEARCH_PAGES)
+        self.assertLess(len(queries), 25)
+
+    def test_searches_are_capped_per_run(self):
+        found, complete, queries = self.search(self.repos(250, 20), budget=[2])
+        self.assertEqual((len(found), complete, len(queries)), (200, False, 2))
+
+    def test_refusal_is_waited_out_once_and_a_second_ends_the_searching(self):
+        refusal = urllib.error.HTTPError("https://api.github.com/search", 403, "rate limited",
+                                         {"Retry-After": "7"}, None)
+        budget = [10]
+        with mock.patch.object(build_index, "api", side_effect=refusal), \
+                mock.patch.object(build_index.time, "sleep") as sleep:
+            self.assertIsNone(build_index.search_page("q", 1, budget))
+        sleep.assert_called_once_with(7)
+        self.assertEqual(budget, [0])
+
+    def test_other_errors_propagate(self):
+        error = urllib.error.HTTPError("https://api.github.com/search", 422, "unprocessable", {}, None)
+        with mock.patch.object(build_index, "api", side_effect=error), \
+                mock.patch.object(build_index.time, "sleep"), self.assertRaises(urllib.error.HTTPError):
+            build_index.search_page("q", 1, [10])
+
+    def test_incomplete_answer_is_not_whole(self):
+        answer = {"total_count": 50, "incomplete_results": True, "items": [REPO]}
+        found = {}
+        with mock.patch.object(build_index, "api", return_value=answer), \
+                mock.patch.object(build_index.time, "sleep"):
+            self.assertEqual(build_index.search("q", [10], found, whole=True), (50, False))
+        self.assertEqual(list(found), ["owner/app"])
+
+    def test_candidates_come_most_starred_first_without_doubles(self):
+        api, _ = self.fake_api(self.repos(3, 20) + self.repos(2, 90))
+        with mock.patch.object(build_index, "api", side_effect=api), \
+                mock.patch.object(build_index.time, "sleep"), \
+                mock.patch.object(build_index, "AUTO_QUERIES", ("one", "two")):
+            candidates = build_index.discover_candidates(1790000000)
+        self.assertEqual([repo["stargazers_count"] for repo in candidates], [90, 90, 20, 20, 20])
+
+
+class FingerprintTest(unittest.TestCase):
+    NOT_BEFORE = 1770000000  # 2026-02-01
+
+    @staticmethod
+    def release(tag="v1", published="2026-09-01T00:00:00Z", assets=1, draft=False, prerelease=False):
+        return {"tagName": tag, "publishedAt": published, "isDraft": draft, "isPrerelease": prerelease,
+                "releaseAssets": {"totalCount": assets}}
+
+    @staticmethod
+    def node(*releases):
+        return {"releases": {"nodes": list(releases)}}
+
+    def test_newest_full_release_is_told_by_its_tag_and_date_with_its_files_counted(self):
+        self.assertEqual(build_index.fingerprint(self.node(self.release(assets=3)), self.NOT_BEFORE),
+                         ("v1 2026-09-01T00:00:00Z", 3))
+
+    def test_prereleases_and_drafts_above_the_full_release_are_passed_over(self):
+        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", prerelease=True),
+                         self.release("v2-draft", "2026-09-09T00:00:00Z", draft=True),
+                         self.release())
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1 2026-09-01T00:00:00Z", 1))
+
+    def test_most_recently_published_full_release_is_taken_whatever_its_commit_date(self):
+        # GitHub orders by the date of the commit a release was made from, which can put an
+        # old release first; the list build_app reads has the newest published first.
+        node = self.node(self.release("v1.2.18", "2026-03-27T12:58:31Z"),
+                         self.release("v2.1.5", "2026-10-22T08:50:13Z", assets=2),
+                         self.release("v2.1.4", "2026-10-01T12:35:41Z"))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v2.1.5 2026-10-22T08:50:13Z", 2))
+
+    def test_no_full_release_among_a_few_is_nothing(self):
+        for repository in (None, {}, {"releases": None}, self.node(),
+                           self.node(self.release(prerelease=True), self.release(draft=True))):
+            self.assertEqual(build_index.fingerprint(repository, self.NOT_BEFORE), ("", None))
+
+    def test_full_release_that_may_lie_deeper_is_marked_so_from_the_newest_published(self):
+        count = build_index.GRAPHQL_RELEASES
+        node = self.node(*[self.release("v%d-rc" % i, "2026-09-%02dT00:00:00Z" % (10 + i), prerelease=True)
+                           for i in range(1, count + 1)])
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
+                         ("? v%d-rc 2026-09-%02dT00:00:00Z" % (count, 10 + count), None))
+
+    def test_release_too_old_is_nothing(self):
+        node = self.node(self.release(published="2025-01-01T00:00:00Z"))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("", None))
+
+    def test_fingerprint_of_an_entry_matches_the_one_github_gives(self):
+        entry = {"tag": "v1", "publishedAt": "2026-09-01T00:00:00Z", "apks": [{"id": 1}]}
+        self.assertEqual(build_index.fingerprint_of(entry),
+                         build_index.fingerprint(self.node(self.release()), self.NOT_BEFORE)[0])
+
+
+class ReleaseFingerprintsTest(unittest.TestCase):
+    NOT_BEFORE = 1770000000
+    BATCH = build_index.GRAPHQL_BATCH
+    ROUND = build_index.GRAPHQL_BATCH * build_index.GRAPHQL_WORKERS
+
+    def answer(self, count, remaining=1000, errors=None):
+        data = {"r%d" % i: FingerprintTest.node(FingerprintTest.release()) for i in range(count)}
+        data["rateLimit"] = {"cost": 3, "remaining": remaining}
+        return {"data": data, "errors": errors or []}
+
+    def test_repositories_are_asked_about_a_batch_at_a_time(self):
+        names = ["o/r%d" % i for i in range(self.BATCH + 50)]
+        asked = []
+
+        def graphql(query):
+            asked.append(query)
+            return self.answer(query.count("repository("))
+
+        with mock.patch.object(build_index, "graphql", side_effect=graphql):
+            answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
+        self.assertEqual(len(asked), 2)
+        self.assertTrue(any('r99: repository(owner: "o", name: "r99") { ...releases }' in query for query in asked))
+        self.assertIn("releases(first: %d, orderBy: {field: CREATED_AT, direction: DESC})"
+                      % build_index.GRAPHQL_RELEASES, asked[0])
+        self.assertEqual(len(answers), len(names))
+        self.assertEqual(answers["o/r149"], ("v1 2026-09-01T00:00:00Z", 1))
+
+    def test_missing_repository_is_nothing_but_another_error_leaves_it_unanswered(self):
+        answer = self.answer(3, errors=[{"type": "NOT_FOUND", "path": ["r0"]},
+                                        {"type": "FORBIDDEN", "path": ["r1", "releases"]}])
+        answer["data"]["r0"] = None
+        answer["data"]["r1"] = None
+        with mock.patch.object(build_index, "graphql", return_value=answer):
+            answers = build_index.release_fingerprints(["a/0", "a/1", "a/2"], self.NOT_BEFORE)
+        self.assertEqual(answers, {"a/0": ("", None), "a/2": ("v1 2026-09-01T00:00:00Z", 1)})
+
+    def test_query_that_fails_twice_leaves_the_rest_unanswered(self):
+        names = ["o/r%d" % i for i in range(self.ROUND + 50)]
+        with mock.patch.object(build_index, "graphql", side_effect=urllib.error.URLError("down")) as graphql, \
+                mock.patch.object(build_index.time, "sleep") as sleep:
+            self.assertEqual(build_index.release_fingerprints(names, self.NOT_BEFORE), {})
+        # Each query of the round is tried twice; the next round is not sent.
+        self.assertEqual(graphql.call_count, 2 * build_index.GRAPHQL_WORKERS)
+        sleep.assert_called_with(build_index.GRAPHQL_RETRY_SECONDS)
+
+    def test_query_that_fails_once_is_asked_again(self):
+        names = ["o/r%d" % i for i in range(3)]
+        timeout = urllib.error.HTTPError("https://api.github.com/graphql", 504, "Gateway Timeout", {}, None)
+        with mock.patch.object(build_index, "graphql", side_effect=[timeout, self.answer(3)]) as graphql, \
+                mock.patch.object(build_index.time, "sleep"):
+            answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
+        self.assertEqual((graphql.call_count, len(answers)), (2, 3))
+
+    def test_answer_without_data_ends_the_checking(self):
+        names = ["o/r%d" % i for i in range(self.ROUND + 50)]
+        refused = {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}
+        with mock.patch.object(build_index, "graphql", return_value=refused) as graphql:
+            self.assertEqual(build_index.release_fingerprints(names, self.NOT_BEFORE), {})
+        self.assertEqual(graphql.call_count, build_index.GRAPHQL_WORKERS)
+
+    def test_checking_stops_when_the_points_run_low(self):
+        names = ["o/r%d" % i for i in range(self.ROUND + 50)]
+        low = self.answer(self.BATCH, remaining=build_index.AUTO_POINTS_RESERVE - 1)
+        with mock.patch.object(build_index, "graphql", return_value=low) as graphql:
+            answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
+        self.assertEqual((graphql.call_count, len(answers)), (build_index.GRAPHQL_WORKERS, self.ROUND))
+
+    def test_checking_stops_when_its_time_is_up(self):
+        with mock.patch.object(build_index, "graphql") as graphql:
+            answers = build_index.release_fingerprints(["o/r"], self.NOT_BEFORE, deadline=time.monotonic() - 1)
+        graphql.assert_not_called()
+        self.assertEqual(answers, {})
+
+class FakeResponse:
+    def __init__(self, headers, body=b"{}"):
+        self.headers = headers
+        self.body = body
+        self.status = 200
+
+    def read(self, *args):
+        return self.body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+
+class ApiTest(unittest.TestCase):
+    def test_requests_left_are_kept_from_the_shared_allowance_only(self):
+        answers = [FakeResponse({"X-RateLimit-Resource": "search", "X-RateLimit-Remaining": "9"}),
+                   FakeResponse({"X-RateLimit-Resource": "core", "X-RateLimit-Remaining": "123"}),
+                   FakeResponse({})]
+        with mock.patch.object(build_index, "api_remaining", None), \
+                mock.patch.object(build_index.urllib.request, "urlopen", side_effect=answers):
+            build_index.api("/search/repositories?q=x")
+            self.assertIsNone(build_index.api_remaining)
+            build_index.api("/repos/o/r/releases")
+            self.assertEqual(build_index.api_remaining, 123)
+            build_index.api("/repos/o/r/releases")
+            self.assertEqual(build_index.api_remaining, 123)
+
+    def test_graphql_posts_the_query_with_the_token(self):
+        with mock.patch.object(build_index.urllib.request, "urlopen",
+                               return_value=FakeResponse({}, b'{"data": {}}')) as urlopen, \
+                mock.patch.dict(os.environ, {"GITHUB_TOKEN": "t0ken"}):
+            self.assertEqual(build_index.graphql("query { rateLimit { cost } }"), {"data": {}})
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, build_index.GRAPHQL_API)
+        self.assertEqual(json.loads(request.data), {"query": "query { rateLimit { cost } }"})
+        self.assertEqual(request.get_header("Authorization"), "Bearer t0ken")
+        self.assertEqual(request.get_header("Content-type"), "application/json")
 
 
 class DiscoverTest(unittest.TestCase):
@@ -1681,6 +2109,7 @@ class MainTest(unittest.TestCase):
                     mock.patch.object(build_index, "discover_candidates",
                                       return_value=list(candidates)), \
                     mock.patch.object(build_index, "api", side_effect=api or self.api), \
+                    mock.patch.object(build_index, "graphql", side_effect=urllib.error.URLError("down")), \
                     mock.patch.object(build_index, "read_manifest", return_value=manifest,
                                       side_effect=None if manifest else OSError("range request not honoured")), \
                     mock.patch.object(build_index.time, "time", return_value=1790000000), \

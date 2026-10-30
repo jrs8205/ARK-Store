@@ -152,24 +152,27 @@ Besides the apps developers publish with the topic, the index searches GitHub fo
 open-source Android apps. They are shown only with **Found on GitHub** on, and their card
 says the developer did not publish them here. Nobody has checked these apps.
 
-The search covers repositories with the topic `android` written in Kotlin, Java or Dart, and
-repositories with the topic `android-app`. A repository qualifies when it
+The searches cover every repository with the topic `android` or `android-app`, every
+repository written in Kotlin, and repositories written in Java, Dart or other languages that
+mention Android in their name, description, topics or README. A repository qualifies when it
 
 - is public, not a fork or archived, and has a recognised open-source license,
 - has been pushed to within the last 30 days,
 - has at least 20 stars, and
 - has a full release, at most 180 days old, with an APK attached.
 
-The limits are constants at the top of `tools/build_index.py`. To stay off this list, remove
-the topic the search found the repository by; to be listed for everyone, add `arkstore`.
+The limits are constants at the top of `tools/build_index.py`. A developer who does not want
+an app here can say so in an issue; to be listed for everyone, add the topic `arkstore`.
 
 What the list does not promise:
 
-- It is not complete. GitHub returns at most a thousand repositories per search, the most
-  starred first.
+- It is not complete. GitHub returns at most a thousand repositories per search, so the
+  searches are split by stars until each part fits, and a search that fails or is cut short
+  leaves the previous entries in place.
 - Some entries are libraries that attach a sample APK; the rules cannot tell them apart.
-- It follows releases more slowly. A repository is looked at again after a push, otherwise
-  after a day, and each run examines a limited number.
+- It follows releases more slowly. After a push, and otherwise once a day, GitHub is asked
+  whether a repository's newest release has changed; only then are its files read, a limited
+  number per run. Download counts are refreshed once a week.
 - Categories are guessed from the topics and the description. An app that cannot be placed
   goes under Other.
 
