@@ -1265,13 +1265,20 @@ def discover():
     return repos, complete
 
 
-def search_page(query, page, budget):
+def search_page(query, page, budget, deadline=None):
     """One page of a search for repositories, or None when it could not be had. budget, a
     list holding the number of searches still allowed in this run, is counted down. GitHub
     refuses searches that come too often; the pause it asks for is taken once, and a second
-    refusal empties the budget, so that the searching of this run ends."""
+    refusal empties the budget, so that the searching of this run ends. So does reaching
+    deadline, a time of time.monotonic: no search is begun after it, and a pause is cut
+    short at it."""
     refused = False
     while budget[0] > 0:
+        if deadline is not None and time.monotonic() >= deadline:
+            print("the searches stopped after %d minutes; the rest waits for the next run"
+                  % (AUTO_MAX_SECONDS // 60), file=sys.stderr)
+            budget[0] = 0
+            return None
         budget[0] -= 1
         # The search API allows fewer requests per minute than the rest: one is sent only
         # once SEARCH_PAUSE_SECONDS have passed since the last, however long that one took.
@@ -1289,20 +1296,23 @@ def search_page(query, page, budget):
                 return None
             refused = True
             wait = (error.headers.get("Retry-After") if error.headers else None) or ""
-            time.sleep(min(int(wait), 60) if wait.isdigit() else 60)
+            seconds = min(int(wait), 60) if wait.isdigit() else 60
+            if deadline is not None:
+                seconds = max(0.0, min(seconds, deadline - time.monotonic()))
+            time.sleep(seconds)
             continue
         return result
     return None
 
 
-def search(query, budget, found, whole):
+def search(query, budget, found, whole, deadline=None):
     """One search for repositories, read into found page by page as far as GitHub gives them
-    and budget (see search_page) lets. Returns how many repositories the search matches and
-    whether all of them were read. Without whole, a search that matches more than GitHub
-    gives for one search is left after its first page, for the caller to ask in parts."""
+    and budget and deadline (see search_page) let. Returns how many repositories the search
+    matches and whether all of them were read. Without whole, a search that matches more than
+    GitHub gives for one search is left after its first page, for the caller to ask in parts."""
     total = 0
     for page in range(1, AUTO_SEARCH_PAGES + 1):
-        result = search_page(query, page, budget)
+        result = search_page(query, page, budget, deadline)
         if result is None:
             return total, False
         total = result.get("total_count", 0)
@@ -1319,12 +1329,13 @@ def search(query, budget, found, whole):
     return total, total <= AUTO_SEARCH_PAGES * PAGE_SIZE
 
 
-def search_repositories(base, since, budget, found):
+def search_repositories(base, since, budget, found, deadline=None):
     """Every repository that matches base among those pushed to since the given day, with
-    AUTO_MIN_STARS stars or more and not archived, read into found. GitHub gives at most
-    AUTO_SEARCH_PAGES pages for one search, so when the query matches more, it is asked by
-    ranges of stars, each halved until it fits; a range of one star that still does not fit
-    is read as far as GitHub gives it. Returns whether everything was read."""
+    AUTO_MIN_STARS stars or more and not archived, read into found, as far as budget and
+    deadline (see search_page) let. GitHub gives at most AUTO_SEARCH_PAGES pages for one
+    search, so when the query matches more, it is asked by ranges of stars, each halved until
+    it fits; a range of one star that still does not fit is read as far as GitHub gives it.
+    Returns whether everything was read."""
     complete = True
     ranges = [(AUTO_MIN_STARS, None)]
     while ranges:
@@ -1332,7 +1343,7 @@ def search_repositories(base, since, budget, found):
         stars = ">=%d" % low if high is None else "%d..%d" % (low, high)
         query = urllib.parse.quote("%s pushed:>=%s archived:false stars:%s" % (base, since, stars))
         splittable = high is None or high > low
-        total, whole = search(query, budget, found, whole=not splittable)
+        total, whole = search(query, budget, found, whole=not splittable, deadline=deadline)
         if whole:
             continue
         if total > AUTO_SEARCH_PAGES * PAGE_SIZE and splittable and budget[0] > 0:
@@ -1350,14 +1361,15 @@ def search_repositories(base, since, budget, found):
     return complete
 
 
-def discover_candidates(today):
-    """Repositories that might be Android apps worth offering, most starred first."""
+def discover_candidates(today, deadline=None):
+    """Repositories that might be Android apps worth offering, most starred first; those found
+    by deadline (see search_page) when it comes first."""
     since = time.strftime("%Y-%m-%d", time.gmtime(today - AUTO_PUSHED_DAYS * 86400))
     found = {}
     budget = [AUTO_MAX_SEARCHES]
     complete = True
     for base in AUTO_QUERIES:
-        if not search_repositories(base, since, budget, found):
+        if not search_repositories(base, since, budget, found, deadline):
             complete = False
     if not complete:
         print("the searches were not read whole; %d repositories found" % len(found), file=sys.stderr)
@@ -1383,25 +1395,30 @@ def fingerprint(repository, not_before):
     the most recently published full one among them is taken, which is the same release but
     for a repository whose newest release was made from an older commit than several others.
     The fingerprint is "" when there is nothing to install: no full release among the few a
-    repository has, or one published before not_before. When every release read is a draft
-    or a prerelease, the full one may lie deeper than was read; such a repository gets a
-    fingerprint marked with "?" from the most recently published release, so that it is
+    repository has, or none published since not_before. That is certain only when the
+    releases read are all the repository has: when as many were read as are asked for, the
+    release to install may lie deeper, as a full release below drafts and prereleases, or a
+    recent one made from an older commit than the old ones read. Such a repository gets a
+    fingerprint marked with "?" from the most recently published release read, so that it is
     examined whenever that changes, and build_app decides."""
     nodes = ((repository or {}).get("releases") or {}).get("nodes") or []
 
     def published(release):
         return parse_time(release.get("publishedAt")) or 0
 
-    full = [release for release in nodes if not release.get("isDraft") and not release.get("isPrerelease")]
-    if not full:
+    def uncertain():
         if len(nodes) < GRAPHQL_RELEASES:
             return "", None
         newest = max(nodes, key=published)
         return "? " + release_fingerprint(newest.get("tagName"), newest.get("publishedAt")), None
+
+    full = [release for release in nodes if not release.get("isDraft") and not release.get("isPrerelease")]
+    if not full:
+        return uncertain()
     release = max(full, key=published)
-    published = parse_time(release.get("publishedAt"))
-    if published is None or published < not_before:
-        return "", None
+    published_at = parse_time(release.get("publishedAt"))
+    if published_at is None or published_at < not_before:
+        return uncertain()
     assets = (release.get("releaseAssets") or {}).get("totalCount")
     return release_fingerprint(release.get("tagName"), release.get("publishedAt")), assets
 
@@ -1519,6 +1536,17 @@ def recheck_due(pushed_at, checked_at, today):
     settling = pushed is not None and checked_at - pushed < AUTO_SETTLE_HOURS * 3600
     return settling or today - checked_at >= AUTO_RECHECK_HOURS * 3600
 
+
+def refresh_due(known, today):
+    """Whether what an examination found is old enough to examine the repository anew though
+    its release looks the same, see AUTO_REFRESH_HOURS. A listed app is, for its download
+    counts and its metadata; so is a release with files among which nothing was fit to
+    install, as a file may since have been replaced by one of the same name, which the
+    fingerprint does not show. One without files has nothing to replace, and a file added
+    shows in their number; one with nothing to install was not examined at all."""
+    examined = known.listed or (known.release and known.assets != 0)
+    return bool(examined) and today - known.examined_at >= AUTO_REFRESH_HOURS * 3600
+
 def guess_category(topics, description):
     """The category the words of a repository's topics and description point to, or None.
 
@@ -1570,7 +1598,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
     """
     deadline = time.monotonic() + AUTO_MAX_SECONDS
     not_before = today - AUTO_RELEASE_DAYS * 86400
-    found = discover_candidates(today)
+    found = discover_candidates(today, deadline)
     candidates = [
         repo for repo in found
         if repo["full_name"] not in published
@@ -1592,8 +1620,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
             # files did not come from the same run. Leaving the repository alone would keep
             # the app out until its next push.
             changed.append(full_name)
-        elif recheck_due(known.pushed_at, known.checked_at, today) \
-                or (known.listed and today - known.examined_at >= AUTO_REFRESH_HOURS * 3600):
+        elif recheck_due(known.pushed_at, known.checked_at, today) or refresh_due(known, today):
             due.append((known.checked_at, full_name))
     asked = (changed + [name for _, name in sorted(due)])[:AUTO_MAX_CHECKS]
     releases = release_fingerprints(asked, not_before, deadline)
@@ -1641,7 +1668,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
             # entry from before releases were checked tells its release, not its files.
             same = (release == known.release and (known.assets is None or assets == known.assets)) or (
                 known.release is None and previous is not None and release == fingerprint_of(previous))
-            fresh = not known.listed or today - known.examined_at < AUTO_REFRESH_HOURS * 3600
+            fresh = not refresh_due(known, today)
             if same and fresh and (previous is not None or not known.listed):
                 app = current
                 settled = known.examined_at

@@ -1500,7 +1500,11 @@ class AutoAppsTest(unittest.TestCase):
             self.asked = list(names)
             return {name: answer(releases[name]) for name in names if name in releases}
 
-        with mock.patch.object(build_index, "discover_candidates", return_value=candidates), \
+        def discover(today, deadline=None):
+            self.search_deadline = deadline
+            return candidates
+
+        with mock.patch.object(build_index, "discover_candidates", side_effect=discover), \
                 mock.patch.object(build_index, "release_fingerprints", side_effect=fingerprints), \
                 mock.patch.object(build_index, "build_app", side_effect=built) as build_app:
             apps, new_state = build_index.build_auto_apps(
@@ -1643,6 +1647,35 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual(build_app.call_count, 1)
         self.assertEqual(state["other/app"]["examinedAt"], self.NOW)
 
+    def test_release_examined_and_left_out_is_examined_anew_after_a_week(self):
+        # The one APK was broken when examined; a working one of the same name has since
+        # taken its place, and the release looks to GitHub as it did.
+        known = self.known(self.NOW - self.HOUR, listed=False,
+                           examined=self.NOW - (build_index.AUTO_REFRESH_HOURS + 1) * self.HOUR)
+        apps, state, build_app = self.run_auto([self.candidate()], [self.entry()], state={"other/app": known})
+        self.assertEqual(self.asked, ["other/app"])
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertTrue(state["other/app"]["listed"])
+
+    def test_release_without_files_examined_and_left_out_is_not_examined_anew(self):
+        # Nothing can have been replaced, and a file added shows in the count.
+        known = self.known(self.NOW - self.HOUR, listed=False, assets=0,
+                           examined=self.NOW - (build_index.AUTO_REFRESH_HOURS + 1) * self.HOUR)
+        apps, state, build_app = self.run_auto([self.candidate()], [], state={"other/app": known},
+                                               releases={"other/app": (self.RELEASE, 0)})
+        build_app.assert_not_called()
+        self.assertEqual(apps, [])
+        self.assertEqual(state, {"other/app": known})
+
+    def test_negative_result_examined_within_the_week_stands(self):
+        known = self.known(self.NOW - self.HOUR, listed=False,
+                           examined=self.NOW - (build_index.AUTO_REFRESH_HOURS - 1) * self.HOUR)
+        apps, state, build_app = self.run_auto([self.candidate()], [], state={"other/app": known})
+        build_app.assert_not_called()
+        self.assertEqual(apps, [])
+        self.assertEqual(state, {"other/app": known})
+
     def test_repository_github_did_not_answer_for_keeps_its_entry_and_state(self):
         previous = {"other/app": self.entry()}
         known = self.known(0, release="v0 2026-08-01T00:00:00Z", listed=True)
@@ -1763,6 +1796,12 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual([app["fullName"] for app in apps], ["o/app0", "o/app1", "o/app4"])
         self.assertEqual(state["o/app4"], known)
 
+    def test_searches_are_given_the_deadline_of_the_run(self):
+        clock = [1000.0]
+        with mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
+            self.run_auto([], [])
+        self.assertEqual(self.search_deadline, 1000.0 + build_index.AUTO_MAX_SECONDS)
+
     def test_entry_the_search_did_not_return_is_kept_while_its_push_is_recent(self):
         previous = {"other/app": self.entry()}
         known = self.known(self.NOW - self.HOUR, listed=True)
@@ -1819,13 +1858,22 @@ class SearchTest(unittest.TestCase):
 
         return api, queries
 
-    def search(self, repos, budget=None):
+    def search(self, repos, budget=None, deadline=None, seconds_per_request=0.0):
+        """Searches repos with the fake API, each request taking seconds_per_request of a
+        clock that starts at 1000."""
         api, queries = self.fake_api(repos)
+        clock = [1000.0]
+
+        def timed_api(path):
+            clock[0] += seconds_per_request
+            return api(path)
+
         found = {}
         budget = [build_index.AUTO_MAX_SEARCHES] if budget is None else budget
-        with mock.patch.object(build_index, "api", side_effect=api), \
-                mock.patch.object(build_index.time, "sleep"):
-            complete = build_index.search_repositories("topic:android", self.SINCE, budget, found)
+        with mock.patch.object(build_index, "api", side_effect=timed_api), \
+                mock.patch.object(build_index.time, "sleep"), \
+                mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
+            complete = build_index.search_repositories("topic:android", self.SINCE, budget, found, deadline=deadline)
         return found, complete, queries
 
     def test_search_that_fits_is_read_page_by_page(self):
@@ -1855,6 +1903,31 @@ class SearchTest(unittest.TestCase):
     def test_searches_are_capped_per_run(self):
         found, complete, queries = self.search(self.repos(250, 20), budget=[2])
         self.assertEqual((len(found), complete, len(queries)), (200, False, 2))
+
+    def test_searching_stops_at_the_deadline_with_what_was_found(self):
+        # Two pages come in before the deadline; the third would have been asked after it.
+        budget = [build_index.AUTO_MAX_SEARCHES]
+        found, complete, queries = self.search(self.repos(250, 20), budget=budget, deadline=1015.0,
+                                               seconds_per_request=10.0)
+        self.assertEqual((len(found), complete, len(queries)), (200, False, 2))
+        # The searching of the run is over, however many searches were left.
+        self.assertEqual(budget, [0])
+
+    def test_refusal_is_waited_out_only_until_the_deadline(self):
+        refusal = urllib.error.HTTPError("https://api.github.com/search", 403, "rate limited",
+                                         {"Retry-After": "45"}, None)
+        clock = [1000.0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        budget = [10]
+        with mock.patch.object(build_index, "api", side_effect=refusal), \
+                mock.patch.object(build_index.time, "sleep", side_effect=sleep), \
+                mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
+            self.assertIsNone(build_index.search_page("q", 1, budget, deadline=1020.0))
+        self.assertEqual(clock, [1020.0])
+        self.assertEqual(budget, [0])
 
     def test_refusal_is_waited_out_once_and_a_second_ends_the_searching(self):
         refusal = urllib.error.HTTPError("https://api.github.com/search", 403, "rate limited",
@@ -1933,6 +2006,17 @@ class FingerprintTest(unittest.TestCase):
 
     def test_release_too_old_is_nothing(self):
         node = self.node(self.release(published="2025-01-01T00:00:00Z"))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("", None))
+
+    def test_full_window_of_old_releases_is_marked_uncertain(self):
+        # The newest by commit date may all be old while a release made from an older commit,
+        # beyond those read, was published lately; build_app decides.
+        count = build_index.GRAPHQL_RELEASES
+        node = self.node(*[self.release("v%d" % i, "2025-01-%02dT00:00:00Z" % (10 + i)) for i in range(1, count + 1)])
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
+                         ("? v%d 2025-01-%02dT00:00:00Z" % (count, 10 + count), None))
+        # Fewer than the window holds is the whole list: nothing lies beyond it.
+        node = self.node(*[self.release("v%d" % i, "2025-01-%02dT00:00:00Z" % (10 + i)) for i in range(1, count)])
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("", None))
 
     def test_fingerprint_of_an_entry_matches_the_one_github_gives(self):
