@@ -143,17 +143,7 @@ class InstallService : Service() {
         return Progress(title, fraction?.let { (it * 100).toInt() })
     }
 
-    private fun notification(progress: Progress): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_ark)
-            .setContentTitle(progress.title)
-            .setProgress(100, progress.percent ?: 0, progress.percent == null)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(open)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+    private fun notification(progress: Progress): Notification = progressNotification(this, progress, open)
 
     companion object {
         private const val TAG = "InstallService"
@@ -163,6 +153,19 @@ class InstallService : Service() {
         private const val NOTIFICATION_ID = 2
         private const val READY_NOTIFICATION_ID = 3
         private const val UPDATE_INTERVAL_MS = 500L
+
+        /** The quiet notification of work under way that [progress] tells of, opening the store with [open] if given. */
+        internal fun progressNotification(context: Context, progress: Progress, open: PendingIntent? = null): Notification =
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(R.drawable.ic_ark)
+                .setContentTitle(progress.title)
+                .setProgress(100, progress.percent ?: 0, progress.percent == null)
+                .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setContentIntent(open)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .build()
 
         fun createChannels(context: Context) {
             val downloads = NotificationChannel(

@@ -266,6 +266,13 @@ object InstallManager {
     private val keeps = ConcurrentHashMap<String, File>()
 
     /**
+     * The attempts whose session the system gave up before asking, each waiting to be handed
+     * over once more, see [retry]. They live only here: should the process end first, nothing
+     * is lost but the attempt, and the row offers the install again.
+     */
+    private val retries = ConcurrentHashMap<String, Committed>()
+
+    /**
      * Held while an attempt is settled by its result and while a confirmation of an earlier
      * process is restored, so that neither can slip under the other: a result taken halfway
      * through a restoration would leave the finished install as installing for good.
@@ -669,6 +676,8 @@ object InstallManager {
             restorePending(context)
             failStale(context)
         }
+        // A screen in front keeps the process going, and need not wait for the worker's turn.
+        retries.keys.forEach { repo -> scope.launch { retry(context, repo) } }
     }
 
     /**
@@ -903,37 +912,30 @@ object InstallManager {
 
     /**
      * Called by [InstallReceiver] once the system has decided on a session, [sessionId] when
-     * it says which: the result of an earlier attempt of the same app is left alone. [done]
-     * is called, once, when everything the result leads to is over: at once when nothing
-     * follows, or once the files have been handed over anew after a session the system gave
-     * up, see [settle]; a receiver keeps the process alive until then.
+     * it says which: the result of an earlier attempt of the same app is left alone. An
+     * install the system gave up before asking is handed over once more, see [settle]: by a
+     * worker, as copying the files can outlast what a receiver is allowed and nothing else
+     * may be keeping the process going, unless a screen is showing, which does that itself.
      */
     internal fun onSessionResult(
         context: Context,
         repo: String,
         status: Int,
         message: String?,
-        sessionId: Int? = null,
-        done: () -> Unit = {}
+        sessionId: Int? = null
     ) {
         val settlement = settle(repo, status, message, sessionId) {
             InstallService.cancelReady(context, repo)
             forgetPending(context, repo)
-        } ?: return done()
-        val toRecommit = settlement.attempted?.takeIf { settlement.retry }
-        if (toRecommit != null) {
-            scope.launch {
-                try {
-                    recommit(context.applicationContext, repo, toRecommit)
-                } finally {
-                    done()
-                }
+        } ?: return
+        if (settlement.retry) {
+            val appContext = context.applicationContext
+            if (screens.get() > 0) {
+                scope.launch { retry(appContext, repo) }
+            } else {
+                InstallRetryWorker.enqueue(appContext, repo)
             }
             return
-        }
-        settlement.attempted?.keep?.let {
-            keeps.remove(repo, it)
-            it.deleteRecursively()
         }
         val app = settlement.attempted?.app
         // The system can see a conflict that comparing the certificates here did not.
@@ -941,7 +943,19 @@ object InstallManager {
             InstalledApps.rememberConflict(context, app, settlement.attempted.packageName)
         }
         _installedChanged.update { it + 1 }
-        done()
+    }
+
+    /** The attempt of [repo] waiting to be handed over once more, for whoever comes first to carry it out. */
+    internal fun takeRetry(repo: String): Committed? = retries.remove(repo)
+
+    /**
+     * Hands over once more the attempt of [repo] whose session the system gave up, when it
+     * has not been done yet, and waits until that is over. It runs apart from the caller, so
+     * that a worker the system stops only stops waiting.
+     */
+    internal suspend fun retry(context: Context, repo: String) {
+        val attempted = takeRetry(repo) ?: return
+        scope.launch { recommit(context.applicationContext, repo, attempted) }.join()
     }
 
     /**
@@ -989,6 +1003,8 @@ object InstallManager {
      * worth showing, unless nobody could have answered yet, see [abortedBySystem]: then the
      * files are handed over once more when they are still here, and the state is not
      * settled; a second time, or without the files, the failure is shown and explained.
+     * Otherwise the attempt's files have served, whichever session it came to, and go under
+     * the lock: no later attempt can have kept any while this one is on its way.
      */
     internal fun settle(repo: String, status: Int, message: String?, sessionId: Int?, cleanup: () -> Unit): Settlement? =
         synchronized(settling) {
@@ -1010,8 +1026,10 @@ object InstallManager {
             confirmations.remove(repo)
             cleanup()
             if (bySystem && attempted?.files != null && !attempted.retried) {
+                retries[repo] = attempted
                 return Settlement(attempted, null, retry = true)
             }
+            if (attempted != null) keeps.remove(repo)?.deleteRecursively()
             val (state, outcome) = when (status) {
                 PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
                 // The user backed out of the system prompt; that is not an error worth showing.
@@ -1088,10 +1106,7 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
-        // The files are the session's from here on, see keeps; an attempt's own cleanup, which
-        // may run the moment this returns, leaves them alone.
-        keep?.let { keeps[key] = it }
-        committed[key] = Committed(app, packageName, sessionId, attempt, files = files, keep = keep, retried = retried)
+        sessionMade(key, app, packageName, sessionId, attempt, files, keep, retried)
         try {
             write(context, installer, sessionId, key, files)
         } catch (e: Exception) {
@@ -1100,6 +1115,26 @@ object InstallManager {
             keep?.let { keeps.remove(key, it) }
             throw e
         }
+    }
+
+    /**
+     * Writes down the session [sessionId] made for the [attempt] of [key]. [keep] is the file
+     * or directory of its [files], which are the session's from here on, see [keeps]: the
+     * attempt's own cleanup, which may run the moment this returns, leaves them alone.
+     */
+    internal fun sessionMade(
+        key: String,
+        app: StoreApp?,
+        packageName: String,
+        sessionId: Int,
+        attempt: Int,
+        files: List<Pair<String, File>>? = null,
+        keep: File? = null,
+        retried: Boolean = false,
+        root: Boolean = false
+    ) {
+        keep?.let { keeps[key] = it }
+        committed[key] = Committed(app, packageName, sessionId, attempt, root, files, keep, retried)
     }
 
     /**
@@ -1124,7 +1159,7 @@ object InstallManager {
         var sessionId: Int? = null
         val result = RootInstaller.install(context.packageName, packageName, files) { id ->
             sessionId = id
-            committed[key] = Committed(app, packageName, id, attempt, root = true)
+            sessionMade(key, app, packageName, id, attempt, root = true)
         }
         return when (result) {
             RootInstaller.Result.NoRoot -> {

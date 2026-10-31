@@ -2,6 +2,7 @@ package org.jarsi.arkstore.install
 
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -37,6 +38,83 @@ class InstallManagerTest {
         // Presented long enough ago: the user refused.
         assertFalse(abortedBySystem(presentedAt = now - 1500, now = now, graceMillis = 1500))
         assertFalse(abortedBySystem(presentedAt = now - 60_000, now = now, graceMillis = 1500))
+    }
+
+    /** An attempt of [pending]'s app on its way, whose session holds a [file] of its own. */
+    private fun handedOver(pending: PendingConfirmation, file: File, retried: Boolean = false) {
+        assertTrue(InstallManager.restore(pending, Intent()))
+        InstallManager.sessionMade(
+            pending.repo, null, pending.packageName, pending.sessionId, 1,
+            files = listOf("base.apk" to file), keep = file, retried = retried
+        )
+    }
+
+    private fun aFile(): File = File.createTempFile("attempt", ".apk").also { it.deleteOnExit() }
+
+    @Test
+    fun anInstallGivenUpBeforeAnyPromptIsHandedOverOnceMore() {
+        val pending = pending("owner/given-up", 91)
+        val file = aFile()
+        handedOver(pending, file)
+
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 91) {}
+        assertTrue(settlement!!.retry)
+        assertEquals(InstallState.Installing, InstallManager.states.value[pending.repo])
+        assertTrue(file.exists())
+        // Whoever comes first takes it: the worker or a screen coming into view.
+        assertNotNull(InstallManager.takeRetry(pending.repo))
+        assertNull(InstallManager.takeRetry(pending.repo))
+    }
+
+    @Test
+    fun anInstallGivenUpASecondTimeIsExplainedAndItsFilesGo() {
+        val pending = pending("owner/given-up-twice", 92)
+        val file = aFile()
+        handedOver(pending, file, retried = true)
+
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 92) {}
+        assertFalse(settlement!!.retry)
+        assertNull(InstallManager.takeRetry(pending.repo))
+        assertEquals(InstallState.Failed(FailReason.ABORTED), InstallManager.states.value[pending.repo])
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun theFilesOfAnAttemptGoWhenItSettles() {
+        val pending = pending("owner/settles", 93)
+        val file = aFile()
+        handedOver(pending, file)
+
+        assertNotNull(InstallManager.settle(pending.repo, PackageInstaller.STATUS_SUCCESS, null, 93) {})
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun theFilesGoToo_whenARootSessionTookThePlaceOfOneGivenUp() {
+        val pending = pending("owner/root-after", 94)
+        val file = aFile()
+        handedOver(pending, file)
+        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 94) {}!!.retry)
+        assertNotNull(InstallManager.takeRetry(pending.repo))
+
+        // As root, the session is made with no files to speak of, and settles at once.
+        InstallManager.sessionMade(pending.repo, null, pending.packageName, 95, 1, root = true)
+        assertNotNull(InstallManager.settle(pending.repo, PackageInstaller.STATUS_SUCCESS, null, 95) {})
+        assertNull(InstallManager.states.value[pending.repo])
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aResultNamingNoSessionWhileTheFilesWaitLeavesThemAlone() {
+        val pending = pending("owner/waiting-files", 96)
+        val file = aFile()
+        handedOver(pending, file)
+        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 96) {}!!.retry)
+
+        InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE, "no prompt", null) {}
+        assertEquals(InstallState.Installing, InstallManager.states.value[pending.repo])
+        assertTrue(file.exists())
+        assertNotNull(InstallManager.takeRetry(pending.repo))
     }
 
     @Test
