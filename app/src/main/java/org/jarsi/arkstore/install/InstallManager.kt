@@ -668,24 +668,47 @@ object InstallManager {
             return
         }
         val prefs = context.getSharedPreferences(PREFS_PENDING, Context.MODE_PRIVATE)
-        val known = mutableSetOf<Int>()
-        for ((repo, value) in prefs.all) {
-            val pending = PendingConfirmation.decode(repo, value as? String)
-            val prompt = pending?.let {
-                runCatching { Intent.parseUri(it.prompt, Intent.URI_INTENT_SCHEME) }.getOrNull()
-            }
-            if (pending == null || prompt == null || pending.sessionId !in sessions) {
-                prefs.edit().remove(repo).apply()
-                continue
-            }
-            known += pending.sessionId
-            if (restore(pending, prompt)) Log.i(TAG, "Install of $repo still waits for the user; asking again")
-        }
-        known += committed.values.filter { !it.root }.map { it.sessionId }
+        val known = restoreRecords(
+            prefs.all,
+            sessions.keys,
+            prompt = { runCatching { Intent.parseUri(it.prompt, Intent.URI_INTENT_SCHEME) }.getOrNull() },
+            forget = { forgetPending(context, it) }
+        ) + committed.values.filter { !it.root }.map { it.sessionId }
         for (sessionId in leftoverSessions(sessions, known, now, LEFTOVER_AGE_MS)) {
             Log.i(TAG, "Letting go of install session $sessionId that nobody waits for")
             runCatching { installer.abandonSession(sessionId) }
         }
+    }
+
+    /**
+     * Picks up the confirmation [records] (each app's stored record, see [rememberPending])
+     * whose sessions are among those [alive] in the system, see [restore], with the prompt
+     * [prompt] reads from each; the rest are dropped with [forget]: what is no record, what
+     * names no prompt that can be read, and what names a session that is gone. A record of an
+     * app whose attempt is on its way is left alone whatever it says: the attempt wrote it
+     * after the sessions were listed, and it is the attempt's own. Returns the sessions the
+     * records kept speak for.
+     */
+    internal fun restoreRecords(
+        records: Map<String, Any?>,
+        alive: Set<Int>,
+        prompt: (PendingConfirmation) -> Intent?,
+        forget: (String) -> Unit
+    ): Set<Int> {
+        val known = mutableSetOf<Int>()
+        for ((repo, value) in records) {
+            val pending = PendingConfirmation.decode(repo, value as? String)
+            val intent = pending?.let(prompt)
+            if (pending == null || intent == null || pending.sessionId !in alive) {
+                synchronized(settling) {
+                    if (!committed.containsKey(repo) && !_states.value[repo].isOnItsWay()) forget(repo)
+                }
+                continue
+            }
+            known += pending.sessionId
+            if (restore(pending, intent)) Log.i(TAG, "Install of $repo still waits for the user; asking again")
+        }
+        return known
     }
 
     /**
@@ -711,7 +734,12 @@ object InstallManager {
         true
     }
 
-    private fun rememberPending(context: Context, repo: String, sessionId: Int, prompt: Intent) {
+    /**
+     * Writes down the confirmation of [repo]'s attempt, see [PendingConfirmation]. Under the
+     * lock, so that a record is written only while its attempt is committed, and dropped (see
+     * [settle] and [restoreRecords]) only while none is.
+     */
+    private fun rememberPending(context: Context, repo: String, sessionId: Int, prompt: Intent) = synchronized(settling) {
         val packageName = committed[repo]?.packageName ?: return
         val record = PendingConfirmation(
             repo, sessionId, packageName, labels[repo], prompt.toUri(Intent.URI_INTENT_SCHEME)
@@ -849,9 +877,10 @@ object InstallManager {
         message: String?,
         sessionId: Int? = null
     ) {
-        val settlement = settle(repo, status, message, sessionId) ?: return
-        InstallService.cancelReady(context, repo)
-        forgetPending(context, repo)
+        val settlement = settle(repo, status, message, sessionId) {
+            InstallService.cancelReady(context, repo)
+            forgetPending(context, repo)
+        } ?: return
         val app = settlement.attempted?.app
         // The system can see a conflict that comparing the certificates here did not.
         if (settlement.state?.reason == FailReason.SIGNATURE_MISMATCH && app != null) {
@@ -866,10 +895,13 @@ object InstallManager {
     /**
      * Settles the attempt of [repo] by the result the system gave for the session [sessionId]
      * with [status] and [message]: what was committed of it is given up, its confirmation let
-     * go and its state settled, for the screen and for whoever waits for the attempt. The
-     * result of an earlier attempt, or of one settled already, is left alone: then null.
+     * go, [cleanup] run for what else it left behind, and its state settled, for the screen
+     * and for whoever waits for the attempt. The cleanup comes before the state, under the
+     * lock: a new attempt begun the moment the app is free leaves a record and a notification
+     * of its own, which the old attempt's cleanup must not take. The result of an earlier
+     * attempt, or of one settled already, is left alone: then null, and no cleanup.
      */
-    internal fun settle(repo: String, status: Int, message: String?, sessionId: Int?): Settlement? =
+    internal fun settle(repo: String, status: Int, message: String?, sessionId: Int?, cleanup: () -> Unit): Settlement? =
         synchronized(settling) {
             val attempted = committed[repo]
             if (!isCurrent(repo, sessionId, attempted)) {
@@ -885,6 +917,7 @@ object InstallManager {
             }
             sessionId?.let { settledSessions += it }
             confirmations.remove(repo)
+            cleanup()
             val (state, outcome) = when (status) {
                 PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
                 // The user backed out of the system prompt; that is not an error worth showing.
