@@ -1,7 +1,10 @@
 package org.jarsi.arkstore.install
 
+import java.io.File
+import kotlin.io.path.createTempDirectory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PendingConfirmationTest {
@@ -46,6 +49,22 @@ class PendingConfirmationTest {
         assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"org.example","label":"Example"}"""))
         assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"","prompt":"#Intent;end"}"""))
         assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"org.example","prompt":""}"""))
+    }
+
+    @Test
+    fun onlyOldFilesNobodyKeepsAreLeftovers() {
+        val folder = createTempDirectory("apk").toFile()
+        try {
+            val now = 10_000_000L
+            val old = File(folder, "1-old.apk").apply { writeText("a"); setLastModified(now - 7_200_000) }
+            val kept = File(folder, "2-kept.apk").apply { writeText("b"); setLastModified(now - 7_200_000) }
+            val fresh = File(folder, "3-fresh.apk").apply { writeText("c"); setLastModified(now - 60_000) }
+            assertEquals(listOf(old), leftoverFiles(folder, setOf(kept), now, 3_600_000))
+            assertEquals(emptyList<File>(), leftoverFiles(File(folder, "none"), emptySet(), now, 3_600_000))
+            assertTrue(fresh.exists())
+        } finally {
+            folder.deleteRecursively()
+        }
     }
 
     @Test

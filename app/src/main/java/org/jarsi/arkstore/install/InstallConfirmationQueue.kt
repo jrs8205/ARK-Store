@@ -57,12 +57,17 @@ internal class InstallConfirmationQueue<T> {
      * becomes the active one, so that the screen does not present it a second time, and the
      * number of its presentation is returned. When another is active, the confirmation is
      * parked instead, as a prompt the screen must not present again once the other settles,
-     * though the user may ask for it; then, as when the confirmation is not here, null.
+     * though the user may ask for it; then, as when the confirmation is not here, null. One
+     * not here is presented all the same, by a notification of an earlier process, and is
+     * remembered as presented, see [presentedAt], until its app is [remove]d.
      */
     @Synchronized
     fun hold(repo: String): Int? {
         if (active?.repo == repo) return presentations
-        val value = waiting.remove(repo) ?: parked.remove(repo) ?: return null
+        val value = waiting.remove(repo) ?: parked.remove(repo) ?: run {
+            presented[repo] = System.currentTimeMillis()
+            return null
+        }
         if (active != null) {
             parked[repo] = value
             presented[repo] = System.currentTimeMillis()
@@ -80,7 +85,8 @@ internal class InstallConfirmationQueue<T> {
 
     /**
      * When the confirmation of [repo] was presented, in [System.currentTimeMillis], while it is
-     * being presented or is parked since; null while it waits to be presented, or is not here.
+     * being presented or is parked since, or was presented from elsewhere (see [hold]); null
+     * while it waits to be presented, or nothing of it was presented.
      */
     @Synchronized
     fun presentedAt(repo: String): Long? = presented[repo]

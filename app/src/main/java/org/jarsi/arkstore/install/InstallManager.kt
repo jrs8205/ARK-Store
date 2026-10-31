@@ -259,6 +259,13 @@ object InstallManager {
     private val committed = ConcurrentHashMap<String, Committed>()
 
     /**
+     * The file, or the directory of files, of each app's attempt that a session of the system
+     * holds, from the hand-over until the attempt settles, across a session the system gives
+     * up and the one made in its place; see [commit] and [settle]. Nothing else deletes it.
+     */
+    private val keeps = ConcurrentHashMap<String, File>()
+
+    /**
      * Held while an attempt is settled by its result and while a confirmation of an earlier
      * process is restored, so that neither can slip under the other: a result taken halfway
      * through a restoration would leave the finished install as installing for good.
@@ -369,12 +376,9 @@ object InstallManager {
         // when a cancel comes before the job's first turn and the body never runs. The
         // reservation is given up last: only then may a new attempt begin.
         install.onSettled { cancelled ->
-            // The files of an attempt committed are kept until its session settles, see
-            // settle: should the system give the session up before asking, they are handed
-            // over once more. Any other attempt is done with them.
-            if (committed[key]?.let { it.attempt == install.id && it.keep != null } != true) {
-                target.deleteRecursively()
-            }
+            // The files of an attempt handed over are the session's to keep until the attempt
+            // settles, see keeps; any other attempt is done with them.
+            if (keeps[key] != target) target.deleteRecursively()
             jobs.remove(key, install)
             _activeJobs.update { it - 1 }
             if (cancelled) {
@@ -681,9 +685,8 @@ object InstallManager {
         val installer = context.packageManager.packageInstaller
         val now = System.currentTimeMillis()
         // Files of attempts of a process that ended with their sessions unsettled.
-        File(context.cacheDir, "apk").listFiles()
-            ?.filter { now - it.lastModified() >= LEFTOVER_FILE_AGE_MS }
-            ?.forEach { it.deleteRecursively() }
+        leftoverFiles(File(context.cacheDir, "apk"), keeps.values, now, LEFTOVER_FILE_AGE_MS)
+            .forEach { it.deleteRecursively() }
         val sessions = try {
             installer.mySessions.associate {
                 it.sessionId to when {
@@ -900,30 +903,45 @@ object InstallManager {
 
     /**
      * Called by [InstallReceiver] once the system has decided on a session, [sessionId] when
-     * it says which: the result of an earlier attempt of the same app is left alone.
+     * it says which: the result of an earlier attempt of the same app is left alone. [done]
+     * is called, once, when everything the result leads to is over: at once when nothing
+     * follows, or once the files have been handed over anew after a session the system gave
+     * up, see [settle]; a receiver keeps the process alive until then.
      */
     internal fun onSessionResult(
         context: Context,
         repo: String,
         status: Int,
         message: String?,
-        sessionId: Int? = null
+        sessionId: Int? = null,
+        done: () -> Unit = {}
     ) {
         val settlement = settle(repo, status, message, sessionId) {
             InstallService.cancelReady(context, repo)
             forgetPending(context, repo)
-        } ?: return
-        if (settlement.retry) {
-            settlement.attempted?.let { scope.launch { recommit(context.applicationContext, repo, it) } }
+        } ?: return done()
+        val toRecommit = settlement.attempted?.takeIf { settlement.retry }
+        if (toRecommit != null) {
+            scope.launch {
+                try {
+                    recommit(context.applicationContext, repo, toRecommit)
+                } finally {
+                    done()
+                }
+            }
             return
         }
-        settlement.attempted?.keep?.deleteRecursively()
+        settlement.attempted?.keep?.let {
+            keeps.remove(repo, it)
+            it.deleteRecursively()
+        }
         val app = settlement.attempted?.app
         // The system can see a conflict that comparing the certificates here did not.
         if (settlement.state?.reason == FailReason.SIGNATURE_MISMATCH && app != null) {
             InstalledApps.rememberConflict(context, app, settlement.attempted.packageName)
         }
         _installedChanged.update { it + 1 }
+        done()
     }
 
     /**
@@ -949,7 +967,10 @@ object InstallManager {
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for $repo", e)
             committed.remove(repo)
-            attempted.keep?.deleteRecursively()
+            attempted.keep?.let {
+                keeps.remove(repo, it)
+                it.deleteRecursively()
+            }
             setState(repo, InstallState.Failed(FailReason.INSTALL, e.message))
             outcomes.tryEmit(Settled(repo, attempted.attempt, Outcome.FAILED))
         }
@@ -1067,12 +1088,16 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
+        // The files are the session's from here on, see keeps; an attempt's own cleanup, which
+        // may run the moment this returns, leaves them alone.
+        keep?.let { keeps[key] = it }
         committed[key] = Committed(app, packageName, sessionId, attempt, files = files, keep = keep, retried = retried)
         try {
             write(context, installer, sessionId, key, files)
         } catch (e: Exception) {
             // Closing a session keeps what was copied into it; only abandoning frees the space.
             runCatching { installer.abandonSession(sessionId) }
+            keep?.let { keeps.remove(key, it) }
             throw e
         }
     }

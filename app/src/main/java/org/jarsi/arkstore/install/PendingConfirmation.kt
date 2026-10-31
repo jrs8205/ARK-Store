@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.install
 
+import java.io.File
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -58,3 +59,12 @@ internal data class PendingConfirmation(
  */
 internal fun leftoverSessions(alive: Map<Int, Long>, known: Set<Int>, now: Long, minAgeMillis: Long): Set<Int> =
     alive.filter { (id, created) -> id !in known && now - created >= minAgeMillis }.keys
+
+/**
+ * The files in [folder], the download folder, that no attempt of this process [keeps] and
+ * that have not been touched for [minAgeMillis] at [now]: left over from a process that
+ * ended with their sessions unsettled. A file kept is an attempt's own, however long its
+ * session has waited for the user; one written to lately is a download on its way.
+ */
+internal fun leftoverFiles(folder: File, keeps: Collection<File>, now: Long, minAgeMillis: Long): List<File> =
+    folder.listFiles().orEmpty().filter { it !in keeps && now - it.lastModified() >= minAgeMillis }

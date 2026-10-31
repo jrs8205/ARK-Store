@@ -41,12 +41,16 @@ class InstallReceiver : BroadcastReceiver() {
             return
         }
 
+        // A session the system gave up before asking is made anew from the files kept, which
+        // takes a moment; the process is kept alive for it, as nothing else may be running.
+        val pending = goAsync()
         InstallManager.onSessionResult(
             appContext,
             repo,
             status,
             intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE),
-            intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1).takeIf { it >= 0 }
+            intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1).takeIf { it >= 0 },
+            done = { pending.finish() }
         )
     }
 

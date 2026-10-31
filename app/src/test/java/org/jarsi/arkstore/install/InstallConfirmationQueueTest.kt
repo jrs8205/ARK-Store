@@ -223,6 +223,18 @@ class InstallConfirmationQueueTest {
     }
 
     @Test
+    fun aPromptOpenedElsewhereForAnAppNotHereCountsAsPresentedAllTheSame() {
+        // After a restart the queue is empty, yet the notification of the earlier process
+        // opens its prompt: the user sees it, and may read it at length before refusing.
+        val queue = InstallConfirmationQueue<String>()
+        assertNull(queue.hold("owner/gone"))
+        assertNotNull(queue.presentedAt("owner/gone"))
+        assertFalse(queue.holds("owner/gone"))
+        queue.remove("owner/gone")
+        assertNull(queue.presentedAt("owner/gone"))
+    }
+
+    @Test
     fun duplicateCallbacksDoNotOpenASecondPrompt() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/app", "old")
