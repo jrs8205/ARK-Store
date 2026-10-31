@@ -1658,12 +1658,22 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
         self.assertTrue(state["other/app"]["listed"])
 
-    def test_release_without_files_examined_and_left_out_is_not_examined_anew(self):
-        # Nothing can have been replaced, and a file added shows in the count.
+    def test_release_without_files_examined_and_left_out_is_examined_anew_too(self):
+        # The release the check counted the files of need not be the one the examination read:
+        # a full release beyond the window may be the newest published, with files of its own.
         known = self.known(self.NOW - self.HOUR, listed=False, assets=0,
                            examined=self.NOW - (build_index.AUTO_REFRESH_HOURS + 1) * self.HOUR)
-        apps, state, build_app = self.run_auto([self.candidate()], [], state={"other/app": known},
+        apps, state, build_app = self.run_auto([self.candidate()], [self.entry()], state={"other/app": known},
                                                releases={"other/app": (self.RELEASE, 0)})
+        self.assertEqual(build_app.call_count, 1)
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+        self.assertTrue(state["other/app"]["listed"])
+
+    def test_repository_with_nothing_to_install_is_not_examined_anew(self):
+        # Nothing was examined: the check alone said so, and says so again when due.
+        known = self.known(self.NOW - self.HOUR, release="", examined=0)
+        apps, state, build_app = self.run_auto([self.candidate()], [], state={"other/app": known},
+                                               releases={"other/app": ""})
         build_app.assert_not_called()
         self.assertEqual(apps, [])
         self.assertEqual(state, {"other/app": known})

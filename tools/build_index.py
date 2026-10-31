@@ -150,9 +150,10 @@ AUTO_MAX_NOTES = 800
 # A repository that has not been pushed to is still asked about now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
 # later without any push. One checked within AUTO_SETTLE_HOURS of its last push is checked
-# again on every run, any other once in AUTO_RECHECK_HOURS. A listed app is examined anew
-# once in AUTO_REFRESH_HOURS even when its release looks the same, for its download counts,
-# its metadata and any file replaced by one of the same name and size.
+# again on every run, any other once in AUTO_RECHECK_HOURS. A repository examined is examined
+# anew once in AUTO_REFRESH_HOURS even when its release looks the same: a listed app for its
+# download counts, its metadata and any file replaced by one of the same name and size, and
+# one found to have nothing fit to install for a file replaced by one that is.
 AUTO_SETTLE_HOURS = 2
 AUTO_RECHECK_HOURS = 24
 AUTO_REFRESH_HOURS = 7 * 24
@@ -1540,12 +1541,11 @@ def recheck_due(pushed_at, checked_at, today):
 def refresh_due(known, today):
     """Whether what an examination found is old enough to examine the repository anew though
     its release looks the same, see AUTO_REFRESH_HOURS. A listed app is, for its download
-    counts and its metadata; so is a release with files among which nothing was fit to
+    counts and its metadata; so is a repository examined and found to have nothing fit to
     install, as a file may since have been replaced by one of the same name, which the
-    fingerprint does not show. One without files has nothing to replace, and a file added
-    shows in their number; one with nothing to install was not examined at all."""
-    examined = known.listed or (known.release and known.assets != 0)
-    return bool(examined) and today - known.examined_at >= AUTO_REFRESH_HOURS * 3600
+    fingerprint does not show, and the release examined need not even be the one the check
+    counted the files of. One with nothing to install by the check alone was not examined."""
+    return bool(known.listed or known.release) and today - known.examined_at >= AUTO_REFRESH_HOURS * 3600
 
 def guess_category(topics, description):
     """The category the words of a repository's topics and description point to, or None.
