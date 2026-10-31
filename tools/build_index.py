@@ -96,9 +96,11 @@ RAW_ADDRESS = "https://raw.githubusercontent.com"
 # Apps nobody published to the store, found by searching GitHub. They are offered only to
 # users who ask for them. To keep that list fresh and reasonably trustworthy, a repository
 # must have been pushed to within AUTO_PUSHED_DAYS, have at least AUTO_MIN_STARS stars, and
-# its newest full release must be at most AUTO_RELEASE_DAYS old. Together the searches cover
-# every repository with the android topic, every Kotlin repository, and the Java, Dart and
-# other repositories that mention Android in their name, description, topics or README.
+# its newest release, full or a prerelease, must be at most AUTO_RELEASE_DAYS old; a
+# prerelease is offered only to users who ask for beta versions. Forks count, with the same
+# stars: a fork that people star is an app of its own. Together the searches cover every
+# repository with the android topic, every Kotlin repository, and the Java, Dart and other
+# repositories that mention Android in their name, description, topics or README.
 AUTO_QUERIES = (
     "topic:android",
     "topic:android-app -topic:android",
@@ -1342,7 +1344,7 @@ def search_repositories(base, since, budget, found, deadline=None):
     while ranges:
         low, high = ranges.pop()
         stars = ">=%d" % low if high is None else "%d..%d" % (low, high)
-        query = urllib.parse.quote("%s pushed:>=%s archived:false stars:%s" % (base, since, stars))
+        query = urllib.parse.quote("%s pushed:>=%s archived:false fork:true stars:%s" % (base, since, stars))
         splittable = high is None or high > low
         total, whole = search(query, budget, found, whole=not splittable, deadline=deadline)
         if whole:
@@ -1383,25 +1385,33 @@ def release_fingerprint(tag, published_at):
 
 
 def fingerprint_of(app):
-    """The fingerprint of the release an index entry describes."""
-    return release_fingerprint(app.get("tag"), app.get("publishedAt"))
+    """The fingerprint of the releases an index entry describes, see fingerprint: its beta's
+    first, when it has one, then its own."""
+    own = release_fingerprint(app.get("tag"), app.get("publishedAt"))
+    beta = app.get("beta")
+    if beta:
+        return release_fingerprint(beta.get("tag"), beta.get("publishedAt")) + " + " + own
+    return own
 
 
 def fingerprint(repository, not_before):
-    """What the newest full release of a repository looks like: the fingerprint of the most
-    recently published release among those read that is neither a draft nor a prerelease,
-    and how many files it has. build_app takes the first full release of the list GitHub's
-    REST API gives, newest published first; the GraphQL API orders releases only by the date
-    of the commit they were made from, so the GRAPHQL_RELEASES newest by that are read and
-    the most recently published full one among them is taken, which is the same release but
-    for a repository whose newest release was made from an older commit than several others.
-    The fingerprint is "" when there is nothing to install: no full release among the few a
-    repository has, or none published since not_before. That is certain only when the
-    releases read are all the repository has: when as many were read as are asked for, the
-    release to install may lie deeper, as a full release below drafts and prereleases, or a
-    recent one made from an older commit than the old ones read. Such a repository gets a
-    fingerprint marked with "?" from the most recently published release read, so that it is
-    examined whenever that changes, and build_app decides."""
+    """What the releases of a repository that matter look like: the fingerprint of the most
+    recently published release that is neither a draft nor older than not_before, a
+    prerelease or a full one, followed after " + " by the most recently published full
+    release's when the newest is a prerelease and a full release recent enough was read too;
+    and how many files those releases have between them. build_app offers the newest full
+    release and, to users who ask for beta versions, a newer prerelease, or a prerelease
+    alone, so a change in either is a change. GitHub's REST API lists releases newest
+    published first, the GraphQL API only by the date of the commit they were made from, so
+    the GRAPHQL_RELEASES newest by that are read and the most recently published among them
+    taken, which is the same release but for a repository whose newest release was made from
+    an older commit than several others. The fingerprint is "" when there is nothing to
+    install: no release but drafts among the few a repository has, or none published since
+    not_before. That is certain only when the releases read are all the repository has: when
+    as many were read as are asked for, a release to install may lie deeper, published lately
+    from an older commit than the old ones read. Such a repository gets a fingerprint marked
+    with "?" from the most recently published release read, so that it is examined whenever
+    that changes, and build_app decides."""
     nodes = ((repository or {}).get("releases") or {}).get("nodes") or []
 
     def published(release):
@@ -1413,15 +1423,18 @@ def fingerprint(repository, not_before):
         newest = max(nodes, key=published)
         return "? " + release_fingerprint(newest.get("tagName"), newest.get("publishedAt")), None
 
-    full = [release for release in nodes if not release.get("isDraft") and not release.get("isPrerelease")]
-    if not full:
+    recent = [release for release in nodes if not release.get("isDraft") and published(release) >= not_before]
+    if not recent:
         return uncertain()
-    release = max(full, key=published)
-    published_at = parse_time(release.get("publishedAt"))
-    if published_at is None or published_at < not_before:
-        return uncertain()
-    assets = (release.get("releaseAssets") or {}).get("totalCount")
-    return release_fingerprint(release.get("tagName"), release.get("publishedAt")), assets
+    newest = max(recent, key=published)
+    named = [newest]
+    if newest.get("isPrerelease"):
+        full = [release for release in recent if not release.get("isPrerelease")]
+        if full:
+            named.append(max(full, key=published))
+    text = " + ".join(release_fingerprint(release.get("tagName"), release.get("publishedAt")) for release in named)
+    assets = sum((release.get("releaseAssets") or {}).get("totalCount") or 0 for release in named)
+    return text, assets
 
 
 def release_fingerprints(names, not_before, deadline=None):
@@ -1506,9 +1519,10 @@ def read_releases(batch, result, not_before, answers):
     return answered, data.get("rateLimit") or {}
 
 def recent_enough(app, today):
-    """Whether the release an entry describes is at most AUTO_RELEASE_DAYS old."""
-    published = published_at({"published_at": app.get("publishedAt")})
-    return published is not None and today - published <= AUTO_RELEASE_DAYS * 86400
+    """Whether a release an entry describes, its own or its beta's, is at most AUTO_RELEASE_DAYS old."""
+    releases = [app, app.get("beta") or {}]
+    times = [published_at({"published_at": release.get("publishedAt")}) for release in releases]
+    return any(published is not None and today - published <= AUTO_RELEASE_DAYS * 86400 for published in times)
 
 
 Known = collections.namedtuple("Known", "pushed_at examined_at listed release assets checked_at")
@@ -1603,7 +1617,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
         repo for repo in found
         if repo["full_name"] not in published
         and TOPIC not in (repo.get("topics") or [])
-        and listable(repo)
+        and listable(repo, forks=True)
     ]
 
     # Checks go to repositories that have changed first, most starred first, and then to
@@ -1678,14 +1692,14 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
             else:
                 lookups += 1
                 try:
-                    # Beta versions of these apps are never offered, so a prerelease is not
-                    # worth the requests that reading its files takes.
                     app = build_app(
-                        repo, known_apks(previous), not_before=not_before, with_prerelease=False,
+                        repo, known_apks(previous), not_before=not_before, with_prerelease=True,
                         icons=icons, metadata_of=functools.partial(app_metadata, previous=previous),
                     )
                     if app:
                         app["releaseNotes"] = app["releaseNotes"][:AUTO_MAX_NOTES]
+                        if app.get("beta"):
+                            app["beta"]["releaseNotes"] = app["beta"].get("releaseNotes", "")[:AUTO_MAX_NOTES]
                     settled = int(today)
                 except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
                     print("%s: %s" % (full_name, error), file=sys.stderr)
@@ -1724,11 +1738,14 @@ def license_of(repo):
     return spdx if spdx and spdx != "NOASSERTION" else None
 
 
-def listable(repo):
+def listable(repo, forks=False):
+    """Whether a repository may be listed at all: public, not archived and under a recognised
+    license. A fork is not, unless forks are wanted, as they are among the apps found by
+    searching, where the stars tell a fork that is an app of its own from the rest."""
     return (
         not repo.get("private")
         and not repo.get("disabled")
-        and not repo.get("fork")
+        and (forks or not repo.get("fork"))
         and not repo.get("archived")
         and license_of(repo) is not None
     )
@@ -2018,8 +2035,10 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
               metadata_of=None):
     """Returns the index entry of a repository, or None when it has nothing to install.
 
-    With not_before, a repository whose newest full release was published earlier than that
-    is given up on at once, before any of its APKs are examined. With icons, an IconStore,
+    With not_before, a release published earlier than that is not offered, nor are its APKs
+    examined: a repository whose newest full release and newest prerelease are both older is
+    given up on at once, and one whose full release alone is older is described by its
+    prerelease, as if it had nothing else. With icons, an IconStore,
     the icons of the apps are read and kept there. With metadata_of, a function given the
     repository such as app_metadata, the fields it returns are written into the entry, unless None.
 
@@ -2046,15 +2065,19 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
         except urllib.error.HTTPError as error:
             if error.code != 404:
                 raise
-    if not_before is not None:
-        if stable is None or (published_at(stable) or 0) < not_before:
-            return None
     # Releases come newest first, so a prerelease at the top is usually newer than the full
     # release; is_upgrade makes sure.
     newest = releases[0] if releases else None
     prerelease = newest if newest is not None and newest.get("prerelease") else None
     if not with_prerelease:
         prerelease = None
+    if not_before is not None:
+        if stable is not None and (published_at(stable) or 0) < not_before:
+            stable = None
+        if prerelease is not None and (published_at(prerelease) or 0) < not_before:
+            prerelease = None
+        if stable is None and prerelease is None:
+            return None
 
     stable_info = release_info(stable, previous_apks, icons) if stable else None
     beta_info = release_info(prerelease, previous_apks, icons) if prerelease else None
@@ -2140,7 +2163,7 @@ def main():
     icons = IconStore(arguments.icons_dir, arguments.icons_url) if arguments.icons_dir and arguments.icons_url else None
 
     previous_apps = load_previous(arguments.previous, ("apps", "betaApps")) or {}
-    previous_auto = load_previous(arguments.previous_auto, ("autoApps",))
+    previous_auto = load_previous(arguments.previous_auto, ("autoApps", "autoBetaApps"))
     if previous_auto is None:
         # An index built before the list had a file of its own carries it itself.
         previous_auto = load_previous(arguments.previous, ("autoApps",)) or {}
@@ -2212,7 +2235,11 @@ def main():
     write_json(arguments.auto_output, {
         "version": 1,
         "generatedAt": generated_at,
-        "autoApps": auto_apps,
+        "autoApps": [app for app in auto_apps if not app.get("betaOnly")],
+        # Those with nothing but a prerelease, for users who ask for beta versions. Kept
+        # apart so that a version of the store that reads only the list above does not take
+        # a prerelease for a full release.
+        "autoBetaApps": [app for app in auto_apps if app.get("betaOnly")],
     }, ensure_ascii=False)
     if arguments.state:
         write_json(arguments.state, state)
