@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.10.0
+
+- The search for apps on GitHub reaches much further, and takes in forks with stars of their
+  own. The list of automatically found apps grows over the first days as the repositories
+  are gone through
+- With Show beta versions on, the automatically found apps offer their prereleases too, and
+  apps that have nothing but prereleases are listed, marked Beta
+- A download waiting for the go-ahead is kept when the app is closed: the prompt is asked
+  again without a new download, and a prompt left unanswered can be opened again from the
+  app's row
+- An install the system cancels before anyone can answer, as has been seen on Xiaomi phones,
+  is handed over once more by itself, with no new download. If it happens again, the app
+  says so
+- Scrolling the list is smoother with the metal surfaces on
+- The settings end with ways to support the development: GitHub Sponsors, Buy Me a Coffee
+  and PayPal
+
 ## 1.9.0
 
 - Everything from the 1.9.0 betas below: the installed apps backed up to a folder or to one
