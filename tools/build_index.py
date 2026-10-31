@@ -150,6 +150,9 @@ AUTO_REQUESTS_RESERVE = 120
 # them, and the index is published only at the end, so the searches and the examining
 # together stop after this long; the rest waits for the next run.
 AUTO_MAX_SECONDS = 15 * 60
+# Of what the searches leave of that time, the checks may take this share, however long GitHub
+# asks them to wait, so that a run always gets to examine what they found to have changed.
+AUTO_CHECK_SHARE = 0.5
 AUTO_MAX_NOTES = 800
 # A repository that has not been pushed to is still asked about now and then: a release's
 # APKs are often attached a while after the push that tagged it, and files can be replaced
@@ -1461,6 +1464,8 @@ def release_fingerprints(names, not_before, deadline=None):
     with concurrent.futures.ThreadPoolExecutor(GRAPHQL_WORKERS) as pool:
         for start in range(0, len(batches), GRAPHQL_WORKERS):
             if deadline is not None and time.monotonic() >= deadline:
+                print("checking stopped at its share of the time; the rest waits for the next run",
+                      file=sys.stderr)
                 break
             round_ = batches[start:start + GRAPHQL_WORKERS]
             results = list(pool.map(functools.partial(ask_releases, deadline=deadline), round_))
@@ -1651,7 +1656,8 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
         elif recheck_due(known.pushed_at, known.checked_at, today) or refresh_due(known, today):
             due.append((known.checked_at, full_name))
     asked = (changed + [name for _, name in sorted(due)])[:AUTO_MAX_CHECKS]
-    releases = release_fingerprints(asked, not_before, deadline)
+    now = time.monotonic()
+    releases = release_fingerprints(asked, not_before, now + (deadline - now) * AUTO_CHECK_SHARE)
 
     apps = []
     new_state = {}
