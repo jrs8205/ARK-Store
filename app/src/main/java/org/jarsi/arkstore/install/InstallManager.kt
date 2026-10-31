@@ -235,7 +235,7 @@ object InstallManager {
     private val restored = AtomicBoolean(false)
 
     /** How many of the store's screens are showing; there can be one per window. */
-    private val screens = AtomicInteger(0)
+    internal val screens = AtomicInteger(0)
 
     /**
      * What was committed for each repository, kept until the system reports the outcome,
@@ -676,8 +676,8 @@ object InstallManager {
             restorePending(context)
             failStale(context)
         }
-        // A screen in front keeps the process going, and need not wait for the worker's turn.
-        retries.keys.forEach { repo -> scope.launch { retry(context, repo) } }
+        // With a screen in front the service may start, and nothing need wait for the worker's turn.
+        retries.keys.forEach { repo -> startRetry(context, repo, foreground = true) }
     }
 
     /**
@@ -913,9 +913,10 @@ object InstallManager {
     /**
      * Called by [InstallReceiver] once the system has decided on a session, [sessionId] when
      * it says which: the result of an earlier attempt of the same app is left alone. An
-     * install the system gave up before asking is handed over once more, see [settle]: by a
-     * worker, as copying the files can outlast what a receiver is allowed and nothing else
-     * may be keeping the process going, unless a screen is showing, which does that itself.
+     * install the system gave up before asking is handed over once more, see [settle]: not
+     * here, as copying the files can outlast what a receiver is allowed. With a screen showing
+     * it is begun at once, see [startRetry]; otherwise the service may not start, and a worker
+     * sees to it, as nothing else may be keeping the process going.
      */
     internal fun onSessionResult(
         context: Context,
@@ -931,7 +932,7 @@ object InstallManager {
         if (settlement.retry) {
             val appContext = context.applicationContext
             if (screens.get() > 0) {
-                scope.launch { retry(appContext, repo) }
+                startRetry(appContext, repo, foreground = true)
             } else {
                 InstallRetryWorker.enqueue(appContext, repo)
             }
@@ -950,12 +951,30 @@ object InstallManager {
 
     /**
      * Hands over once more the attempt of [repo] whose session the system gave up, when it
-     * has not been done yet, and waits until that is over. It runs apart from the caller, so
-     * that a worker the system stops only stops waiting.
+     * has not been done yet, for a worker, which waits until that is over. It runs apart from
+     * the worker, so that one the system stops only stops waiting.
      */
     internal suspend fun retry(context: Context, repo: String) {
-        val attempted = takeRetry(repo) ?: return
-        scope.launch { recommit(context.applicationContext, repo, attempted) }.join()
+        startRetry(context, repo, foreground = false)?.join()
+    }
+
+    /**
+     * Begins the hand-over of [repo] that [retry] tells of, when it has not been begun yet. It
+     * is a job like any other: [foreground], with a screen showing, starts the service, as for
+     * a download, because the screen may go before the files are copied.
+     */
+    internal fun startRetry(context: Context, repo: String, foreground: Boolean): Job? {
+        val attempted = takeRetry(repo) ?: return null
+        val appContext = context.applicationContext
+        _activeJobs.update { it + 1 }
+        if (foreground) InstallService.start(appContext)
+        return scope.launch {
+            try {
+                recommit(appContext, repo, attempted)
+            } finally {
+                _activeJobs.update { it - 1 }
+            }
+        }
     }
 
     /**

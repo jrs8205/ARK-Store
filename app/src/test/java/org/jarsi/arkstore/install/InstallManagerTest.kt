@@ -1,8 +1,16 @@
 package org.jarsi.arkstore.install
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageInstaller
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -64,6 +72,69 @@ class InstallManagerTest {
         // Whoever comes first takes it: the worker or a screen coming into view.
         assertNotNull(InstallManager.takeRetry(pending.repo))
         assertNull(InstallManager.takeRetry(pending.repo))
+    }
+
+    /** A context that notes the services started and holds a hand-over at its first question until told. */
+    private class HoldingContext : ContextWrapper(null) {
+        val reached = CountDownLatch(1)
+        val go = CountDownLatch(1)
+        val services = AtomicInteger(0)
+
+        override fun getApplicationContext(): Context = this
+
+        override fun startService(service: Intent?): ComponentName? {
+            services.incrementAndGet()
+            return null
+        }
+
+        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences {
+            reached.countDown()
+            go.await()
+            throw IllegalStateException("The hand-over ends here")
+        }
+    }
+
+    /** An attempt of its own that the system gave up, waiting to be handed over once more. */
+    private fun givenUp(repo: String, sessionId: Int): File {
+        val pending = pending(repo, sessionId)
+        val file = aFile()
+        handedOver(pending, file)
+        assertTrue(InstallManager.settle(repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, sessionId) {}!!.retry)
+        return file
+    }
+
+    @Test
+    fun aRetryBegunWithAScreenShowingIsKeptGoingWhenTheScreenGoes() = runBlocking {
+        val file = givenUp("owner/slow", 201)
+        val before = InstallManager.activeJobs.value
+        val context = HoldingContext()
+
+        InstallManager.screens.incrementAndGet()
+        val job = InstallManager.startRetry(context, "owner/slow", foreground = true)!!
+        assertTrue(context.reached.await(10, TimeUnit.SECONDS))
+        InstallManager.onScreenStopped(context)
+
+        // The service stops only when no job is left.
+        assertEquals(1, context.services.get())
+        assertEquals(before + 1, InstallManager.activeJobs.value)
+
+        context.go.countDown()
+        job.join()
+        assertEquals(before, InstallManager.activeJobs.value)
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aRetryOfAWorkerLeavesTheServiceAlone() = runBlocking {
+        givenUp("owner/in-the-background", 202)
+        val context = HoldingContext()
+
+        val job = InstallManager.startRetry(context, "owner/in-the-background", foreground = false)!!
+        assertTrue(context.reached.await(10, TimeUnit.SECONDS))
+        assertEquals(0, context.services.get())
+
+        context.go.countDown()
+        job.join()
     }
 
     @Test
