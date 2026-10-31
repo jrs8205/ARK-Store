@@ -338,5 +338,5 @@
     <string name="restore_data_failed">Die Daten dieser Apps wurden nicht wiederhergestellt: %1$s</string>
     <string name="restore_wrong_password">Das ist nicht das Passwort, mit dem die Daten verschlüsselt wurden.</string>
     <string name="support_title">ARK-Store unterstützen</string>
-    <string name="support_description">ARK-Store ist immer kostenlos und Open Source, und das bleibt auch so. Wenn es dein Smartphone angenehmer macht, kannst du mir einen Kaffee ausgeben oder meine Arbeit sponsern.</string>
+    <string name="support_description">ARK-Store ist immer kostenlos und Open Source, und das bleibt auch so. Wenn ARK-Store die Nutzung deines Smartphones angenehmer macht, kannst du mir einen Kaffee ausgeben oder meine Arbeit sponsern.</string>
 </resources>
