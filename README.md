@@ -156,10 +156,12 @@ The searches cover every repository with the topic `android` or `android-app`, e
 repository written in Kotlin, and repositories written in Java, Dart or other languages that
 mention Android in their name, description, topics or README. A repository qualifies when it
 
-- is public, not a fork or archived, and has a recognised open-source license,
+- is public, not archived, and has a recognised open-source license (a fork counts when it
+  has the stars of its own),
 - has been pushed to within the last 30 days,
 - has at least 20 stars, and
-- has a full release, at most 180 days old, with an APK attached.
+- has a release at most 180 days old with an APK attached. A prerelease is offered only to
+  users with **Show beta versions** on, as with published apps.
 
 The limits are constants at the top of `tools/build_index.py`. A developer who does not want
 an app here can say so in an issue; to be listed for everyone, add the topic `arkstore`.
@@ -176,8 +178,7 @@ What the list does not promise:
 - Categories are guessed from the topics and the description. An app that cannot be placed
   goes under Other.
 
-The list is `auto.json` next to the index, downloaded only while the switch is on. Beta
-versions of these apps are not offered.
+The list is `auto.json` next to the index, downloaded only while the switch is on.
 
 **Found on Codeberg** does the same for Codeberg with lower limits: topic `android` or
 `android-app`, at least 5 stars, active within 30 days, a license recognised from the license

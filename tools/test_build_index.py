@@ -1144,6 +1144,39 @@ class NotBeforeTest(unittest.TestCase):
                 mock.patch.object(build_index, "read_manifest", return_value=("org.example", 1, "1", None)):
             self.assertEqual(build_index.build_app(REPO, {}, not_before=1700000000)["tag"], "v1")
 
+    def test_recent_prerelease_over_an_old_full_release_is_offered_as_beta_only(self):
+        # The old full release is not offered, nor are its files read; the prerelease is,
+        # for users who ask for beta versions.
+        releases = [{"tag_name": "v2-beta", "prerelease": True, "published_at": "2026-09-10T00:00:00Z",
+                     "assets": [asset("b.apk", 2)]},
+                    {"tag_name": "v1", "published_at": "2020-01-01T00:00:00Z", "assets": [asset("a.apk", 1)]}]
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 2, "2", None)) as reader:
+            app = build_index.build_app(REPO, {}, not_before=1700000000)
+        self.assertEqual((app["tag"], app.get("betaOnly")), ("v2-beta", True))
+        self.assertEqual(reader.call_count, 1)
+
+    def test_prerelease_alone_is_offered_as_beta_only_while_recent(self):
+        recent = [{"tag_name": "v2-beta", "prerelease": True, "published_at": "2026-09-10T00:00:00Z",
+                   "assets": [asset("b.apk", 2)]}]
+        with mock.patch.object(build_index, "api", return_value=recent), \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 2, "2", None)):
+            app = build_index.build_app(REPO, {}, not_before=1700000000)
+        self.assertEqual((app["tag"], app.get("betaOnly")), ("v2-beta", True))
+        old = [dict(recent[0], published_at="2020-01-01T00:00:00Z")]
+        with mock.patch.object(build_index, "api", return_value=old), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            self.assertIsNone(build_index.build_app(REPO, {}, not_before=1700000000))
+        reader.assert_not_called()
+
+    def test_prereleases_are_not_looked_at_when_not_wanted(self):
+        releases = [{"tag_name": "v2-beta", "prerelease": True, "published_at": "2026-09-10T00:00:00Z",
+                     "assets": [asset("b.apk", 2)]}]
+        with mock.patch.object(build_index, "api", return_value=releases), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            self.assertIsNone(build_index.build_app(REPO, {}, not_before=1700000000, with_prerelease=False))
+        reader.assert_not_called()
+
 
 def fastlane(*names):
     """Paths of files in a repository's fastlane/metadata/android folder."""
@@ -1512,10 +1545,33 @@ class AutoAppsTest(unittest.TestCase):
         return apps, new_state, build_app
 
     def test_recent_release_is_listed_with_short_notes(self):
-        apps, state, _ = self.run_auto([self.candidate()], [self.entry()])
+        apps, state, build_app = self.run_auto([self.candidate()], [self.entry()])
         self.assertEqual([app["fullName"] for app in apps], ["other/app"])
         self.assertEqual(len(apps[0]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
         self.assertEqual(state, {"other/app": self.known(self.NOW, listed=True)})
+        # Prereleases are looked at too, for users who ask for beta versions.
+        self.assertTrue(build_app.call_args.kwargs["with_prerelease"])
+
+    def test_beta_notes_are_shortened_too(self):
+        beta = {"tag": "v2-beta", "publishedAt": "2026-09-10T00:00:00Z", "releaseNotes": "b" * 5000,
+                "apks": [{"id": 2, "name": "beta.apk", "size": 100}]}
+        apps, _, _ = self.run_auto([self.candidate()], [dict(self.entry(), beta=beta)])
+        self.assertEqual(len(apps[0]["beta"]["releaseNotes"]), build_index.AUTO_MAX_NOTES)
+
+    def test_starred_fork_is_listed(self):
+        apps, _, _ = self.run_auto([dict(self.candidate(), fork=True)], [self.entry()])
+        self.assertEqual([app["fullName"] for app in apps], ["other/app"])
+
+    def test_fork_is_listable_only_where_forks_are_wanted(self):
+        self.assertFalse(build_index.listable(dict(REPO, fork=True)))
+        self.assertTrue(build_index.listable(dict(REPO, fork=True), forks=True))
+        self.assertFalse(build_index.listable(dict(REPO, fork=True, archived=True), forks=True))
+
+    def test_entry_counts_as_recent_while_its_beta_is(self):
+        old = {"publishedAt": "2025-01-01T00:00:00Z"}
+        self.assertFalse(build_index.recent_enough(old, self.NOW))
+        self.assertTrue(build_index.recent_enough(dict(old, beta={"publishedAt": "2026-09-01T00:00:00Z"}), self.NOW))
+        self.assertFalse(build_index.recent_enough(dict(old, beta={"publishedAt": "2025-02-01T00:00:00Z"}), self.NOW))
 
     def test_old_release_is_left_out_but_remembered(self):
         apps, state, _ = self.run_auto([self.candidate()], [self.entry(published="2025-01-01T00:00:00Z")])
@@ -1709,12 +1765,6 @@ class AutoAppsTest(unittest.TestCase):
                               "metadataReader": build_index.METADATA_READER})
         api.assert_not_called()
 
-    def test_prereleases_are_not_looked_at(self):
-        _, _, build_app = self.run_auto([self.candidate()], [self.entry()])
-        self.assertFalse(build_app.call_args.kwargs["with_prerelease"])
-        self.assertEqual(build_app.call_args.kwargs["not_before"],
-                         self.NOW - build_index.AUTO_RELEASE_DAYS * 86400)
-
     def test_changed_repositories_are_asked_about_before_those_merely_due(self):
         limit = build_index.AUTO_MAX_CHECKS
         due = [self.candidate("due/app%d" % i) for i in range(5)]
@@ -1890,7 +1940,7 @@ class SearchTest(unittest.TestCase):
         found, complete, queries = self.search(self.repos(250, 20))
         self.assertEqual((len(found), complete), (250, True))
         self.assertEqual(len(queries), 3)
-        self.assertIn("topic:android pushed:>=2026-09-01 archived:false stars:>=20", queries)
+        self.assertIn("topic:android pushed:>=2026-09-01 archived:false fork:true stars:>=20", queries)
 
     def test_search_that_matches_more_than_github_gives_is_asked_by_ranges_of_stars(self):
         repos = self.repos(900, 25) + self.repos(600, 50) + self.repos(50, 2000)
@@ -1988,11 +2038,20 @@ class FingerprintTest(unittest.TestCase):
         self.assertEqual(build_index.fingerprint(self.node(self.release(assets=3)), self.NOT_BEFORE),
                          ("v1 2026-09-01T00:00:00Z", 3))
 
-    def test_prereleases_and_drafts_above_the_full_release_are_passed_over(self):
-        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", prerelease=True),
+    def test_newest_prerelease_counts_beside_the_full_release_and_drafts_are_passed_over(self):
+        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", assets=2, prerelease=True),
                          self.release("v2-draft", "2026-09-09T00:00:00Z", draft=True),
                          self.release())
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
+                         ("v2-beta 2026-09-10T00:00:00Z + v1 2026-09-01T00:00:00Z", 3))
+        # A prerelease older than the full release changes nothing the full release does not.
+        node = self.node(self.release("v1-rc", "2026-08-20T00:00:00Z", prerelease=True), self.release())
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1 2026-09-01T00:00:00Z", 1))
+
+    def test_full_release_too_old_to_offer_is_left_out_beside_a_recent_prerelease(self):
+        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", assets=2, prerelease=True),
+                         self.release(published="2025-01-01T00:00:00Z"))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v2-beta 2026-09-10T00:00:00Z", 2))
 
     def test_most_recently_published_full_release_is_taken_whatever_its_commit_date(self):
         # GitHub orders by the date of the commit a release was made from, which can put an
@@ -2002,17 +2061,19 @@ class FingerprintTest(unittest.TestCase):
                          self.release("v2.1.4", "2026-10-01T12:35:41Z"))
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v2.1.5 2026-10-22T08:50:13Z", 2))
 
-    def test_no_full_release_among_a_few_is_nothing(self):
-        for repository in (None, {}, {"releases": None}, self.node(),
-                           self.node(self.release(prerelease=True), self.release(draft=True))):
+    def test_no_release_but_drafts_among_a_few_is_nothing(self):
+        for repository in (None, {}, {"releases": None}, self.node(), self.node(self.release(draft=True))):
             self.assertEqual(build_index.fingerprint(repository, self.NOT_BEFORE), ("", None))
 
-    def test_full_release_that_may_lie_deeper_is_marked_so_from_the_newest_published(self):
+    def test_a_prerelease_alone_is_a_release_of_its_own(self):
         count = build_index.GRAPHQL_RELEASES
+        node = self.node(self.release("v1-rc", prerelease=True), self.release(draft=True))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1-rc 2026-09-01T00:00:00Z", 1))
+        # A full window of prereleases: the newest published is the release, whatever lies deeper.
         node = self.node(*[self.release("v%d-rc" % i, "2026-09-%02dT00:00:00Z" % (10 + i), prerelease=True)
                            for i in range(1, count + 1)])
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
-                         ("? v%d-rc 2026-09-%02dT00:00:00Z" % (count, 10 + count), None))
+                         ("v%d-rc 2026-09-%02dT00:00:00Z" % (count, 10 + count), 1))
 
     def test_release_too_old_is_nothing(self):
         node = self.node(self.release(published="2025-01-01T00:00:00Z"))
@@ -2028,11 +2089,23 @@ class FingerprintTest(unittest.TestCase):
         # Fewer than the window holds is the whole list: nothing lies beyond it.
         node = self.node(*[self.release("v%d" % i, "2025-01-%02dT00:00:00Z" % (10 + i)) for i in range(1, count)])
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("", None))
+        # Old prereleases are no more certain.
+        node = self.node(*[self.release("v%d-rc" % i, "2025-01-%02dT00:00:00Z" % (10 + i), prerelease=True)
+                           for i in range(1, count + 1)])
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
+                         ("? v%d-rc 2025-01-%02dT00:00:00Z" % (count, 10 + count), None))
 
     def test_fingerprint_of_an_entry_matches_the_one_github_gives(self):
         entry = {"tag": "v1", "publishedAt": "2026-09-01T00:00:00Z", "apks": [{"id": 1}]}
         self.assertEqual(build_index.fingerprint_of(entry),
                          build_index.fingerprint(self.node(self.release()), self.NOT_BEFORE)[0])
+        beta = {"tag": "v2-beta", "publishedAt": "2026-09-10T00:00:00Z", "apks": [{"id": 2}]}
+        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", prerelease=True), self.release())
+        self.assertEqual(build_index.fingerprint_of(dict(entry, beta=beta)),
+                         build_index.fingerprint(node, self.NOT_BEFORE)[0])
+        only = {"tag": "v2-beta", "publishedAt": "2026-09-10T00:00:00Z", "apks": [{"id": 2}], "betaOnly": True}
+        node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", prerelease=True))
+        self.assertEqual(build_index.fingerprint_of(only), build_index.fingerprint(node, self.NOT_BEFORE)[0])
 
 
 class ReleaseFingerprintsTest(unittest.TestCase):
@@ -2225,6 +2298,18 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("autoApps", index)
         self.assertEqual([app["fullName"] for app in auto["autoApps"]], ["other/app"])
         self.assertEqual(auto["generatedAt"], index["generatedAt"])
+
+    FOUND_BETA = {"fullName": "other/beta", "tag": "v2-beta", "publishedAt": "2026-09-10T00:00:00Z",
+                  "releaseNotes": "", "apks": [{"id": 11}], "stars": 1, "topics": [], "betaOnly": True}
+
+    def test_beta_only_automatic_apps_go_under_a_key_of_their_own(self):
+        # An older app reads only "autoApps", and must not take a prerelease for a full release.
+        candidates = [self.candidate(), dict(self.candidate(), full_name="other/beta",
+                                             html_url="https://github.com/other/beta")]
+        _, auto = self.run_main({"apps": [self.KNOWN]}, candidates,
+                                previous_auto={"autoApps": [self.FOUND], "autoBetaApps": [self.FOUND_BETA]})
+        self.assertEqual([app["fullName"] for app in auto["autoApps"]], ["other/app"])
+        self.assertEqual([app["fullName"] for app in auto["autoBetaApps"]], ["other/beta"])
 
     def test_metadata_of_a_published_app_is_looked_up_once_per_push(self):
         asked = []
