@@ -2043,7 +2043,7 @@ class FingerprintTest(unittest.TestCase):
                          self.release("v2-draft", "2026-09-09T00:00:00Z", draft=True),
                          self.release())
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
-                         ("v2-beta 2026-09-10T00:00:00Z + v1 2026-09-01T00:00:00Z", 3))
+                         ("v2-beta 2026-09-10T00:00:00Z pre + v1 2026-09-01T00:00:00Z", 3))
         # A prerelease older than the full release changes nothing the full release does not.
         node = self.node(self.release("v1-rc", "2026-08-20T00:00:00Z", prerelease=True), self.release())
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1 2026-09-01T00:00:00Z", 1))
@@ -2051,7 +2051,14 @@ class FingerprintTest(unittest.TestCase):
     def test_full_release_too_old_to_offer_is_left_out_beside_a_recent_prerelease(self):
         node = self.node(self.release("v2-beta", "2026-09-10T00:00:00Z", assets=2, prerelease=True),
                          self.release(published="2025-01-01T00:00:00Z"))
-        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v2-beta 2026-09-10T00:00:00Z", 2))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v2-beta 2026-09-10T00:00:00Z pre", 2))
+
+    def test_the_kind_of_a_release_is_part_of_its_fingerprint(self):
+        # A release re-marked from prerelease to full, or back, with the same tag, date and
+        # files is a change: it moves between the users who see it.
+        full = self.node(self.release("v1", "2026-09-01T00:00:00Z"))
+        pre = self.node(self.release("v1", "2026-09-01T00:00:00Z", prerelease=True))
+        self.assertNotEqual(build_index.fingerprint(full, self.NOT_BEFORE), build_index.fingerprint(pre, self.NOT_BEFORE))
 
     def test_most_recently_published_full_release_is_taken_whatever_its_commit_date(self):
         # GitHub orders by the date of the commit a release was made from, which can put an
@@ -2068,12 +2075,12 @@ class FingerprintTest(unittest.TestCase):
     def test_a_prerelease_alone_is_a_release_of_its_own(self):
         count = build_index.GRAPHQL_RELEASES
         node = self.node(self.release("v1-rc", prerelease=True), self.release(draft=True))
-        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1-rc 2026-09-01T00:00:00Z", 1))
+        self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE), ("v1-rc 2026-09-01T00:00:00Z pre", 1))
         # A full window of prereleases: the newest published is the release, whatever lies deeper.
         node = self.node(*[self.release("v%d-rc" % i, "2026-09-%02dT00:00:00Z" % (10 + i), prerelease=True)
                            for i in range(1, count + 1)])
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
-                         ("v%d-rc 2026-09-%02dT00:00:00Z" % (count, 10 + count), 1))
+                         ("v%d-rc 2026-09-%02dT00:00:00Z pre" % (count, 10 + count), 1))
 
     def test_release_too_old_is_nothing(self):
         node = self.node(self.release(published="2025-01-01T00:00:00Z"))
@@ -2093,7 +2100,7 @@ class FingerprintTest(unittest.TestCase):
         node = self.node(*[self.release("v%d-rc" % i, "2025-01-%02dT00:00:00Z" % (10 + i), prerelease=True)
                            for i in range(1, count + 1)])
         self.assertEqual(build_index.fingerprint(node, self.NOT_BEFORE),
-                         ("? v%d-rc 2025-01-%02dT00:00:00Z" % (count, 10 + count), None))
+                         ("? v%d-rc 2025-01-%02dT00:00:00Z pre" % (count, 10 + count), None))
 
     def test_fingerprint_of_an_entry_matches_the_one_github_gives(self):
         entry = {"tag": "v1", "publishedAt": "2026-09-01T00:00:00Z", "apks": [{"id": 1}]}

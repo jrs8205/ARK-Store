@@ -1379,18 +1379,19 @@ def discover_candidates(today, deadline=None):
     return sorted(found.values(), key=lambda repo: -repo.get("stargazers_count", 0))
 
 
-def release_fingerprint(tag, published_at):
-    """A text that changes with a release's tag and date of publication."""
-    return "%s %s" % (tag, published_at or "")
+def release_fingerprint(tag, published_at, prerelease=False):
+    """A text that changes with a release's tag, its date of publication and whether it is a
+    prerelease: one re-marked as full, or as a prerelease, moves between the users who see it."""
+    return "%s %s%s" % (tag, published_at or "", " pre" if prerelease else "")
 
 
 def fingerprint_of(app):
     """The fingerprint of the releases an index entry describes, see fingerprint: its beta's
-    first, when it has one, then its own."""
-    own = release_fingerprint(app.get("tag"), app.get("publishedAt"))
+    first, when it has one, then its own, a prerelease when the entry is a beta-only one."""
+    own = release_fingerprint(app.get("tag"), app.get("publishedAt"), bool(app.get("betaOnly")))
     beta = app.get("beta")
     if beta:
-        return release_fingerprint(beta.get("tag"), beta.get("publishedAt")) + " + " + own
+        return release_fingerprint(beta.get("tag"), beta.get("publishedAt"), True) + " + " + own
     return own
 
 
@@ -1417,11 +1418,13 @@ def fingerprint(repository, not_before):
     def published(release):
         return parse_time(release.get("publishedAt")) or 0
 
+    def text_of(release):
+        return release_fingerprint(release.get("tagName"), release.get("publishedAt"), bool(release.get("isPrerelease")))
+
     def uncertain():
         if len(nodes) < GRAPHQL_RELEASES:
             return "", None
-        newest = max(nodes, key=published)
-        return "? " + release_fingerprint(newest.get("tagName"), newest.get("publishedAt")), None
+        return "? " + text_of(max(nodes, key=published)), None
 
     recent = [release for release in nodes if not release.get("isDraft") and published(release) >= not_before]
     if not recent:
@@ -1432,7 +1435,7 @@ def fingerprint(repository, not_before):
         full = [release for release in recent if not release.get("isPrerelease")]
         if full:
             named.append(max(full, key=published))
-    text = " + ".join(release_fingerprint(release.get("tagName"), release.get("publishedAt")) for release in named)
+    text = " + ".join(text_of(release) for release in named)
     assets = sum((release.get("releaseAssets") or {}).get("totalCount") or 0 for release in named)
     return text, assets
 
