@@ -2168,6 +2168,37 @@ class ReleaseFingerprintsTest(unittest.TestCase):
             answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
         self.assertEqual((graphql.call_count, len(answers)), (2, 3))
 
+    @staticmethod
+    def refusal(retry_after=None):
+        headers = {"Retry-After": retry_after} if retry_after else {}
+        return urllib.error.HTTPError("https://api.github.com/graphql", 403, "Forbidden", headers, None)
+
+    def test_refused_query_waits_the_pause_github_asks_for_and_is_asked_again(self):
+        names = ["o/r%d" % i for i in range(3)]
+        with mock.patch.object(build_index, "graphql", side_effect=[self.refusal("7"), self.answer(3)]),                 mock.patch.object(build_index.time, "sleep") as sleep:
+            answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
+        sleep.assert_called_once_with(7)
+        self.assertEqual(len(answers), 3)
+
+    def test_refused_query_without_a_pause_waits_a_minute(self):
+        names = ["o/r%d" % i for i in range(3)]
+        with mock.patch.object(build_index, "graphql", side_effect=[self.refusal(), self.answer(3)]),                 mock.patch.object(build_index.time, "sleep") as sleep:
+            answers = build_index.release_fingerprints(names, self.NOT_BEFORE)
+        sleep.assert_called_once_with(60)
+        self.assertEqual(len(answers), 3)
+
+    def test_pause_after_a_refusal_ends_at_the_deadline(self):
+        names = ["o/r%d" % i for i in range(3)]
+        with mock.patch.object(build_index, "graphql", side_effect=[self.refusal("45"), self.answer(3)]),                 mock.patch.object(build_index.time, "sleep") as sleep,                 mock.patch.object(build_index.time, "monotonic", return_value=1000.0):
+            build_index.release_fingerprints(names, self.NOT_BEFORE, deadline=1020.0)
+        sleep.assert_called_once_with(20.0)
+
+    def test_query_refused_twice_ends_the_checking(self):
+        names = ["o/r%d" % i for i in range(self.ROUND + 50)]
+        with mock.patch.object(build_index, "graphql", side_effect=self.refusal("7")) as graphql,                 mock.patch.object(build_index.time, "sleep"):
+            self.assertEqual(build_index.release_fingerprints(names, self.NOT_BEFORE), {})
+        self.assertEqual(graphql.call_count, 2 * build_index.GRAPHQL_WORKERS)
+
     def test_answer_without_data_ends_the_checking(self):
         names = ["o/r%d" % i for i in range(self.ROUND + 50)]
         refused = {"errors": [{"type": "RATE_LIMITED", "message": "API rate limit exceeded"}]}
