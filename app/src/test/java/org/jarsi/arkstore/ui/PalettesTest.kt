@@ -128,6 +128,24 @@ class PalettesTest {
     }
 
     @Test
+    fun anOutlineKeepsItsContrastOnAPlateDrawnAsMetal() {
+        // WCAG 1.4.11: the edge of a button at 3:1 against what it lies on, at the end of the
+        // shader's range nearest to the outline. The support buttons lie on such a plate.
+        val failures = mutableListOf<String>()
+        for (palette in Palette.entries.filter { it != Palette.WALLPAPER }) {
+            val tones = TonalPalettes.of(palette)
+            for (dark in listOf(false, true)) {
+                for (black in listOf(false, true)) {
+                    val scheme = Palettes.colorScheme(palette, tones, dark = dark, black = black)
+                    val ratio = contrast(scheme.outline, Surfaces.underText(scheme.surfaceContainerHigh))
+                    if (ratio < 3.0) failures += "$palette dark=$dark black=$black: ${"%.2f".format(ratio)}:1"
+                }
+            }
+        }
+        assertTrue(failures.joinToString("\n"), failures.isEmpty())
+    }
+
+    @Test
     fun textKeepsItsContrastOnTheSurfacesDrawnAsMetal() {
         // With materials on, the shader lights and shades a surface under its text, within the
         // limits Surfaces holds it to. A text must read at 7:1 against its surface at the end

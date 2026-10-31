@@ -1526,12 +1526,18 @@ internal fun StoreButton(
     }
 }
 
-/** An outlined button; raised metal of the surface's colour when materials are on. */
+/**
+ * An outlined button; raised metal of the surface's colour when materials are on. On metal the
+ * bevel alone marks its edge. [strongOutline] draws the edge in a colour that reads at 3:1 against
+ * a plate of the button's own colour, with or without metal: the bevel does not show there, and
+ * the usual outline is too faint for it.
+ */
 @Composable
 internal fun StoreOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    strongOutline: Boolean = false,
     content: @Composable RowScope.() -> Unit
 ) {
     val metal = LocalMaterial.current
@@ -1539,7 +1545,11 @@ internal fun StoreOutlinedButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = enabled),
+        border = when {
+            strongOutline -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            metal -> null
+            else -> ButtonDefaults.outlinedButtonBorder(enabled = enabled)
+        },
         contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
     ) {
         ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
