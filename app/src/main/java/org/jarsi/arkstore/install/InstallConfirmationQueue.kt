@@ -25,6 +25,8 @@ internal class InstallConfirmationQueue<T> {
     private val parked = linkedMapOf<String, T>()
     private var active: InstallConfirmation<T>? = null
     private var presentations = 0
+    /** When the confirmation of each app being presented or parked was presented, see [presentedAt]. */
+    private val presented = hashMapOf<String, Long>()
     private val _next = MutableStateFlow<InstallConfirmation<T>?>(null)
     val next = _next.asStateFlow()
     private val _unanswered = MutableStateFlow<Set<String>>(emptySet())
@@ -63,6 +65,7 @@ internal class InstallConfirmationQueue<T> {
         val value = waiting.remove(repo) ?: parked.remove(repo) ?: return null
         if (active != null) {
             parked[repo] = value
+            presented[repo] = System.currentTimeMillis()
             publish()
             return null
         }
@@ -74,6 +77,13 @@ internal class InstallConfirmationQueue<T> {
     /** The number of the latest presentation; each [take] or [hold] that presents a confirmation begins a new one. */
     @Synchronized
     fun presentation(): Int = presentations
+
+    /**
+     * When the confirmation of [repo] was presented, in [System.currentTimeMillis], while it is
+     * being presented or is parked since; null while it waits to be presented, or is not here.
+     */
+    @Synchronized
+    fun presentedAt(repo: String): Long? = presented[repo]
 
     /** The confirmations nobody has presented yet, oldest first. */
     @Synchronized
@@ -102,6 +112,7 @@ internal class InstallConfirmationQueue<T> {
     fun remove(repo: String) {
         waiting.remove(repo)
         parked.remove(repo)
+        presented.remove(repo)
         if (active?.repo == repo) active = null
         publish()
     }
@@ -128,6 +139,7 @@ internal class InstallConfirmationQueue<T> {
     @Synchronized
     fun resume(repo: String): Boolean {
         val value = parked.remove(repo) ?: return false
+        presented.remove(repo)
         val rest = LinkedHashMap(waiting)
         waiting.clear()
         waiting[repo] = value
@@ -139,6 +151,7 @@ internal class InstallConfirmationQueue<T> {
     private fun present(repo: String, value: T) {
         active = InstallConfirmation(repo, value)
         presentations++
+        presented[repo] = System.currentTimeMillis()
     }
 
     private fun publish() {

@@ -28,6 +28,18 @@ class InstallManagerTest {
     }
 
     @Test
+    fun anAbortBeforeThePromptCouldBeAnsweredIsTheSystemsNotTheUsers() {
+        val now = 1_000_000L
+        // Nothing was presented: the system gave up on its own.
+        assertTrue(abortedBySystem(presentedAt = null, now = now, graceMillis = 1500))
+        // Presented a moment ago: nobody could have read and refused it yet.
+        assertTrue(abortedBySystem(presentedAt = now - 1499, now = now, graceMillis = 1500))
+        // Presented long enough ago: the user refused.
+        assertFalse(abortedBySystem(presentedAt = now - 1500, now = now, graceMillis = 1500))
+        assertFalse(abortedBySystem(presentedAt = now - 60_000, now = now, graceMillis = 1500))
+    }
+
+    @Test
     fun aRestoredConfirmationIsAskedAgainUnderItsSessionUntilItsResultComes() {
         val pending = pending("owner/restored", 71)
         assertTrue(InstallManager.restore(pending, Intent()))

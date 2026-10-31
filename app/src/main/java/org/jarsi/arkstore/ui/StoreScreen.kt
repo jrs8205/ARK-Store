@@ -958,6 +958,7 @@ private fun FailureRow(
                     FailReason.INVALID_APK -> R.string.fail_invalid_apk
                     FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
                     FailReason.INSTALL -> R.string.fail_install
+                    FailReason.ABORTED -> R.string.fail_aborted
                 }
             ),
             style = MaterialTheme.typography.bodyMedium,

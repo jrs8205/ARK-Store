@@ -30,6 +30,7 @@
     <string name="fail_invalid_apk">İndirilen dosya geçerli bir uygulama paketi değil.</string>
     <string name="fail_signature">Yüklü uygulama farklı bir anahtarla imzalandığı için doğrudan güncellenemiyor. Önce uygulamayı kaldırıp ardından yeniden yükleyin. Bu işlem uygulamanın verilerini siler.</string>
     <string name="fail_install">Yükleme başarısız oldu.</string>
+    <string name="fail_aborted">Sistem, size soramadan kurulumu iptal etti. Yeniden denemek için Tekrar dene’ye dokunun.</string>
 
     <string name="detail_latest">En son sürüm</string>
     <string name="detail_installed">Yüklü</string>

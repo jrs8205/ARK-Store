@@ -34,6 +34,7 @@
     <string name="fail_invalid_apk">The downloaded file is not a valid app package.</string>
     <string name="fail_signature">The installed app is signed with a different key, so it cannot be updated in place. Uninstall it first and then install it again. This removes the app\'s data.</string>
     <string name="fail_install">The installation failed.</string>
+    <string name="fail_aborted">The system cancelled the installation before it could ask you. Tap Try again to try once more.</string>
 
     <string name="detail_latest">Latest version</string>
     <string name="detail_installed">Installed</string>

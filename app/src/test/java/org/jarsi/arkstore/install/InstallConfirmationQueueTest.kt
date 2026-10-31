@@ -194,6 +194,35 @@ class InstallConfirmationQueueTest {
     }
 
     @Test
+    fun tellsWhenTheConfirmationOfAnAppWasPresented() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.enqueue("owner/second", "second")
+        queue.enqueue("owner/third", "third")
+        // Waiting is not presented; nor is one that is not here.
+        assertNull(queue.presentedAt("owner/first"))
+        assertNull(queue.presentedAt("owner/none"))
+
+        val before = System.currentTimeMillis()
+        queue.take()
+        val presented = queue.presentedAt("owner/first")
+        assertNotNull(presented)
+        assertTrue(presented!! >= before)
+        assertNull(queue.presentedAt("owner/second"))
+        // Held over another, it is presented too, and parked.
+        assertNull(queue.hold("owner/third"))
+        assertNotNull(queue.presentedAt("owner/third"))
+        // Parked, it stays presented, from the time it was.
+        queue.park("owner/first", queue.presentation())
+        assertEquals(presented, queue.presentedAt("owner/first"))
+        // Asked for again, it waits to be presented anew; settled, it is gone.
+        assertTrue(queue.resume("owner/first"))
+        assertNull(queue.presentedAt("owner/first"))
+        queue.remove("owner/third")
+        assertNull(queue.presentedAt("owner/third"))
+    }
+
+    @Test
     fun duplicateCallbacksDoNotOpenASecondPrompt() {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/app", "old")

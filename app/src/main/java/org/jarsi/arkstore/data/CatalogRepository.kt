@@ -533,15 +533,27 @@ class CatalogRepository private constructor(context: Context) {
         }
         return try {
             val root = text?.let(::JSONObject) ?: index
-            objects(root, "autoApps").associate { app ->
+            // "autoApps" have a full release and possibly a newer prerelease under "beta";
+            // "autoBetaApps" have nothing but a prerelease.
+            val stable = objects(root, "autoApps").associate { app ->
                 app.getString("fullName") to Entry(
                     stamp = app.optString("pushedAt"),
                     fetchedAt = now,
                     app = indexedApp(app, app, auto = true),
-                    beta = null,
+                    beta = app.optJSONObject("beta")?.let { indexedApp(app, it, prerelease = true, auto = true) },
                     discovered = true
                 )
             }
+            val betaOnly = objects(root, "autoBetaApps").associate { app ->
+                app.getString("fullName") to Entry(
+                    stamp = app.optString("pushedAt"),
+                    fetchedAt = now,
+                    app = null,
+                    beta = indexedApp(app, app, prerelease = true, auto = true),
+                    discovered = true
+                )
+            }
+            betaOnly + stable
         } catch (e: JSONException) {
             Log.w(TAG, "List of automatically found apps unreadable", e)
             emptyMap()

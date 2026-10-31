@@ -29,6 +29,7 @@
     <string name="fail_invalid_apk">ダウンロードしたファイルは有効なアプリパッケージではありません。</string>
     <string name="fail_signature">インストール済みのアプリは別の署名鍵で署名されているため、上書きして更新することはできません。一度アンインストールしてから、もう一度インストールしてください。アンインストールすると、アプリのデータは削除されます。</string>
     <string name="fail_install">インストールに失敗しました。</string>
+    <string name="fail_aborted">確認を求める前にシステムがインストールをキャンセルしました。「再試行」をタップしてもう一度お試しください。</string>
 
     <string name="detail_latest">最新バージョン</string>
     <string name="detail_installed">インストール済み</string>

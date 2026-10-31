@@ -30,6 +30,7 @@
     <string name="fail_invalid_apk">डाउनलोड की गई फ़ाइल कोई मान्य ऐप पैकेज नहीं है।</string>
     <string name="fail_signature">इंस्टॉल किया गया ऐप किसी दूसरी कुंजी से साइन किया गया है, इसलिए उसे सीधे अपडेट नहीं किया जा सकता। पहले उसे अनइंस्टॉल करें और फिर दोबारा इंस्टॉल करें। ऐसा करने पर ऐप का डेटा मिट जाएगा।</string>
     <string name="fail_install">इंस्टॉल नहीं हो सका।</string>
+    <string name="fail_aborted">सिस्टम ने आपसे पूछने से पहले ही इंस्टॉल रद्द कर दिया। एक बार फिर कोशिश करने के लिए फिर से कोशिश करें पर टैप करें।</string>
 
     <string name="detail_latest">सबसे नया वर्शन</string>
     <string name="detail_installed">इंस्टॉल किया गया</string>

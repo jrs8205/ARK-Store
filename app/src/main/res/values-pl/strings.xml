@@ -32,6 +32,7 @@
     <string name="fail_invalid_apk">Pobrany plik nie jest prawidłowym pakietem aplikacji.</string>
     <string name="fail_signature">Zainstalowana aplikacja jest podpisana innym kluczem, więc nie można jej zaktualizować bezpośrednio. Najpierw ją odinstaluj, a potem zainstaluj ponownie. Spowoduje to usunięcie danych aplikacji.</string>
     <string name="fail_install">Instalacja nie powiodła się.</string>
+    <string name="fail_aborted">System anulował instalację, zanim zdążył zapytać o zgodę. Stuknij Spróbuj ponownie, aby powtórzyć.</string>
 
     <string name="detail_latest">Najnowsza wersja</string>
     <string name="detail_installed">Zainstalowana</string>

@@ -55,7 +55,11 @@ sealed interface InstallState {
     data class Failed(val reason: FailReason, val detail: String? = null) : InstallState
 }
 
-enum class FailReason { DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL }
+enum class FailReason {
+    DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL,
+    /** The system gave the install up before the user could answer, and not for the first time; see [abortedBySystem]. */
+    ABORTED
+}
 
 /** How an install that was waited for came out. */
 enum class Outcome { INSTALLED, CONFIRMATION_NEEDED, FAILED, CANCELLED }
@@ -138,6 +142,16 @@ internal data class Settled(val repo: String, val attempt: Int, val outcome: Out
 internal fun isAttempt(job: InstallJob?, attempt: Int?): Boolean =
     job != null && (attempt == null || job.id == attempt)
 
+/**
+ * Whether an install the system reports as aborted was given up by the system itself rather
+ * than refused by the user: no prompt was [presentedAt] all for the user to answer, or one
+ * was presented less than [graceMillis] before [now], too short a time to read it and refuse.
+ * Some devices give up the first session this way and ask only on the next, which the user
+ * saw as a download that led nowhere until tried again.
+ */
+internal fun abortedBySystem(presentedAt: Long?, now: Long, graceMillis: Long): Boolean =
+    presentedAt == null || now - presentedAt < graceMillis
+
 /** The step of a download that has [read] bytes of [total], or of [fallback] when the response did not say. */
 internal const val UNKNOWN_STEP = -1
 /** The step before any was reported; no download reports it, so the first is always a change. */
@@ -186,6 +200,10 @@ object InstallManager {
      * seconds for most apps; a prompt that the user left open or put aside reports nothing.
      */
     private const val PROMPT_GRACE_MS = 20 * 1000L
+    /** A prompt presented this shortly before the system gave the install up was never answered, see [abortedBySystem]. */
+    private const val INSTANT_ABORT_MS = 1500L
+    /** A file in the download folder untouched this long belongs to no attempt of any process that lives. */
+    private const val LEFTOVER_FILE_AGE_MS = 60 * 60 * 1000L
     /** Where the confirmations the system waits for are written down, see [restorePending]. */
     private const val PREFS_PENDING = "pending_installs"
     /** A session made this recently may be one this process is still writing down. */
@@ -229,7 +247,13 @@ object InstallManager {
         val sessionId: Int,
         val attempt: Int,
         /** Made through `pm` as root: the system reports nothing of it, the command's own verdict settles it. */
-        val root: Boolean = false
+        val root: Boolean = false,
+        /** The files handed over, each under its name in the session, kept in [keep] until the session settles. */
+        val files: List<Pair<String, File>>? = null,
+        /** The file, or the directory of files, deleted once the session has settled. */
+        val keep: File? = null,
+        /** Handed over once more already, after the system gave up the first session before asking. */
+        val retried: Boolean = false
     )
 
     private val committed = ConcurrentHashMap<String, Committed>()
@@ -345,8 +369,12 @@ object InstallManager {
         // when a cancel comes before the job's first turn and the body never runs. The
         // reservation is given up last: only then may a new attempt begin.
         install.onSettled { cancelled ->
-            // Once committed, the session holds its own copy of the files.
-            target.deleteRecursively()
+            // The files of an attempt committed are kept until its session settles, see
+            // settle: should the system give the session up before asking, they are handed
+            // over once more. Any other attempt is done with them.
+            if (committed[key]?.let { it.attempt == install.id && it.keep != null } != true) {
+                target.deleteRecursively()
+            }
             jobs.remove(key, install)
             _activeJobs.update { it - 1 }
             if (cancelled) {
@@ -507,7 +535,7 @@ object InstallManager {
         // first refuses this.
         install.handOver()
         try {
-            commit(appContext, key, null, packageName, files.map { it.name to it }, install.id)
+            commit(appContext, key, null, packageName, files.map { it.name to it }, install.id, keep = files.first().parentFile)
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for $key", e)
             committed.remove(key)
@@ -618,7 +646,7 @@ object InstallManager {
         setState(app.fullName, InstallState.Installing)
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         try {
-            commit(appContext, app.fullName, app, archive.packageName, listOf("base.apk" to target), install.id)
+            commit(appContext, app.fullName, app, archive.packageName, listOf("base.apk" to target), install.id, keep = target)
         } catch (e: Exception) {
             Log.w(TAG, "Install session failed for ${app.fullName}", e)
             committed.remove(app.fullName)
@@ -652,6 +680,10 @@ object InstallManager {
         if (!restored.compareAndSet(false, true)) return
         val installer = context.packageManager.packageInstaller
         val now = System.currentTimeMillis()
+        // Files of attempts of a process that ended with their sessions unsettled.
+        File(context.cacheDir, "apk").listFiles()
+            ?.filter { now - it.lastModified() >= LEFTOVER_FILE_AGE_MS }
+            ?.forEach { it.deleteRecursively() }
         val sessions = try {
             installer.mySessions.associate {
                 it.sessionId to when {
@@ -881,6 +913,11 @@ object InstallManager {
             InstallService.cancelReady(context, repo)
             forgetPending(context, repo)
         } ?: return
+        if (settlement.retry) {
+            settlement.attempted?.let { scope.launch { recommit(context.applicationContext, repo, it) } }
+            return
+        }
+        settlement.attempted?.keep?.deleteRecursively()
         val app = settlement.attempted?.app
         // The system can see a conflict that comparing the certificates here did not.
         if (settlement.state?.reason == FailReason.SIGNATURE_MISMATCH && app != null) {
@@ -889,8 +926,34 @@ object InstallManager {
         _installedChanged.update { it + 1 }
     }
 
-    /** What [settle] took: the attempt that was committed, if any, and the failure it left, if any. */
-    internal class Settlement(val attempted: Committed?, val state: InstallState.Failed?)
+    /**
+     * What [settle] took: the attempt that was committed, if any, and the failure it left, if
+     * any; or, with [retry], an attempt whose session the system gave up before asking, which
+     * is to be handed over once more and is not settled.
+     */
+    internal class Settlement(val attempted: Committed?, val state: InstallState.Failed?, val retry: Boolean = false)
+
+    /**
+     * Hands the files of [attempted], an attempt of [repo] whose session the system gave up
+     * before the user could answer, over once more, under the same attempt: its state stays
+     * installing throughout, and whoever waits for it goes on waiting. A second such session
+     * is settled as a failure the user can read about, see [FailReason.ABORTED].
+     */
+    private suspend fun recommit(context: Context, repo: String, attempted: Committed) {
+        Log.i(TAG, "The system gave up the install of $repo before asking; handing the files over once more")
+        try {
+            commit(
+                context, repo, attempted.app, attempted.packageName, checkNotNull(attempted.files), attempted.attempt,
+                keep = attempted.keep, retried = true
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Install session failed for $repo", e)
+            committed.remove(repo)
+            attempted.keep?.deleteRecursively()
+            setState(repo, InstallState.Failed(FailReason.INSTALL, e.message))
+            outcomes.tryEmit(Settled(repo, attempted.attempt, Outcome.FAILED))
+        }
+    }
 
     /**
      * Settles the attempt of [repo] by the result the system gave for the session [sessionId]
@@ -900,6 +963,11 @@ object InstallManager {
      * lock: a new attempt begun the moment the app is free leaves a record and a notification
      * of its own, which the old attempt's cleanup must not take. The result of an earlier
      * attempt, or of one settled already, is left alone: then null, and no cleanup.
+     *
+     * An install the system reports as aborted was refused by the user, which is no failure
+     * worth showing, unless nobody could have answered yet, see [abortedBySystem]: then the
+     * files are handed over once more when they are still here, and the state is not
+     * settled; a second time, or without the files, the failure is shown and explained.
      */
     internal fun settle(repo: String, status: Int, message: String?, sessionId: Int?, cleanup: () -> Unit): Settlement? =
         synchronized(settling) {
@@ -916,12 +984,18 @@ object InstallManager {
                 return null
             }
             sessionId?.let { settledSessions += it }
+            val bySystem = status == PackageInstaller.STATUS_FAILURE_ABORTED &&
+                abortedBySystem(confirmations.presentedAt(repo), System.currentTimeMillis(), INSTANT_ABORT_MS)
             confirmations.remove(repo)
             cleanup()
+            if (bySystem && attempted?.files != null && !attempted.retried) {
+                return Settlement(attempted, null, retry = true)
+            }
             val (state, outcome) = when (status) {
                 PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
                 // The user backed out of the system prompt; that is not an error worth showing.
-                PackageInstaller.STATUS_FAILURE_ABORTED -> null to Outcome.FAILED
+                PackageInstaller.STATUS_FAILURE_ABORTED ->
+                    (if (bySystem) InstallState.Failed(FailReason.ABORTED) else null) to Outcome.FAILED
                 PackageInstaller.STATUS_FAILURE_CONFLICT,
                 PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
                     InstallState.Failed(conflictReason(message), message) to Outcome.FAILED
@@ -966,7 +1040,9 @@ object InstallManager {
      * file as "base.apk", and the splits of a bundle under their own names, so that an app
      * installed in parts is restored in parts. With root turned on, the session is made
      * through `pm` as root instead, which asks the user nothing; when root cannot be had just
-     * now, the ordinary session is made after all.
+     * now, the ordinary session is made after all. [keep] is the file or directory the files
+     * are in, kept until the session settles, see [settle]; [retried] says this is the second
+     * session of the attempt.
      */
     private suspend fun commit(
         context: Context,
@@ -974,7 +1050,9 @@ object InstallManager {
         app: StoreApp?,
         packageName: String,
         files: List<Pair<String, File>>,
-        attempt: Int
+        attempt: Int,
+        keep: File? = null,
+        retried: Boolean = false
     ) {
         if (Root.enabled(context) && commitAsRoot(context, key, app, packageName, files, attempt)) return
         val installer = context.packageManager.packageInstaller
@@ -989,7 +1067,7 @@ object InstallManager {
         }
 
         val sessionId = installer.createSession(params)
-        committed[key] = Committed(app, packageName, sessionId, attempt)
+        committed[key] = Committed(app, packageName, sessionId, attempt, files = files, keep = keep, retried = retried)
         try {
             write(context, installer, sessionId, key, files)
         } catch (e: Exception) {
