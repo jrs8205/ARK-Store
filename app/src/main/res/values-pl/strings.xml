@@ -32,6 +32,7 @@
     <string name="fail_invalid_apk">Pobrany plik nie jest prawidłowym pakietem aplikacji.</string>
     <string name="fail_signature">Zainstalowana aplikacja jest podpisana innym kluczem, więc nie można jej zaktualizować bezpośrednio. Najpierw ją odinstaluj, a potem zainstaluj ponownie. Spowoduje to usunięcie danych aplikacji.</string>
     <string name="fail_install">Instalacja nie powiodła się.</string>
+    <string name="fail_aborted">System anulował instalację, zanim zdążył zapytać o zgodę. Stuknij Spróbuj ponownie, aby powtórzyć.</string>
 
     <string name="detail_latest">Najnowsza wersja</string>
     <string name="detail_installed">Zainstalowana</string>
@@ -165,7 +166,6 @@
     <string name="newer_installed_note">Zainstalowana jest nowsza wersja beta. Zastąpi ją następna wersja stabilna.</string>
     <string name="stable_title">Powrót do wersji stabilnej</string>
     <string name="stable_description">Zainstalowana jest nowsza wersja beta tej aplikacji. Następna wersja stabilna zastąpi ją automatycznie. Aby wrócić od razu, odinstaluj aplikację i zainstaluj ją ponownie ze sklepu. Odinstalowanie usuwa dane aplikacji.</string>
-    <string name="stable_description_store">Zainstalowana jest nowsza wersja beta ARK-Store. Następna wersja stabilna zastąpi ją automatycznie. Aby wrócić od razu, odinstaluj ARK-Store i zainstaluj wersję stabilną z jego strony na GitHubie.</string>
     <string name="action_return_to_stable">Odinstaluj wersję beta</string>
     <string name="stable_confirm_title">Odinstalować wersję beta?</string>
     <string name="stable_confirm_message">Aplikacja i jej dane zostaną usunięte. Następnie zainstaluj wersję stabilną z listy.</string>
@@ -359,4 +359,6 @@
     <string name="backup_data_failed">Nie zapisano danych tych aplikacji: %1$s</string>
     <string name="restore_data_failed">Nie przywrócono danych tych aplikacji: %1$s</string>
     <string name="restore_wrong_password">To nie jest hasło, którym zaszyfrowano dane.</string>
+    <string name="support_title">Wesprzyj ARK-Store</string>
+    <string name="support_description">ARK-Store jest zawsze bezpłatny i ma otwarty kod źródłowy, i tak już zostanie. Jeśli dzięki niemu korzystanie z telefonu jest przyjemniejsze, możesz postawić mi kawę lub sponsorować moją pracę.</string>
 </resources>

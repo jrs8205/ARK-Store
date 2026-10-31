@@ -30,16 +30,17 @@ class MainActivity : ComponentActivity() {
         registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     /**
-     * Whose prompt is open, and of which session, so that its closing can be told to the
-     * confirmations; kept across a recreation of the activity, which the result survives.
+     * Whose prompt is open, and in which presentation of the confirmations, so that its
+     * closing can be told to them; kept across a recreation of the activity, which the
+     * result survives.
      */
     private var promptedRepo: String? = null
-    private var promptedSession: Int = -1
+    private var promptedPresentation: Int = -1
 
     private val installConfirmation =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             // PackageInstaller reports the installation outcome through InstallReceiver.
-            promptedRepo?.let { InstallManager.onPromptClosed(it, promptedSession) }
+            promptedRepo?.let { InstallManager.onPromptClosed(it, promptedPresentation) }
             promptedRepo = null
         }
 
@@ -47,7 +48,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         promptedRepo = savedInstanceState?.getString(STATE_PROMPTED_REPO)
-        promptedSession = savedInstanceState?.getInt(STATE_PROMPTED_SESSION, -1) ?: -1
+        promptedPresentation = savedInstanceState?.getInt(STATE_PROMPTED_PRESENTATION, -1) ?: -1
         // The chosen theme's background from the first frame on, instead of the window's own.
         window.setBackgroundDrawable(windowBackground(this).toDrawable())
         setContent {
@@ -62,7 +63,7 @@ class MainActivity : ComponentActivity() {
                     InstallService.cancelReady(this@MainActivity, confirmation.repo)
                     try {
                         promptedRepo = confirmation.repo
-                        promptedSession = confirmation.value.sessionId
+                        promptedPresentation = InstallManager.confirmations.presentation()
                         installConfirmation.launch(confirmation.value.prompt)
                     } catch (e: Exception) {
                         Log.w("MainActivity", "Could not show the install prompt", e)
@@ -90,7 +91,7 @@ class MainActivity : ComponentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_PROMPTED_REPO, promptedRepo)
-        outState.putInt(STATE_PROMPTED_SESSION, promptedSession)
+        outState.putInt(STATE_PROMPTED_PRESENTATION, promptedPresentation)
     }
 
     override fun onStart() {
@@ -101,6 +102,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onResume()
+        InstallManager.onScreenResumed(promptedRepo)
     }
 
     override fun onStop() {
@@ -110,7 +112,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val STATE_PROMPTED_REPO = "prompted_repo"
-        private const val STATE_PROMPTED_SESSION = "prompted_session"
+        private const val STATE_PROMPTED_PRESENTATION = "prompted_presentation"
 
         /**
          * The intent with which a notification brings the store forward. It is the launcher's

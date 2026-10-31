@@ -29,6 +29,7 @@
     <string name="fail_invalid_apk">下载的文件不是有效的应用安装包。</string>
     <string name="fail_signature">已安装的应用使用了不同的签名密钥，因此无法直接更新。请先卸载该应用，然后重新安装。这会删除该应用的数据。</string>
     <string name="fail_install">安装失败。</string>
+    <string name="fail_aborted">系统在询问您之前取消了安装。点按“重试”再试一次。</string>
 
     <string name="detail_latest">最新版本</string>
     <string name="detail_installed">已安装版本</string>
@@ -144,7 +145,6 @@
     <string name="newer_installed_note">已安装较新的测试版。下一个稳定版会替换它。</string>
     <string name="stable_title">换回稳定版</string>
     <string name="stable_description">此应用已安装较新的测试版。下一个稳定版会自动替换它。如果想现在就换回，请卸载该应用，然后从商店重新安装。卸载会删除该应用的数据。</string>
-    <string name="stable_description_store">已安装较新的 ARK-Store 测试版。下一个稳定版会自动替换它。如果想现在就换回，请卸载 ARK-Store，然后从其 GitHub 页面安装稳定版。</string>
     <string name="action_return_to_stable">卸载测试版</string>
     <string name="stable_confirm_title">要卸载测试版吗？</string>
     <string name="stable_confirm_message">该应用及其数据将被删除。之后，请从列表中安装稳定版。</string>
@@ -326,4 +326,6 @@
     <string name="backup_data_failed">以下应用的数据未能保存：%1$s</string>
     <string name="restore_data_failed">以下应用的数据未能恢复：%1$s</string>
     <string name="restore_wrong_password">此密码与加密数据时使用的密码不一致。</string>
+    <string name="support_title">支持 ARK-Store</string>
+    <string name="support_description">ARK-Store 始终免费且开源，今后也不会改变。如果它让您的手机用起来更顺手，欢迎请我喝杯咖啡，或赞助我的工作。</string>
 </resources>

@@ -29,6 +29,7 @@
     <string name="fail_invalid_apk">다운로드한 파일이 올바른 앱 패키지가 아닙니다.</string>
     <string name="fail_signature">설치된 앱이 다른 서명 키를 사용하므로 기존 앱을 바로 업데이트할 수 없습니다. 먼저 앱을 제거한 후 다시 설치하세요. 제거하면 앱 데이터가 삭제됩니다.</string>
     <string name="fail_install">설치하지 못했습니다.</string>
+    <string name="fail_aborted">시스템이 확인을 요청하기 전에 설치를 취소했습니다. 다시 시도를 탭하여 한 번 더 시도하세요.</string>
 
     <string name="detail_latest">최신 버전</string>
     <string name="detail_installed">설치된 버전</string>
@@ -144,7 +145,6 @@
     <string name="newer_installed_note">더 새로운 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 대체됩니다.</string>
     <string name="stable_title">정식 버전으로 돌아가기</string>
     <string name="stable_description">이 앱의 더 새로운 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 자동으로 대체됩니다. 지금 되돌리려면 앱을 제거한 후 스토어에서 다시 설치하세요. 제거하면 앱 데이터가 삭제됩니다.</string>
-    <string name="stable_description_store">더 새로운 ARK-Store 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 자동으로 대체됩니다. 지금 되돌리려면 ARK-Store를 제거한 후 GitHub 페이지에서 정식 버전을 설치하세요.</string>
     <string name="action_return_to_stable">베타 버전 제거</string>
     <string name="stable_confirm_title">베타 버전을 제거할까요?</string>
     <string name="stable_confirm_message">앱과 앱 데이터가 삭제됩니다. 그런 다음 목록에서 정식 버전을 설치하세요.</string>
@@ -326,4 +326,6 @@
     <string name="backup_data_failed">다음 앱의 데이터를 저장하지 못했습니다: %1$s</string>
     <string name="restore_data_failed">다음 앱의 데이터를 복원하지 못했습니다: %1$s</string>
     <string name="restore_wrong_password">데이터를 암호화할 때 사용한 비밀번호가 아닙니다.</string>
+    <string name="support_title">ARK-Store 후원하기</string>
+    <string name="support_description">ARK-Store는 언제나 무료 오픈 소스이며 앞으로도 변함없습니다. 휴대전화를 더 편하게 쓰는 데 도움이 되었다면 커피 한 잔을 사 주시거나 제 작업을 후원해 주세요.</string>
 </resources>

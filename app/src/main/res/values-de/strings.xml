@@ -30,6 +30,7 @@
     <string name="fail_invalid_apk">Die heruntergeladene Datei ist kein gültiges App-Paket.</string>
     <string name="fail_signature">Die installierte App ist mit einem anderen Schlüssel signiert und lässt sich daher nicht direkt aktualisieren. Deinstalliere sie zuerst und installiere sie dann neu. Dabei werden die Daten der App gelöscht.</string>
     <string name="fail_install">Die Installation ist fehlgeschlagen.</string>
+    <string name="fail_aborted">Das System hat die Installation abgebrochen, bevor es nachfragen konnte. Tippe auf Wiederholen, um es erneut zu versuchen.</string>
 
     <string name="detail_latest">Neueste Version</string>
     <string name="detail_installed">Installiert</string>
@@ -151,7 +152,6 @@
     <string name="newer_installed_note">Eine neuere Betaversion ist installiert. Die nächste stabile Version ersetzt sie.</string>
     <string name="stable_title">Zurück zur stabilen Version</string>
     <string name="stable_description">Von dieser App ist eine neuere Betaversion installiert. Die nächste stabile Version ersetzt sie automatisch. Wenn du sofort zurückwechseln möchtest, deinstalliere die App und installiere sie über den Store neu. Beim Deinstallieren werden die Daten der App gelöscht.</string>
-    <string name="stable_description_store">Von ARK-Store ist eine neuere Betaversion installiert. Die nächste stabile Version ersetzt sie automatisch. Wenn du sofort zurückwechseln möchtest, deinstalliere ARK-Store und installiere die stabile Version von der GitHub-Seite des Projekts.</string>
     <string name="action_return_to_stable">Betaversion deinstallieren</string>
     <string name="stable_confirm_title">Betaversion deinstallieren?</string>
     <string name="stable_confirm_message">Die App und ihre Daten werden entfernt. Installiere danach die stabile Version aus der Liste.</string>
@@ -337,4 +337,6 @@
     <string name="backup_data_failed">Die Daten dieser Apps wurden nicht gesichert: %1$s</string>
     <string name="restore_data_failed">Die Daten dieser Apps wurden nicht wiederhergestellt: %1$s</string>
     <string name="restore_wrong_password">Das ist nicht das Passwort, mit dem die Daten verschlüsselt wurden.</string>
+    <string name="support_title">ARK-Store unterstützen</string>
+    <string name="support_description">ARK-Store ist immer kostenlos und Open Source, und das bleibt auch so. Wenn ARK-Store die Nutzung deines Smartphones angenehmer macht, kannst du mir einen Kaffee ausgeben oder meine Arbeit sponsern.</string>
 </resources>

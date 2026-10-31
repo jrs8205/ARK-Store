@@ -30,6 +30,7 @@
     <string name="fail_invalid_apk">डाउनलोड की गई फ़ाइल कोई मान्य ऐप पैकेज नहीं है।</string>
     <string name="fail_signature">इंस्टॉल किया गया ऐप किसी दूसरी कुंजी से साइन किया गया है, इसलिए उसे सीधे अपडेट नहीं किया जा सकता। पहले उसे अनइंस्टॉल करें और फिर दोबारा इंस्टॉल करें। ऐसा करने पर ऐप का डेटा मिट जाएगा।</string>
     <string name="fail_install">इंस्टॉल नहीं हो सका।</string>
+    <string name="fail_aborted">सिस्टम ने आपसे पूछने से पहले ही इंस्टॉल रद्द कर दिया। एक बार फिर कोशिश करने के लिए फिर से कोशिश करें पर टैप करें।</string>
 
     <string name="detail_latest">सबसे नया वर्शन</string>
     <string name="detail_installed">इंस्टॉल किया गया</string>
@@ -151,7 +152,6 @@
     <string name="newer_installed_note">एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन उसकी जगह ले लेगा।</string>
     <string name="stable_title">स्थिर वर्शन पर वापस जाएं</string>
     <string name="stable_description">इस ऐप का एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन अपने-आप उसकी जगह ले लेगा। अभी वापस जाने के लिए, ऐप को अनइंस्टॉल करें और स्टोर से फिर से इंस्टॉल करें। अनइंस्टॉल करने पर ऐप का डेटा मिट जाता है।</string>
-    <string name="stable_description_store">ARK-Store का एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन अपने-आप उसकी जगह ले लेगा। अभी वापस जाने के लिए, ARK-Store को अनइंस्टॉल करें और उसके GitHub पेज से स्थिर वर्शन इंस्टॉल करें।</string>
     <string name="action_return_to_stable">बीटा अनइंस्टॉल करें</string>
     <string name="stable_confirm_title">बीटा अनइंस्टॉल करें?</string>
     <string name="stable_confirm_message">ऐप और उसका डेटा हटा दिया जाएगा। इसके बाद, सूची से स्थिर वर्शन इंस्टॉल करें।</string>
@@ -337,4 +337,6 @@
     <string name="backup_data_failed">इन ऐप का डेटा सेव नहीं हुआ: %1$s</string>
     <string name="restore_data_failed">इन ऐप का डेटा वापस नहीं लाया जा सका: %1$s</string>
     <string name="restore_wrong_password">यह वह पासवर्ड नहीं है, जिससे डेटा एन्क्रिप्ट किया गया था।</string>
+    <string name="support_title">ARK-Store का समर्थन करें</string>
+    <string name="support_description">ARK-Store हमेशा मुफ़्त और ओपन सोर्स है, और ऐसा ही रहेगा। अगर इससे आपका फ़ोन इस्तेमाल करना ज़्यादा सुखद हो गया है, तो आप मुझे एक कॉफ़ी पिला सकते हैं या मेरे काम को स्पॉन्सर कर सकते हैं।</string>
 </resources>

@@ -31,6 +31,7 @@
     <string name="fail_invalid_apk">Le fichier téléchargé n\'est pas un package d\'application valide.</string>
     <string name="fail_signature">L\'application installée est signée avec une autre clé ; elle ne peut donc pas être mise à jour directement. Désinstallez-la d\'abord, puis réinstallez-la. Cette opération supprime les données de l\'application.</string>
     <string name="fail_install">Échec de l\'installation.</string>
+    <string name="fail_aborted">Le système a annulé l’installation avant de pouvoir vous demander confirmation. Touchez Réessayer pour recommencer.</string>
 
     <string name="detail_latest">Dernière version</string>
     <string name="detail_installed">Version installée</string>
@@ -158,7 +159,6 @@
     <string name="newer_installed_note">Une bêta plus récente est installée. La prochaine version stable la remplacera.</string>
     <string name="stable_title">Revenir à la version stable</string>
     <string name="stable_description">Une bêta plus récente de cette application est installée. La prochaine version stable la remplacera automatiquement. Pour revenir en arrière dès maintenant, désinstallez l\'application, puis réinstallez-la depuis la boutique. La désinstallation supprime les données de l\'application.</string>
-    <string name="stable_description_store">Une bêta plus récente d\'ARK-Store est installée. La prochaine version stable la remplacera automatiquement. Pour revenir en arrière dès maintenant, désinstallez ARK-Store, puis installez la version stable depuis sa page GitHub.</string>
     <string name="action_return_to_stable">Désinstaller la bêta</string>
     <string name="stable_confirm_title">Désinstaller la bêta ?</string>
     <string name="stable_confirm_message">L\'application et ses données vont être supprimées. Installez ensuite la version stable depuis la liste.</string>
@@ -348,4 +348,6 @@
     <string name="backup_data_failed">Les données de ces applications n\'ont pas été enregistrées : %1$s</string>
     <string name="restore_data_failed">Les données de ces applications n\'ont pas été restaurées : %1$s</string>
     <string name="restore_wrong_password">Ce n\'est pas le mot de passe avec lequel les données ont été chiffrées.</string>
+    <string name="support_title">Soutenir ARK-Store</string>
+    <string name="support_description">ARK-Store est gratuit et open source, et le restera toujours. S\'il rend votre téléphone plus agréable à utiliser, vous pouvez m\'offrir un café ou sponsoriser mon travail.</string>
 </resources>

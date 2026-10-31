@@ -101,6 +101,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -169,6 +171,7 @@ import org.jarsi.arkstore.work.UpdateCheckWorker
 fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
+    val awaiting by InstallManager.awaitingUser.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
     val updatePolicy by viewModel.updatePolicy.collectAsStateWithLifecycle()
@@ -498,6 +501,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "updates",
                         rows = updates,
                         installs = installs,
+                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -524,6 +528,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "installed",
                         rows = installed,
                         installs = installs,
+                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -533,6 +538,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "available",
                         rows = available,
                         installs = installs,
+                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -702,6 +708,7 @@ private fun LazyListScope.section(
     key: String,
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
+    awaiting: Set<String>,
     bookmarked: Set<String>,
     viewModel: StoreViewModel,
     onSelect: (String) -> Unit,
@@ -713,8 +720,10 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
+            awaiting = row.app.fullName in awaiting,
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
+            onResume = { viewModel.resumeInstall(row.app.fullName) },
             onCancel = { viewModel.cancelInstall(row.app.fullName) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -775,8 +784,11 @@ private fun ErrorBanner(error: LoadError) {
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
+    /** The install waits for the user's go-ahead, which the prompt did not get; see [InstallManager.awaitingUser]. */
+    awaiting: Boolean,
     bookmarked: Boolean,
     onInstall: () -> Unit,
+    onResume: () -> Unit,
     onCancel: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -797,10 +809,21 @@ private fun AppCard(
         // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
         border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         // A metal plate casts a shadow; it is drawn here, outside the clip that bounds the
-        // touch feedback, where the card's own elevation shadow would be clipped away.
+        // touch feedback, where the card's own elevation shadow would be clipped away. The
+        // metal itself is a shader run for every pixel: an offscreen layer keeps the card
+        // drawn as an image, so that a scroll moves the image rather than running the shader
+        // for every card on every frame, which dropped frames on a phone.
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (metal) Modifier.shadow(6.dp, CardDefaults.shape) else Modifier)
+            .then(
+                if (metal) {
+                    Modifier
+                        .shadow(6.dp, CardDefaults.shape)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                } else {
+                    Modifier
+                }
+            )
             .clip(CardDefaults.shape)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
@@ -841,6 +864,21 @@ private fun AppCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 when (install) {
+                    // The system holds the files and waits for the user: the button asks again,
+                    // under the same name as before, and nothing is downloaded anew.
+                    InstallState.Installing if awaiting -> StoreButton(
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                            onResume()
+                        }
+                    ) {
+                        Text(
+                            stringResource(
+                                if (row.status == AppStatus.UPDATE_AVAILABLE) R.string.action_update
+                                else R.string.action_install
+                            )
+                        )
+                    }
                     InstallState.Queued, is InstallState.Downloading, InstallState.Installing ->
                         Progress(ringOf(install), onCancel)
                     else -> when (row.status) {
@@ -933,6 +971,7 @@ private fun FailureRow(
                     FailReason.INVALID_APK -> R.string.fail_invalid_apk
                     FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
                     FailReason.INSTALL -> R.string.fail_install
+                    FailReason.ABORTED -> R.string.fail_aborted
                 }
             ),
             style = MaterialTheme.typography.bodyMedium,
@@ -1325,9 +1364,12 @@ private fun DetailsSheet(
                 Text(stringResource(R.string.action_offer_updates))
             }
         }
-        // Not for another app under this name: its version says nothing about a beta.
-        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
-            ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
+        // Not for another app under this name: its version says nothing about a beta. Nor for
+        // the store, which makes no betas of its own and would be removing itself.
+        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP &&
+            app.packageName != context.packageName
+        ) {
+            ReturnToStable(app.packageName)
         }
     }
 }
@@ -1337,7 +1379,7 @@ private fun DetailsSheet(
  * install an older version over a newer one, so the way back is to remove the app first.
  */
 @Composable
-private fun ReturnToStable(packageName: String, isStore: Boolean) {
+private fun ReturnToStable(packageName: String) {
     val context = LocalContext.current
     var confirming by rememberSaveable { mutableStateOf(false) }
 
@@ -1349,15 +1391,11 @@ private fun ReturnToStable(packageName: String, isStore: Boolean) {
             .semantics { heading() }
     )
     Text(
-        text = stringResource(
-            if (isStore) R.string.stable_description_store else R.string.stable_description
-        ),
+        text = stringResource(R.string.stable_description),
         style = MaterialTheme.typography.bodyMedium
     )
-    if (!isStore) {
-        StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
-            Text(stringResource(R.string.action_return_to_stable))
-        }
+    StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+        Text(stringResource(R.string.action_return_to_stable))
     }
 
     if (confirming) {
@@ -1488,12 +1526,18 @@ internal fun StoreButton(
     }
 }
 
-/** An outlined button; raised metal of the surface's colour when materials are on. */
+/**
+ * An outlined button; raised metal of the surface's colour when materials are on. On metal the
+ * bevel alone marks its edge. [strongOutline] draws the edge in a colour that reads at 3:1 against
+ * a plate of the button's own colour, with or without metal: the bevel does not show there, and
+ * the usual outline is too faint for it.
+ */
 @Composable
 internal fun StoreOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    strongOutline: Boolean = false,
     content: @Composable RowScope.() -> Unit
 ) {
     val metal = LocalMaterial.current
@@ -1501,7 +1545,11 @@ internal fun StoreOutlinedButton(
         onClick = onClick,
         modifier = modifier,
         enabled = enabled,
-        border = if (metal) null else ButtonDefaults.outlinedButtonBorder(enabled = enabled),
+        border = when {
+            strongOutline -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            metal -> null
+            else -> ButtonDefaults.outlinedButtonBorder(enabled = enabled)
+        },
         contentPadding = if (metal) PaddingValues(0.dp) else ButtonDefaults.ContentPadding
     ) {
         ButtonFace(MaterialTheme.colorScheme.surfaceContainerHigh, metal, content)
@@ -2057,7 +2105,7 @@ private fun formatDateTime(millis: Long): String? = if (millis <= 0) null else r
         .format(Instant.ofEpochMilli(millis))
 }.getOrNull()
 
-private fun openUrl(context: Context, url: String) {
+internal fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
 }
 

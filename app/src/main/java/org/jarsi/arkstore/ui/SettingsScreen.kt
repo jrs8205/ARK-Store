@@ -7,10 +7,12 @@ import android.text.format.DateUtils
 import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -25,6 +27,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,7 +47,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -194,12 +201,82 @@ internal fun SettingsScreen(
         NotificationSetting()
         TransferSettings(viewModel)
         AppBackupSettings(onBackup, onRestore)
+        SupportSettings()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 24.dp)
         )
+    }
+}
+
+/** Where the store's development can be supported, under the services' own names in every language. */
+private val supportLinks = listOf(
+    "GitHub Sponsors" to "https://github.com/sponsors/jrs8205",
+    "Buy Me a Coffee" to "https://buymeacoffee.com/jrs8205",
+    "PayPal" to "https://www.paypal.me/JarsiS"
+)
+
+@Composable
+private fun SupportSettings() {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    val metal = LocalMaterial.current
+    val surface = MaterialTheme.colorScheme.surfaceContainerHigh
+    // A plate of its own, as this is no setting. It is built as a card of the list is: polished
+    // rather than brushed, and kept as an image so that scrolling does not run the shader anew.
+    Card(
+        colors = CardDefaults.cardColors(containerColor = surface),
+        border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .fillMaxWidth()
+            .then(
+                if (metal) {
+                    Modifier
+                        .shadow(6.dp, CardDefaults.shape)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .material(surface, Relief.RAISED, radius = 12.dp, grain = 0.2f)
+                .padding(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.support_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.semantics { heading() }
+            )
+            Text(
+                text = stringResource(R.string.support_description),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 12.dp)
+            ) {
+                supportLinks.forEach { (name, url) ->
+                    StoreOutlinedButton(
+                        strongOutline = true,
+                        onClick = {
+                            haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                            openUrl(context, url)
+                        }
+                    ) {
+                        Text(name)
+                    }
+                }
+            }
+        }
     }
 }
 

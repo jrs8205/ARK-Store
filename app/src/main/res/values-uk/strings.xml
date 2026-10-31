@@ -32,6 +32,7 @@
     <string name="fail_invalid_apk">Завантажений файл не є дійсним пакетом додатка.</string>
     <string name="fail_signature">Установлений додаток підписано іншим ключем, тому його не можна оновити без перевстановлення. Спершу видаліть додаток, а потім знову встановіть його. Разом із додатком буде видалено його дані.</string>
     <string name="fail_install">Не вдалося встановити додаток.</string>
+    <string name="fail_aborted">Система скасувала встановлення, не встигнувши запитати підтвердження. Натисніть «Повторити», щоб спробувати знову.</string>
 
     <string name="detail_latest">Остання версія</string>
     <string name="detail_installed">Установлено</string>
@@ -165,7 +166,6 @@
     <string name="newer_installed_note">Установлено новішу бета-версію. Наступна стабільна версія замінить її.</string>
     <string name="stable_title">Повернення до стабільної версії</string>
     <string name="stable_description">Установлено новішу бета-версію цього додатка. Наступна стабільна версія замінить її автоматично. Щоб повернутися зараз, видаліть додаток і знову встановіть його з магазину. Разом із додатком буде видалено його дані.</string>
-    <string name="stable_description_store">Установлено новішу бета-версію ARK-Store. Наступна стабільна версія замінить її автоматично. Щоб повернутися зараз, видаліть ARK-Store і встановіть стабільну версію з його сторінки на GitHub.</string>
     <string name="action_return_to_stable">Видалити бета-версію</string>
     <string name="stable_confirm_title">Видалити бета-версію?</string>
     <string name="stable_confirm_message">Додаток і його дані буде видалено. Після цього встановіть стабільну версію зі списку.</string>
@@ -359,4 +359,6 @@
     <string name="backup_data_failed">Не вдалося зберегти дані цих додатків: %1$s</string>
     <string name="restore_data_failed">Не вдалося відновити дані цих додатків: %1$s</string>
     <string name="restore_wrong_password">Це не той пароль, яким було зашифровано дані.</string>
+    <string name="support_title">Підтримати ARK-Store</string>
+    <string name="support_description">ARK-Store — безкоштовний додаток із відкритим кодом, і таким він залишиться завжди. Якщо з ним вашим телефоном приємніше користуватися, можете пригостити мене кавою або спонсорувати мою роботу.</string>
 </resources>

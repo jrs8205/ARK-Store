@@ -31,6 +31,7 @@
     <string name="fail_invalid_apk">Il file scaricato non è un pacchetto app valido.</string>
     <string name="fail_signature">L\'app installata è firmata con una chiave diversa, quindi non può essere aggiornata direttamente. Disinstallala e poi installala di nuovo. In questo modo i dati dell\'app vengono eliminati.</string>
     <string name="fail_install">Installazione non riuscita.</string>
+    <string name="fail_aborted">Il sistema ha annullato l’installazione prima di poterti chiedere conferma. Tocca Riprova per riprovare.</string>
 
     <string name="detail_latest">Ultima versione</string>
     <string name="detail_installed">Installata</string>
@@ -158,7 +159,6 @@
     <string name="newer_installed_note">È installata una beta più recente. La prossima versione stabile la sostituirà.</string>
     <string name="stable_title">Torna alla versione stabile</string>
     <string name="stable_description">Di questa app è installata una beta più recente. La prossima versione stabile la sostituirà automaticamente. Per tornare indietro subito, disinstalla l\'app e installala di nuovo dallo store. La disinstallazione elimina i dati dell\'app.</string>
-    <string name="stable_description_store">Di ARK-Store è installata una beta più recente. La prossima versione stabile la sostituirà automaticamente. Per tornare indietro subito, disinstalla ARK-Store e installa la versione stabile dalla sua pagina GitHub.</string>
     <string name="action_return_to_stable">Disinstalla la beta</string>
     <string name="stable_confirm_title">Disinstallare la beta?</string>
     <string name="stable_confirm_message">L\'app e i suoi dati verranno rimossi. Poi installa la versione stabile dall\'elenco.</string>
@@ -348,4 +348,6 @@
     <string name="backup_data_failed">I dati di queste app non sono stati salvati: %1$s</string>
     <string name="restore_data_failed">I dati di queste app non sono stati ripristinati: %1$s</string>
     <string name="restore_wrong_password">La password non corrisponde a quella usata per crittografare i dati.</string>
+    <string name="support_title">Sostieni ARK-Store</string>
+    <string name="support_description">ARK-Store è gratuito e open source, e lo resterà sempre. Se rende il tuo telefono più piacevole da usare, puoi offrirmi un caffè o sponsorizzare il mio lavoro.</string>
 </resources>

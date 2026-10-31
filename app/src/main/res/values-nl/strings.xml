@@ -30,6 +30,7 @@
     <string name="fail_invalid_apk">Het gedownloade bestand is geen geldig app-pakket.</string>
     <string name="fail_signature">De geïnstalleerde app is ondertekend met een andere sleutel en kan daarom niet direct worden geüpdatet. Verwijder de app eerst en installeer deze daarna opnieuw. Daarbij worden de gegevens van de app verwijderd.</string>
     <string name="fail_install">De installatie is mislukt.</string>
+    <string name="fail_aborted">Het systeem heeft de installatie geannuleerd voordat het om toestemming kon vragen. Tik op Opnieuw proberen om het nog eens te proberen.</string>
 
     <string name="detail_latest">Nieuwste versie</string>
     <string name="detail_installed">Geïnstalleerd</string>
@@ -151,7 +152,6 @@
     <string name="newer_installed_note">Er is een nieuwere bèta geïnstalleerd. De volgende stabiele versie vervangt deze.</string>
     <string name="stable_title">Terug naar de stabiele versie</string>
     <string name="stable_description">Er is een nieuwere bèta van deze app geïnstalleerd. De volgende stabiele versie vervangt deze vanzelf. Wil je nu al terug, verwijder de app dan en installeer deze opnieuw via de store. Daarbij worden de gegevens van de app verwijderd.</string>
-    <string name="stable_description_store">Er is een nieuwere bèta van ARK-Store geïnstalleerd. De volgende stabiele versie vervangt deze vanzelf. Wil je nu al terug, verwijder ARK-Store dan en installeer de stabiele versie via de GitHub-pagina.</string>
     <string name="action_return_to_stable">Bèta verwijderen</string>
     <string name="stable_confirm_title">Bèta verwijderen?</string>
     <string name="stable_confirm_message">De app en de bijbehorende gegevens worden verwijderd. Installeer daarna de stabiele versie via de lijst.</string>
@@ -337,4 +337,6 @@
     <string name="backup_data_failed">De gegevens van deze apps zijn niet opgeslagen: %1$s</string>
     <string name="restore_data_failed">De gegevens van deze apps zijn niet teruggezet: %1$s</string>
     <string name="restore_wrong_password">Dit is niet het wachtwoord waarmee de gegevens zijn versleuteld.</string>
+    <string name="support_title">Steun ARK-Store</string>
+    <string name="support_description">ARK-Store is altijd gratis en open source, en dat blijft ook zo. Maakt het je telefoon prettiger in gebruik, dan kun je me op een kopje koffie trakteren of mijn werk sponsoren.</string>
 </resources>

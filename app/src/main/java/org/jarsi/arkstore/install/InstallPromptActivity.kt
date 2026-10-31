@@ -13,7 +13,8 @@ import android.util.Log
  * screen. It is what the "ready to install" notification starts, and shows nothing itself.
  *
  * Going through here rather than straight to the prompt lets the store know that the prompt
- * has been opened, so its own screen does not open it a second time. The prompt travels in
+ * has been opened, so its own screen does not open it a second time, and offers it again
+ * when it is left without an answer. The prompt travels in
  * the notification's intent, so this also works after the process has been stopped, when
  * nothing else remembers the install. The activity is not exported: only the store's own
  * notification can start it, never another app with a prompt of its choosing.
@@ -30,7 +31,7 @@ class InstallPromptActivity : Activity() {
             intent.getParcelableExtra(EXTRA_PROMPT)
         }
         if (savedInstanceState == null && repo != null && prompt != null) {
-            InstallManager.confirmations.remove(repo)
+            InstallManager.promptOpened(repo)
             try {
                 startActivity(prompt)
             } catch (e: Exception) {

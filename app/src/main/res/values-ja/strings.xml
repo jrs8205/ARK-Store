@@ -29,6 +29,7 @@
     <string name="fail_invalid_apk">ダウンロードしたファイルは有効なアプリパッケージではありません。</string>
     <string name="fail_signature">インストール済みのアプリは別の署名鍵で署名されているため、上書きして更新することはできません。一度アンインストールしてから、もう一度インストールしてください。アンインストールすると、アプリのデータは削除されます。</string>
     <string name="fail_install">インストールに失敗しました。</string>
+    <string name="fail_aborted">確認を求める前にシステムがインストールをキャンセルしました。「再試行」をタップしてもう一度お試しください。</string>
 
     <string name="detail_latest">最新バージョン</string>
     <string name="detail_installed">インストール済み</string>
@@ -144,7 +145,6 @@
     <string name="newer_installed_note">新しいベータ版がインストールされています。次の安定版で置き換えられます。</string>
     <string name="stable_title">安定版に戻す</string>
     <string name="stable_description">このアプリの新しいベータ版がインストールされています。次の安定版で自動的に置き換えられます。今すぐ戻すには、アプリをアンインストールしてから、ストアでもう一度インストールしてください。アンインストールすると、アプリのデータは削除されます。</string>
-    <string name="stable_description_store">ARK-Store の新しいベータ版がインストールされています。次の安定版で自動的に置き換えられます。今すぐ戻すには、ARK-Store をアンインストールしてから、GitHub のページで安定版をインストールしてください。</string>
     <string name="action_return_to_stable">ベータ版をアンインストール</string>
     <string name="stable_confirm_title">ベータ版をアンインストールしますか？</string>
     <string name="stable_confirm_message">アプリとそのデータが削除されます。その後、リストから安定版をインストールしてください。</string>
@@ -326,4 +326,6 @@
     <string name="backup_data_failed">次のアプリのデータは保存されませんでした：%1$s</string>
     <string name="restore_data_failed">次のアプリのデータは復元されませんでした：%1$s</string>
     <string name="restore_wrong_password">パスワードが、データの暗号化に使われたものと一致しません。</string>
+    <string name="support_title">ARK-Store を支援</string>
+    <string name="support_description">ARK-Store はいつでも無料のオープンソースで、これからもそれは変わりません。スマートフォンがより快適になったと感じていただけたら、コーヒーをごちそうしていただくか、開発をスポンサーとして支援していただけるとうれしいです。</string>
 </resources>
