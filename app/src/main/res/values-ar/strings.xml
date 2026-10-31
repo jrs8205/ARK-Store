@@ -180,7 +180,6 @@
     <string name="newer_installed_note">المثبّت إصدار تجريبي أحدث، وسيحلّ محلّه الإصدار الثابت التالي.</string>
     <string name="stable_title">العودة إلى الإصدار الثابت</string>
     <string name="stable_description">الإصدار المثبّت من هذا التطبيق إصدار تجريبي أحدث. وسيحلّ محلّه الإصدار الثابت التالي تلقائيًا. للعودة الآن، ألغِ تثبيت التطبيق ثم ثبّته من جديد من المتجر. يؤدي إلغاء التثبيت إلى حذف بيانات التطبيق.</string>
-    <string name="stable_description_store">الإصدار المثبّت من ARK-Store إصدار تجريبي أحدث. وسيحلّ محلّه الإصدار الثابت التالي تلقائيًا. للعودة الآن، ألغِ تثبيت ARK-Store ثم ثبّت الإصدار الثابت من صفحته على GitHub.</string>
     <string name="action_return_to_stable">إلغاء تثبيت الإصدار التجريبي</string>
     <string name="stable_confirm_title">هل تريد إلغاء تثبيت الإصدار التجريبي؟</string>
     <string name="stable_confirm_message">ستتم إزالة التطبيق وبياناته. بعد ذلك، ثبّت الإصدار الثابت من القائمة.</string>

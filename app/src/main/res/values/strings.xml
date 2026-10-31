@@ -153,7 +153,6 @@
     <string name="newer_installed_note">A newer beta is installed. The next stable version will replace it.</string>
     <string name="stable_title">Back to the stable version</string>
     <string name="stable_description">A newer beta of this app is installed. The next stable version replaces it by itself. To go back now, uninstall the app and install it again from the store. Uninstalling removes the app\'s data.</string>
-    <string name="stable_description_store">A newer beta of ARK-Store is installed. The next stable version replaces it by itself. To go back now, uninstall ARK-Store and install the stable version from its GitHub page.</string>
     <string name="action_return_to_stable">Uninstall the beta</string>
     <string name="stable_confirm_title">Uninstall the beta?</string>
     <string name="stable_confirm_message">The app and its data are removed. After that, install the stable version from the list.</string>

@@ -152,7 +152,6 @@
     <string name="newer_installed_note">Daha yeni bir beta sürümü yüklü. Bir sonraki kararlı sürüm onun yerini alacak.</string>
     <string name="stable_title">Kararlı sürüme dönüş</string>
     <string name="stable_description">Bu uygulamanın daha yeni bir beta sürümü yüklü. Bir sonraki kararlı sürüm onun yerini kendiliğinden alır. Hemen geri dönmek için uygulamayı kaldırıp mağazadan yeniden yükleyin. Kaldırma işlemi uygulamanın verilerini siler.</string>
-    <string name="stable_description_store">ARK-Store\'un daha yeni bir beta sürümü yüklü. Bir sonraki kararlı sürüm onun yerini kendiliğinden alır. Hemen geri dönmek için ARK-Store\'u kaldırıp kararlı sürümü GitHub sayfasından yükleyin.</string>
     <string name="action_return_to_stable">Beta sürümünü kaldır</string>
     <string name="stable_confirm_title">Beta sürümü kaldırılsın mı?</string>
     <string name="stable_confirm_message">Uygulama kaldırılır ve verileri silinir. Ardından kararlı sürümü listeden yükleyin.</string>

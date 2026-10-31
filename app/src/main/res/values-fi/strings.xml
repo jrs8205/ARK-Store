@@ -147,7 +147,6 @@
     <string name="newer_installed_note">Uudempi beta on asennettuna. Seuraava vakaa versio korvaa sen.</string>
     <string name="stable_title">Takaisin vakaaseen versioon</string>
     <string name="stable_description">Tästä sovelluksesta on asennettuna uudempi beta. Seuraava vakaa versio korvaa sen itsestään. Jos haluat palata heti, poista sovellus ja asenna se uudelleen kaupasta. Poisto tyhjentää sovelluksen tiedot.</string>
-    <string name="stable_description_store">ARK-Storesta on asennettuna uudempi beta. Seuraava vakaa versio korvaa sen itsestään. Jos haluat palata heti, poista ARK-Store ja asenna vakaa versio sen GitHub-sivulta.</string>
     <string name="action_return_to_stable">Poista beta</string>
     <string name="stable_confirm_title">Poistetaanko beta?</string>
     <string name="stable_confirm_message">Sovellus ja sen tiedot poistetaan. Asenna sen jälkeen vakaa versio listalta.</string>

@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -194,12 +195,42 @@ internal fun SettingsScreen(
         NotificationSetting()
         TransferSettings(viewModel)
         AppBackupSettings(onBackup, onRestore)
+        SupportButtons()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 24.dp)
         )
+    }
+}
+
+/** Where the store's development can be supported, under the services' own names in every language. */
+private val supportLinks = listOf(
+    "GitHub Sponsors" to "https://github.com/sponsors/jrs8205",
+    "Buy Me a Coffee" to "https://buymeacoffee.com/jrs8205",
+    "PayPal" to "https://paypal.me/JarsiS"
+)
+
+@Composable
+private fun SupportButtons() {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 24.dp)
+    ) {
+        supportLinks.forEach { (name, url) ->
+            StoreOutlinedButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    openUrl(context, url)
+                }
+            ) {
+                Text(name)
+            }
+        }
     }
 }
 

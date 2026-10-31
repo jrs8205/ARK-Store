@@ -145,7 +145,6 @@
     <string name="newer_installed_note">已安装较新的测试版。下一个稳定版会替换它。</string>
     <string name="stable_title">换回稳定版</string>
     <string name="stable_description">此应用已安装较新的测试版。下一个稳定版会自动替换它。如果想现在就换回，请卸载该应用，然后从商店重新安装。卸载会删除该应用的数据。</string>
-    <string name="stable_description_store">已安装较新的 ARK-Store 测试版。下一个稳定版会自动替换它。如果想现在就换回，请卸载 ARK-Store，然后从其 GitHub 页面安装稳定版。</string>
     <string name="action_return_to_stable">卸载测试版</string>
     <string name="stable_confirm_title">要卸载测试版吗？</string>
     <string name="stable_confirm_message">该应用及其数据将被删除。之后，请从列表中安装稳定版。</string>

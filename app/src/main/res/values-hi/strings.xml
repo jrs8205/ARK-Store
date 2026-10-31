@@ -152,7 +152,6 @@
     <string name="newer_installed_note">एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन उसकी जगह ले लेगा।</string>
     <string name="stable_title">स्थिर वर्शन पर वापस जाएं</string>
     <string name="stable_description">इस ऐप का एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन अपने-आप उसकी जगह ले लेगा। अभी वापस जाने के लिए, ऐप को अनइंस्टॉल करें और स्टोर से फिर से इंस्टॉल करें। अनइंस्टॉल करने पर ऐप का डेटा मिट जाता है।</string>
-    <string name="stable_description_store">ARK-Store का एक नया बीटा वर्शन इंस्टॉल है। अगला स्थिर वर्शन अपने-आप उसकी जगह ले लेगा। अभी वापस जाने के लिए, ARK-Store को अनइंस्टॉल करें और उसके GitHub पेज से स्थिर वर्शन इंस्टॉल करें।</string>
     <string name="action_return_to_stable">बीटा अनइंस्टॉल करें</string>
     <string name="stable_confirm_title">बीटा अनइंस्टॉल करें?</string>
     <string name="stable_confirm_message">ऐप और उसका डेटा हटा दिया जाएगा। इसके बाद, सूची से स्थिर वर्शन इंस्टॉल करें।</string>

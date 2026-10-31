@@ -145,7 +145,6 @@
     <string name="newer_installed_note">新しいベータ版がインストールされています。次の安定版で置き換えられます。</string>
     <string name="stable_title">安定版に戻す</string>
     <string name="stable_description">このアプリの新しいベータ版がインストールされています。次の安定版で自動的に置き換えられます。今すぐ戻すには、アプリをアンインストールしてから、ストアでもう一度インストールしてください。アンインストールすると、アプリのデータは削除されます。</string>
-    <string name="stable_description_store">ARK-Store の新しいベータ版がインストールされています。次の安定版で自動的に置き換えられます。今すぐ戻すには、ARK-Store をアンインストールしてから、GitHub のページで安定版をインストールしてください。</string>
     <string name="action_return_to_stable">ベータ版をアンインストール</string>
     <string name="stable_confirm_title">ベータ版をアンインストールしますか？</string>
     <string name="stable_confirm_message">アプリとそのデータが削除されます。その後、リストから安定版をインストールしてください。</string>

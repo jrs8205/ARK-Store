@@ -159,7 +159,6 @@
     <string name="newer_installed_note">Une bêta plus récente est installée. La prochaine version stable la remplacera.</string>
     <string name="stable_title">Revenir à la version stable</string>
     <string name="stable_description">Une bêta plus récente de cette application est installée. La prochaine version stable la remplacera automatiquement. Pour revenir en arrière dès maintenant, désinstallez l\'application, puis réinstallez-la depuis la boutique. La désinstallation supprime les données de l\'application.</string>
-    <string name="stable_description_store">Une bêta plus récente d\'ARK-Store est installée. La prochaine version stable la remplacera automatiquement. Pour revenir en arrière dès maintenant, désinstallez ARK-Store, puis installez la version stable depuis sa page GitHub.</string>
     <string name="action_return_to_stable">Désinstaller la bêta</string>
     <string name="stable_confirm_title">Désinstaller la bêta ?</string>
     <string name="stable_confirm_message">L\'application et ses données vont être supprimées. Installez ensuite la version stable depuis la liste.</string>

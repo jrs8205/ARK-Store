@@ -145,7 +145,6 @@
     <string name="newer_installed_note">더 새로운 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 대체됩니다.</string>
     <string name="stable_title">정식 버전으로 돌아가기</string>
     <string name="stable_description">이 앱의 더 새로운 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 자동으로 대체됩니다. 지금 되돌리려면 앱을 제거한 후 스토어에서 다시 설치하세요. 제거하면 앱 데이터가 삭제됩니다.</string>
-    <string name="stable_description_store">더 새로운 ARK-Store 베타 버전이 설치되어 있습니다. 다음 정식 버전이 나오면 자동으로 대체됩니다. 지금 되돌리려면 ARK-Store를 제거한 후 GitHub 페이지에서 정식 버전을 설치하세요.</string>
     <string name="action_return_to_stable">베타 버전 제거</string>
     <string name="stable_confirm_title">베타 버전을 제거할까요?</string>
     <string name="stable_confirm_message">앱과 앱 데이터가 삭제됩니다. 그런 다음 목록에서 정식 버전을 설치하세요.</string>

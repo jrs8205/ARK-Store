@@ -1364,9 +1364,12 @@ private fun DetailsSheet(
                 Text(stringResource(R.string.action_offer_updates))
             }
         }
-        // Not for another app under this name: its version says nothing about a beta.
-        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP) {
-            ReturnToStable(app.packageName, isStore = app.packageName == context.packageName)
+        // Not for another app under this name: its version says nothing about a beta. Nor for
+        // the store, which makes no betas of its own and would be removing itself.
+        if (row.betaInstalled && app.packageName != null && row.status != AppStatus.OTHER_APP &&
+            app.packageName != context.packageName
+        ) {
+            ReturnToStable(app.packageName)
         }
     }
 }
@@ -1376,7 +1379,7 @@ private fun DetailsSheet(
  * install an older version over a newer one, so the way back is to remove the app first.
  */
 @Composable
-private fun ReturnToStable(packageName: String, isStore: Boolean) {
+private fun ReturnToStable(packageName: String) {
     val context = LocalContext.current
     var confirming by rememberSaveable { mutableStateOf(false) }
 
@@ -1388,15 +1391,11 @@ private fun ReturnToStable(packageName: String, isStore: Boolean) {
             .semantics { heading() }
     )
     Text(
-        text = stringResource(
-            if (isStore) R.string.stable_description_store else R.string.stable_description
-        ),
+        text = stringResource(R.string.stable_description),
         style = MaterialTheme.typography.bodyMedium
     )
-    if (!isStore) {
-        StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
-            Text(stringResource(R.string.action_return_to_stable))
-        }
+    StoreOutlinedButton(onClick = { confirming = true }, modifier = Modifier.padding(top = 8.dp)) {
+        Text(stringResource(R.string.action_return_to_stable))
     }
 
     if (confirming) {
@@ -2096,7 +2095,7 @@ private fun formatDateTime(millis: Long): String? = if (millis <= 0) null else r
         .format(Instant.ofEpochMilli(millis))
 }.getOrNull()
 
-private fun openUrl(context: Context, url: String) {
+internal fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
 }
 

@@ -152,7 +152,6 @@
     <string name="newer_installed_note">Eine neuere Betaversion ist installiert. Die nächste stabile Version ersetzt sie.</string>
     <string name="stable_title">Zurück zur stabilen Version</string>
     <string name="stable_description">Von dieser App ist eine neuere Betaversion installiert. Die nächste stabile Version ersetzt sie automatisch. Wenn du sofort zurückwechseln möchtest, deinstalliere die App und installiere sie über den Store neu. Beim Deinstallieren werden die Daten der App gelöscht.</string>
-    <string name="stable_description_store">Von ARK-Store ist eine neuere Betaversion installiert. Die nächste stabile Version ersetzt sie automatisch. Wenn du sofort zurückwechseln möchtest, deinstalliere ARK-Store und installiere die stabile Version von der GitHub-Seite des Projekts.</string>
     <string name="action_return_to_stable">Betaversion deinstallieren</string>
     <string name="stable_confirm_title">Betaversion deinstallieren?</string>
     <string name="stable_confirm_message">Die App und ihre Daten werden entfernt. Installiere danach die stabile Version aus der Liste.</string>
