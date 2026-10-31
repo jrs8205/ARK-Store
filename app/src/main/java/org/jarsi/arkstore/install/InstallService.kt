@@ -212,7 +212,7 @@ class InstallService : Service() {
             val prompt = PendingIntent.getActivity(
                 context,
                 sessionId,
-                InstallPromptActivity.intent(context, repo, sessionId, confirm),
+                InstallPromptActivity.intent(context, repo, confirm),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val notification = NotificationCompat.Builder(context, READY_CHANNEL_ID)

@@ -22,6 +22,13 @@ class PendingConfirmationTest {
     }
 
     @Test
+    fun labelMayHoldALineBreak() {
+        // A backup carries the app's name as the developer wrote it, line breaks and all.
+        val named = pending.copy(label = "Example\nBeta")
+        assertEquals(named, PendingConfirmation.decode("owner/app", named.encode()))
+    }
+
+    @Test
     fun promptMayHoldAnything() {
         val odd = pending.copy(prompt = "#Intent;S.note=a\nb;end")
         assertEquals(odd, PendingConfirmation.decode("owner/app", odd.encode()))
@@ -31,10 +38,14 @@ class PendingConfirmationTest {
     fun whatIsNotARecordIsNull() {
         assertNull(PendingConfirmation.decode("owner/app", null))
         assertNull(PendingConfirmation.decode("owner/app", ""))
-        assertNull(PendingConfirmation.decode("owner/app", "x\norg.example\n\n#Intent;end"))
-        assertNull(PendingConfirmation.decode("owner/app", "42\norg.example\nExample"))
-        assertNull(PendingConfirmation.decode("owner/app", "42\n\nExample\n#Intent;end"))
-        assertNull(PendingConfirmation.decode("owner/app", "42\norg.example\nExample\n"))
+        assertNull(PendingConfirmation.decode("owner/app", "not json"))
+        // The line-by-line form of the development builds before the record became JSON.
+        assertNull(PendingConfirmation.decode("owner/app", "42\norg.example\nExample\n#Intent;end"))
+        assertNull(PendingConfirmation.decode("owner/app", """{"session":"x","package":"org.example","prompt":"#Intent;end"}"""))
+        assertNull(PendingConfirmation.decode("owner/app", """{"package":"org.example","prompt":"#Intent;end"}"""))
+        assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"org.example","label":"Example"}"""))
+        assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"","prompt":"#Intent;end"}"""))
+        assertNull(PendingConfirmation.decode("owner/app", """{"session":42,"package":"org.example","prompt":""}"""))
     }
 
     @Test

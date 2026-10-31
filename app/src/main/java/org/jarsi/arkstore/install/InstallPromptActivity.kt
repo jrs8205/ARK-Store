@@ -31,7 +31,7 @@ class InstallPromptActivity : Activity() {
             intent.getParcelableExtra(EXTRA_PROMPT)
         }
         if (savedInstanceState == null && repo != null && prompt != null) {
-            InstallManager.promptOpened(repo, intent.getIntExtra(EXTRA_SESSION, -1))
+            InstallManager.promptOpened(repo)
             try {
                 startActivity(prompt)
             } catch (e: Exception) {
@@ -50,13 +50,11 @@ class InstallPromptActivity : Activity() {
     companion object {
         private const val TAG = "InstallPromptActivity"
         private const val EXTRA_REPO = "repo"
-        private const val EXTRA_SESSION = "session"
         private const val EXTRA_PROMPT = "prompt"
 
-        fun intent(context: Context, repo: String, sessionId: Int, prompt: Intent): Intent =
+        fun intent(context: Context, repo: String, prompt: Intent): Intent =
             Intent(context, InstallPromptActivity::class.java)
                 .putExtra(EXTRA_REPO, repo)
-                .putExtra(EXTRA_SESSION, sessionId)
                 .putExtra(EXTRA_PROMPT, prompt)
     }
 }

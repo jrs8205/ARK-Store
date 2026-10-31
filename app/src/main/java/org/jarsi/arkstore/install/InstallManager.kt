@@ -223,7 +223,7 @@ object InstallManager {
      * What was committed for each repository, kept until the system reports the outcome,
      * with the number of the [attempt] it was, see [InstallJob.id].
      */
-    private data class Committed(
+    internal data class Committed(
         val app: StoreApp?,
         val packageName: String,
         val sessionId: Int,
@@ -233,6 +233,19 @@ object InstallManager {
     )
 
     private val committed = ConcurrentHashMap<String, Committed>()
+
+    /**
+     * Held while an attempt is settled by its result and while a confirmation of an earlier
+     * process is restored, so that neither can slip under the other: a result taken halfway
+     * through a restoration would leave the finished install as installing for good.
+     */
+    private val settling = Any()
+
+    /**
+     * The sessions whose result has come in this process. A confirmation written down for
+     * one of them is settled already, however much it still looks like one to restore.
+     */
+    private val settledSessions: MutableSet<Int> = ConcurrentHashMap.newKeySet()
 
     /** The names of the installs from files on the device, which the catalogue knows nothing of. */
     private val labels = ConcurrentHashMap<String, String>()
@@ -629,11 +642,11 @@ object InstallManager {
     /**
      * Picks up where a process that ended left off, once per process. The confirmations
      * written down by [rememberPending] whose sessions the system still holds are asked
-     * again, under those sessions, so that the downloads need not be made anew; one whose
-     * session is gone, or whose app is on its way again already, is forgotten. Sessions of
-     * the store that the system holds and nothing here knows of are left over from such a
-     * process too, and are let go, unless made so recently that they may be this process's
-     * own, still being written down.
+     * again, under those sessions, so that the downloads need not be made anew, see
+     * [restore]; one whose session is gone is forgotten. Sessions of the store that the
+     * system holds and nothing here knows of are left over from such a process too, and are
+     * let go, unless made so recently that they may be this process's own, still being
+     * written down.
      */
     private fun restorePending(context: Context) {
         if (!restored.compareAndSet(false, true)) return
@@ -657,7 +670,6 @@ object InstallManager {
         val prefs = context.getSharedPreferences(PREFS_PENDING, Context.MODE_PRIVATE)
         val known = mutableSetOf<Int>()
         for ((repo, value) in prefs.all) {
-            if (_states.value[repo].isOnItsWay() || committed.containsKey(repo)) continue
             val pending = PendingConfirmation.decode(repo, value as? String)
             val prompt = pending?.let {
                 runCatching { Intent.parseUri(it.prompt, Intent.URI_INTENT_SCHEME) }.getOrNull()
@@ -667,17 +679,36 @@ object InstallManager {
                 continue
             }
             known += pending.sessionId
-            pending.label?.let { labels[repo] = it }
-            committed[repo] = Committed(null, pending.packageName, pending.sessionId, attempts.incrementAndGet())
-            setState(repo, InstallState.Installing)
-            confirmations.enqueue(repo, Confirmation(pending.sessionId, prompt))
-            Log.i(TAG, "Install of $repo still waits for the user; asking again")
+            if (restore(pending, prompt)) Log.i(TAG, "Install of $repo still waits for the user; asking again")
         }
         known += committed.values.filter { !it.root }.map { it.sessionId }
         for (sessionId in leftoverSessions(sessions, known, now, LEFTOVER_AGE_MS)) {
             Log.i(TAG, "Letting go of install session $sessionId that nobody waits for")
             runCatching { installer.abandonSession(sessionId) }
         }
+    }
+
+    /**
+     * Picks up [pending], a confirmation written down by a process that ended, whose session
+     * the system still holds: the install is on its way again, as an attempt of this process
+     * under that session, and the user is asked again with [prompt]. Nothing is picked up
+     * when an attempt of the app is on its way already, or when the session's result has come
+     * in this process, as it may have while the record was being read: that install is done
+     * with. Returns whether the confirmation was picked up.
+     */
+    internal fun restore(pending: PendingConfirmation, prompt: Intent): Boolean = synchronized(settling) {
+        val repo = pending.repo
+        if (pending.sessionId in settledSessions || committed.containsKey(repo)) return false
+        var got = false
+        _states.update { states ->
+            got = !states[repo].isOnItsWay()
+            if (got) states + (repo to InstallState.Installing) else states
+        }
+        if (!got) return false
+        pending.label?.let { labels[repo] = it }
+        committed[repo] = Committed(null, pending.packageName, pending.sessionId, attempts.incrementAndGet())
+        confirmations.enqueue(repo, Confirmation(pending.sessionId, prompt))
+        true
     }
 
     private fun rememberPending(context: Context, repo: String, sessionId: Int, prompt: Intent) {
@@ -721,25 +752,27 @@ object InstallManager {
     }
 
     /**
-     * The prompt of [repo]'s install, of the session [sessionId], has closed. Its outcome
-     * arrives from the system, in time; a prompt left without an answer settles nothing, so
-     * after a while the confirmation is parked, for the screen to offer again as a button.
+     * The prompt of [repo]'s install has closed, in the [presentation] the confirmations
+     * numbered so. Its outcome arrives from the system, in time; a prompt left without an
+     * answer settles nothing, so after a while the confirmation is parked, for the screen to
+     * offer again as a button, unless it has been presented anew by then.
      */
-    internal fun onPromptClosed(repo: String, sessionId: Int) {
+    internal fun onPromptClosed(repo: String, presentation: Int) {
         scope.launch {
             delay(PROMPT_GRACE_MS)
-            confirmations.park(repo) { it.sessionId == sessionId }
+            confirmations.park(repo, presentation)
         }
     }
 
     /**
-     * The prompt of [repo]'s install, of the session [sessionId], is being opened from its
-     * notification. The confirmation becomes the one being presented, so that the screen
-     * does not open it too. Nothing tells when such a prompt closes, so it is treated like one
-     * closed now: parked after the grace, unless its result has come by then.
+     * The prompt of [repo]'s install is being opened from its notification. The confirmation
+     * becomes the one being presented, so that the screen does not open it too; while another
+     * is being presented, it is parked instead, see [InstallConfirmationQueue.hold]. Nothing
+     * tells when such a prompt closes, so it is treated like one closed now: parked after the
+     * grace, unless its result has come by then.
      */
-    internal fun promptOpened(repo: String, sessionId: Int) {
-        if (confirmations.hold(repo)) onPromptClosed(repo, sessionId)
+    internal fun promptOpened(repo: String) {
+        confirmations.hold(repo)?.let { onPromptClosed(repo, it) }
     }
 
     /** The user asks for the parked prompt of [repo] again; the screen presents it when it can. */
@@ -755,7 +788,7 @@ object InstallManager {
      */
     internal fun onScreenResumed(prompted: String?) {
         val open = confirmations.active() ?: return
-        if (open.repo != prompted) onPromptClosed(open.repo, open.value.sessionId)
+        if (open.repo != prompted) onPromptClosed(open.repo, confirmations.presentation())
     }
 
     /**
@@ -816,41 +849,57 @@ object InstallManager {
         message: String?,
         sessionId: Int? = null
     ) {
-        val attempted = committed[repo]
-        if (!isCurrent(repo, sessionId, attempted)) {
-            Log.i(TAG, "Result of an earlier attempt of $repo ignored")
-            return
-        }
-        // The attempt is taken in one step: the system and the check for stale sessions can
-        // report on the same session at the same moment, and only one of them may settle it.
-        if (attempted != null && !committed.remove(repo, attempted)) {
-            Log.i(TAG, "Result of $repo settled already")
-            return
-        }
+        val settlement = settle(repo, status, message, sessionId) ?: return
         InstallService.cancelReady(context, repo)
-        confirmations.remove(repo)
         forgetPending(context, repo)
-        val (state, outcome) = when (status) {
-            PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
-            // The user backed out of the system prompt; that is not an error worth showing.
-            PackageInstaller.STATUS_FAILURE_ABORTED -> null to Outcome.FAILED
-            PackageInstaller.STATUS_FAILURE_CONFLICT,
-            PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
-                val reason = conflictReason(message)
-                // The system can see a conflict that comparing the certificates here did not.
-                if (reason == FailReason.SIGNATURE_MISMATCH && attempted?.app != null) {
-                    InstalledApps.rememberConflict(context, attempted.app, attempted.packageName)
-                }
-                InstallState.Failed(reason, message) to Outcome.FAILED
-            }
-            else -> InstallState.Failed(FailReason.INSTALL, message) to Outcome.FAILED
+        val app = settlement.attempted?.app
+        // The system can see a conflict that comparing the certificates here did not.
+        if (settlement.state?.reason == FailReason.SIGNATURE_MISMATCH && app != null) {
+            InstalledApps.rememberConflict(context, app, settlement.attempted.packageName)
         }
-        // Only the state of the attempt taken is settled: an attempt begun since the check,
-        // which a result that was not taken may have let through, is left as it is.
-        _states.update { afterResult(it, repo, state, owned = attempted != null) }
-        attempted?.let { outcomes.tryEmit(Settled(repo, it.attempt, outcome)) }
         _installedChanged.update { it + 1 }
     }
+
+    /** What [settle] took: the attempt that was committed, if any, and the failure it left, if any. */
+    internal class Settlement(val attempted: Committed?, val state: InstallState.Failed?)
+
+    /**
+     * Settles the attempt of [repo] by the result the system gave for the session [sessionId]
+     * with [status] and [message]: what was committed of it is given up, its confirmation let
+     * go and its state settled, for the screen and for whoever waits for the attempt. The
+     * result of an earlier attempt, or of one settled already, is left alone: then null.
+     */
+    internal fun settle(repo: String, status: Int, message: String?, sessionId: Int?): Settlement? =
+        synchronized(settling) {
+            val attempted = committed[repo]
+            if (!isCurrent(repo, sessionId, attempted)) {
+                Log.i(TAG, "Result of an earlier attempt of $repo ignored")
+                return null
+            }
+            // The attempt is taken in one step: the system and the check for stale sessions
+            // can report on the same session at the same moment, and only one of them may
+            // settle it.
+            if (attempted != null && !committed.remove(repo, attempted)) {
+                Log.i(TAG, "Result of $repo settled already")
+                return null
+            }
+            sessionId?.let { settledSessions += it }
+            confirmations.remove(repo)
+            val (state, outcome) = when (status) {
+                PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
+                // The user backed out of the system prompt; that is not an error worth showing.
+                PackageInstaller.STATUS_FAILURE_ABORTED -> null to Outcome.FAILED
+                PackageInstaller.STATUS_FAILURE_CONFLICT,
+                PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
+                    InstallState.Failed(conflictReason(message), message) to Outcome.FAILED
+                else -> InstallState.Failed(FailReason.INSTALL, message) to Outcome.FAILED
+            }
+            // Only the state of the attempt taken is settled: an attempt begun since the
+            // check, which a result that was not taken may have let through, is left as it is.
+            _states.update { afterResult(it, repo, state, owned = attempted != null) }
+            attempted?.let { outcomes.tryEmit(Settled(repo, it.attempt, outcome)) }
+            Settlement(attempted, state)
+        }
 
     fun notifyInstalledChanged() = _installedChanged.update { it + 1 }
 

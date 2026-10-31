@@ -1,5 +1,8 @@
 package org.jarsi.arkstore.install
 
+import org.json.JSONException
+import org.json.JSONObject
+
 /**
  * A confirmation the system asked for, written down so that it outlives the process: the
  * download is done and the system holds the files, waiting for the user's go-ahead, and the
@@ -13,18 +16,36 @@ internal data class PendingConfirmation(
     val label: String?,
     val prompt: String
 ) {
-    /** The record as it is stored: one line per field, the prompt last, as it may hold anything. */
-    fun encode(): String =
-        listOf(sessionId.toString(), packageName, label.orEmpty(), prompt).joinToString("\n")
+    /** The record as it is stored. The label and the prompt may hold anything, line breaks included. */
+    fun encode(): String = JSONObject()
+        .put(SESSION, sessionId)
+        .put(PACKAGE, packageName)
+        .putOpt(LABEL, label)
+        .put(PROMPT, prompt)
+        .toString()
 
     companion object {
+        private const val SESSION = "session"
+        private const val PACKAGE = "package"
+        private const val LABEL = "label"
+        private const val PROMPT = "prompt"
+
         /** The record stored for [repo], or null when [text] is not one. */
         fun decode(repo: String, text: String?): PendingConfirmation? {
-            val parts = text?.split("\n", limit = 4) ?: return null
-            if (parts.size != 4) return null
-            val sessionId = parts[0].toIntOrNull() ?: return null
-            if (parts[1].isEmpty() || parts[3].isEmpty()) return null
-            return PendingConfirmation(repo, sessionId, parts[1], parts[2].ifEmpty { null }, parts[3])
+            val record = try {
+                JSONObject(text ?: return null)
+            } catch (e: JSONException) {
+                return null
+            }
+            val sessionId = record.optString(SESSION).toIntOrNull() ?: return null
+            if (record.optString(PACKAGE).isEmpty() || record.optString(PROMPT).isEmpty()) return null
+            return PendingConfirmation(
+                repo,
+                sessionId,
+                record.getString(PACKAGE),
+                record.optString(LABEL).ifEmpty { null },
+                record.getString(PROMPT)
+            )
         }
     }
 }

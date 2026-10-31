@@ -2,6 +2,8 @@ package org.jarsi.arkstore.install
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -49,22 +51,45 @@ class InstallConfirmationQueueTest {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/first", "first")
         queue.enqueue("owner/second", "second")
+        val before = queue.presentation()
         queue.take()
-        queue.park("owner/second") { it == "second" }
+        val first = queue.presentation()
+        assertNotEquals(before, first)
+        queue.park("owner/second", first)
         assertNull(queue.next.value)
         assertEquals(emptySet<String>(), queue.unanswered.value)
-        // The prompt of an earlier attempt of the same app is not the one open now.
-        queue.park("owner/first") { it == "earlier" }
+        // The prompt of an earlier presentation of the same app is not the one open now.
+        queue.park("owner/first", before)
         assertNull(queue.next.value)
 
-        queue.park("owner/first") { it == "first" }
+        queue.park("owner/first", first)
         assertEquals(setOf("owner/first"), queue.unanswered.value)
         assertEquals(InstallConfirmation("owner/second", "second"), queue.take())
         // A late parking of the first must not touch the second, which is active now.
-        queue.park("owner/first") { it == "first" }
+        queue.park("owner/first", first)
         assertNull(queue.next.value)
         queue.enqueue("owner/third", "third")
         assertNull(queue.take())
+    }
+
+    @Test
+    fun aLateParkingFromAnEarlierPresentationLeavesTheReopenedPromptAlone() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.take()
+        val earlier = queue.presentation()
+        queue.park("owner/first", earlier)
+        assertTrue(queue.resume("owner/first"))
+        assertEquals(InstallConfirmation("owner/first", "first"), queue.take())
+        assertNotEquals(earlier, queue.presentation())
+
+        // A second timer of the earlier presentation goes off while the prompt is open again.
+        queue.park("owner/first", earlier)
+        assertEquals(InstallConfirmation("owner/first", "first"), queue.active())
+        assertEquals(emptySet<String>(), queue.unanswered.value)
+        queue.park("owner/first", queue.presentation())
+        assertNull(queue.active())
+        assertEquals(setOf("owner/first"), queue.unanswered.value)
     }
 
     @Test
@@ -73,7 +98,7 @@ class InstallConfirmationQueueTest {
         queue.enqueue("owner/first", "first")
         queue.enqueue("owner/second", "second")
         queue.take()
-        queue.park("owner/first") { it == "first" }
+        queue.park("owner/first", queue.presentation())
 
         // The others go on; the parked one does not come back by itself.
         assertEquals("owner/second", queue.take()?.repo)
@@ -96,14 +121,14 @@ class InstallConfirmationQueueTest {
         val queue = InstallConfirmationQueue<String>()
         queue.enqueue("owner/first", "first")
         queue.take()
-        queue.park("owner/first") { it == "first" }
+        queue.park("owner/first", queue.presentation())
         queue.remove("owner/first")
         assertFalse(queue.holds("owner/first"))
         assertEquals(emptySet<String>(), queue.unanswered.value)
 
         queue.enqueue("owner/second", "second")
         queue.take()
-        queue.park("owner/second") { it == "second" }
+        queue.park("owner/second", queue.presentation())
         // A new request for the same app, as from a new attempt, is the one that counts.
         queue.enqueue("owner/second", "again")
         assertEquals(emptyList<InstallConfirmation<String>>(), queue.parked())
@@ -117,20 +142,43 @@ class InstallConfirmationQueueTest {
         queue.enqueue("owner/second", "second")
 
         // The notification opened the second: the screen must not open it too.
-        assertTrue(queue.hold("owner/second"))
+        val held = queue.hold("owner/second")
+        assertNotNull(held)
+        assertEquals(held, queue.presentation())
         assertNull(queue.next.value)
         assertNull(queue.take())
-        assertFalse(queue.hold("owner/first"))
-        assertTrue(queue.hold("owner/second"))
+        // Opened from the notification once more while still open: the same presentation.
+        assertEquals(held, queue.hold("owner/second"))
 
-        queue.park("owner/second") { it == "second" }
+        queue.park("owner/second", held!!)
         assertEquals(setOf("owner/second"), queue.unanswered.value)
         assertEquals(InstallConfirmation("owner/first", "first"), queue.take())
         queue.remove("owner/first")
-        // A parked one can be presented elsewhere too.
-        assertTrue(queue.hold("owner/second"))
+        // A parked one can be presented elsewhere too, as a presentation of its own.
+        val again = queue.hold("owner/second")
+        assertNotNull(again)
+        assertNotEquals(held, again)
         assertEquals(emptySet<String>(), queue.unanswered.value)
-        assertFalse(queue.hold("owner/none"))
+        assertNull(queue.hold("owner/none"))
+    }
+
+    @Test
+    fun aPromptOpenedElsewhereOverTheActiveOneIsParkedRatherThanOfferedAgain() {
+        val queue = InstallConfirmationQueue<String>()
+        queue.enqueue("owner/first", "first")
+        queue.enqueue("owner/second", "second")
+        queue.enqueue("owner/third", "third")
+        queue.take()
+
+        // The notification opened the second while the first is active: the screen must not
+        // open it again once the first settles, but the user may still ask for it.
+        assertNull(queue.hold("owner/second"))
+        assertEquals(InstallConfirmation("owner/first", "first"), queue.active())
+        assertEquals(setOf("owner/second"), queue.unanswered.value)
+        queue.remove("owner/first")
+        assertEquals(InstallConfirmation("owner/third", "third"), queue.next.value)
+        assertTrue(queue.resume("owner/second"))
+        assertEquals(InstallConfirmation("owner/second", "second"), queue.take())
     }
 
     @Test
@@ -141,7 +189,7 @@ class InstallConfirmationQueueTest {
         assertNull(queue.active())
         queue.take()
         assertEquals(InstallConfirmation("owner/first", "first"), queue.active())
-        queue.park("owner/first") { it == "first" }
+        queue.park("owner/first", queue.presentation())
         assertNull(queue.active())
     }
 

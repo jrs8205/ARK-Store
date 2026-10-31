@@ -15,11 +15,16 @@ internal data class InstallConfirmation<T>(val repo: String, val value: T)
  * presented again only when the user asks for it, with [resume], so that a prompt the user
  * put aside does not keep coming back by itself. The screen learns which these are from
  * [unanswered] and offers them again as a button.
+ *
+ * Each time a confirmation is presented is a presentation of its own, numbered by
+ * [presentation]: a parking meant for one presentation, as by a timer set when its prompt
+ * closed, leaves a later presentation of the same confirmation alone.
  */
 internal class InstallConfirmationQueue<T> {
     private val waiting = linkedMapOf<String, T>()
     private val parked = linkedMapOf<String, T>()
     private var active: InstallConfirmation<T>? = null
+    private var presentations = 0
     private val _next = MutableStateFlow<InstallConfirmation<T>?>(null)
     val next = _next.asStateFlow()
     private val _unanswered = MutableStateFlow<Set<String>>(emptySet())
@@ -39,26 +44,36 @@ internal class InstallConfirmationQueue<T> {
     fun take(): InstallConfirmation<T>? {
         if (active != null) return null
         val entry = waiting.entries.firstOrNull() ?: return null
-        val confirmation = InstallConfirmation(entry.key, entry.value)
+        present(entry.key, entry.value)
         waiting.remove(entry.key)
-        active = confirmation
         publish()
-        return confirmation
+        return active
     }
 
     /**
      * Someone else, such as a notification, is presenting the confirmation of [repo]: it
-     * becomes the active one, so that the screen does not present it a second time. Returns
-     * whether it was waiting or parked here; nothing changes when another is active.
+     * becomes the active one, so that the screen does not present it a second time, and the
+     * number of its presentation is returned. When another is active, the confirmation is
+     * parked instead, as a prompt the screen must not present again once the other settles,
+     * though the user may ask for it; then, as when the confirmation is not here, null.
      */
     @Synchronized
-    fun hold(repo: String): Boolean {
-        if (active != null) return active?.repo == repo
-        val value = waiting.remove(repo) ?: parked.remove(repo) ?: return false
-        active = InstallConfirmation(repo, value)
+    fun hold(repo: String): Int? {
+        if (active?.repo == repo) return presentations
+        val value = waiting.remove(repo) ?: parked.remove(repo) ?: return null
+        if (active != null) {
+            parked[repo] = value
+            publish()
+            return null
+        }
+        present(repo, value)
         publish()
-        return true
+        return presentations
     }
+
+    /** The number of the latest presentation; each [take] or [hold] that presents a confirmation begins a new one. */
+    @Synchronized
+    fun presentation(): Int = presentations
 
     /** The confirmations nobody has presented yet, oldest first. */
     @Synchronized
@@ -93,14 +108,14 @@ internal class InstallConfirmationQueue<T> {
 
     /**
      * The prompt of [repo] was left without an answer, while it is still the active one and
-     * its value [matches]: a prompt the user put aside settles nothing, and the rest must not
-     * wait forever. The confirmation is parked, to be presented again when the user asks, as
-     * its session is still waiting for the answer.
+     * its [presentation] is still the one going on: a prompt the user put aside settles
+     * nothing, and the rest must not wait forever. The confirmation is parked, to be
+     * presented again when the user asks, as its session is still waiting for the answer.
      */
     @Synchronized
-    fun park(repo: String, matches: (T) -> Boolean) {
+    fun park(repo: String, presentation: Int) {
         val open = active ?: return
-        if (open.repo != repo || !matches(open.value)) return
+        if (open.repo != repo || presentation != presentations) return
         active = null
         parked[repo] = open.value
         publish()
@@ -119,6 +134,11 @@ internal class InstallConfirmationQueue<T> {
         waiting.putAll(rest)
         publish()
         return true
+    }
+
+    private fun present(repo: String, value: T) {
+        active = InstallConfirmation(repo, value)
+        presentations++
     }
 
     private fun publish() {
