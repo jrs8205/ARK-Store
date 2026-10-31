@@ -126,11 +126,13 @@ SEARCH_PAUSE_SECONDS = 2
 # workflow run has a thousand points an hour, apart from its requests; a query for a hundred
 # repositories costs a few points and takes some seconds, so a run asks about this many
 # repositories at most and stops when fewer than AUTO_POINTS_RESERVE points are left for the
-# run that follows within the hour.
+# run that follows within the hour. Four queries at a time drew refusals from GitHub on every
+# run measured: it also limits how much of its time one caller takes.
 GRAPHQL_BATCH = 100
 GRAPHQL_RELEASES = 5
-GRAPHQL_WORKERS = 4
-# A query that fails, as with a gateway timeout, is asked once more after this pause.
+GRAPHQL_WORKERS = 2
+# A query that fails, as with a gateway timeout, is asked once more after this pause; one that
+# GitHub refuses as too much, after the pause it asks for (see refusal_pause).
 GRAPHQL_RETRY_SECONDS = 5
 AUTO_MAX_CHECKS = 2500
 AUTO_POINTS_RESERVE = 250
@@ -1268,6 +1270,17 @@ def discover():
     return repos, complete
 
 
+def refusal_pause(error, deadline=None):
+    """How many seconds to wait after GitHub refused a request as coming too often: the pause
+    it asks for, or a minute when it asks for none, at most a minute and never past deadline,
+    a time of time.monotonic."""
+    wait = (error.headers.get("Retry-After") if error.headers else None) or ""
+    seconds = min(int(wait), 60) if wait.isdigit() else 60
+    if deadline is not None:
+        seconds = max(0.0, min(seconds, deadline - time.monotonic()))
+    return seconds
+
+
 def search_page(query, page, budget, deadline=None):
     """One page of a search for repositories, or None when it could not be had. budget, a
     list holding the number of searches still allowed in this run, is counted down. GitHub
@@ -1298,11 +1311,7 @@ def search_page(query, page, budget, deadline=None):
                 budget[0] = 0
                 return None
             refused = True
-            wait = (error.headers.get("Retry-After") if error.headers else None) or ""
-            seconds = min(int(wait), 60) if wait.isdigit() else 60
-            if deadline is not None:
-                seconds = max(0.0, min(seconds, deadline - time.monotonic()))
-            time.sleep(seconds)
+            time.sleep(refusal_pause(error, deadline))
             continue
         return result
     return None
@@ -1454,7 +1463,7 @@ def release_fingerprints(names, not_before, deadline=None):
             if deadline is not None and time.monotonic() >= deadline:
                 break
             round_ = batches[start:start + GRAPHQL_WORKERS]
-            results = list(pool.map(ask_releases, round_))
+            results = list(pool.map(functools.partial(ask_releases, deadline=deadline), round_))
             remaining = None
             stop = False
             for batch, result in zip(round_, results):
@@ -1476,9 +1485,10 @@ def release_fingerprints(names, not_before, deadline=None):
     return answers
 
 
-def ask_releases(batch):
+def ask_releases(batch, deadline=None):
     """One query for the newest releases of the repositories in batch, as GitHub answers it,
-    or None when it could not be had in two tries."""
+    or None when it could not be had in two tries. A query GitHub refuses is asked again after
+    the pause it asks for, as far as deadline lets (see refusal_pause)."""
     fields = []
     for i, name in enumerate(batch):
         owner, _, repo = name.partition("/")
@@ -1495,7 +1505,8 @@ def ask_releases(batch):
         except (urllib.error.URLError, OSError, ValueError) as error:
             print("release check failed: %s" % error, file=sys.stderr)
             if attempt == 0:
-                time.sleep(GRAPHQL_RETRY_SECONDS)
+                refused = isinstance(error, urllib.error.HTTPError) and error.code in (403, 429)
+                time.sleep(refusal_pause(error, deadline) if refused else GRAPHQL_RETRY_SECONDS)
     return None
 
 
