@@ -101,6 +101,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
@@ -807,10 +809,21 @@ private fun AppCard(
         // light, so the edge is drawn as well; the metal has a bevelled edge of its own.
         border = if (metal) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         // A metal plate casts a shadow; it is drawn here, outside the clip that bounds the
-        // touch feedback, where the card's own elevation shadow would be clipped away.
+        // touch feedback, where the card's own elevation shadow would be clipped away. The
+        // metal itself is a shader run for every pixel: an offscreen layer keeps the card
+        // drawn as an image, so that a scroll moves the image rather than running the shader
+        // for every card on every frame, which dropped frames on a phone.
         modifier = Modifier
             .fillMaxWidth()
-            .then(if (metal) Modifier.shadow(6.dp, CardDefaults.shape) else Modifier)
+            .then(
+                if (metal) {
+                    Modifier
+                        .shadow(6.dp, CardDefaults.shape)
+                        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                } else {
+                    Modifier
+                }
+            )
             .clip(CardDefaults.shape)
             .clickable(onClickLabel = stringResource(R.string.action_details), onClick = onClick)
     ) {
