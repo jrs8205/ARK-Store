@@ -1856,6 +1856,51 @@ class AutoAppsTest(unittest.TestCase):
         self.assertEqual([app["fullName"] for app in apps], ["o/app0", "o/app1", "o/app4"])
         self.assertEqual(state["o/app4"], known)
 
+    def run_with_refusals(self, candidates, before=None):
+        """A run on a clock of its own: the searches take a minute, GitHub refuses each query of
+        the check once and answers it 15 seconds after it is asked again, and examining a
+        repository takes 4 seconds. before is what an earlier such run returned. Returns its
+        list and state, and the repositories examined."""
+        clock = [1000.0]
+        refused = set()
+        examined = []
+
+        def discover(today, deadline=None):
+            clock[0] += 60
+            return candidates
+
+        def graphql(query):
+            if query not in refused:
+                refused.add(query)
+                raise ReleaseFingerprintsTest.refusal()
+            clock[0] += 15
+            data = {"r%d" % i: FingerprintTest.node(FingerprintTest.release())
+                    for i in range(query.count(": repository("))}
+            return {"data": dict(data, rateLimit={"cost": 3, "remaining": 1000})}
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        def build_app(repo, *args, **kwargs):
+            clock[0] += 4
+            examined.append(repo["full_name"])
+            return self.entry(repo["full_name"])
+
+        with mock.patch.object(build_index, "GRAPHQL_WORKERS", 1),                 mock.patch.object(build_index, "discover_candidates", side_effect=discover),                 mock.patch.object(build_index, "graphql", side_effect=graphql),                 mock.patch.object(build_index, "build_app", side_effect=build_app),                 mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]),                 mock.patch.object(build_index.time, "sleep", side_effect=sleep),                 mock.patch.object(build_index.sys, "stderr"):
+            apps, state = before or ([], {})
+            apps, state = build_index.build_auto_apps(
+                set(), {app["fullName"]: app for app in apps}, state, self.NOW)
+        return (apps, state), examined
+
+    def test_checks_refused_again_and_again_leave_the_examining_its_share_of_the_time(self):
+        candidates = [self.candidate("o/app%d" % i) for i in range(2500)]
+        run, first = self.run_with_refusals(candidates)
+        self.assertGreater(len(first), 80)
+        # The next run goes on from there, rather than asking the same until the time is up.
+        _, second = self.run_with_refusals(candidates, run)
+        self.assertGreater(len(second), 80)
+        self.assertFalse(set(first) & set(second))
+
     def test_searches_are_given_the_deadline_of_the_run(self):
         clock = [1000.0]
         with mock.patch.object(build_index.time, "monotonic", side_effect=lambda: clock[0]):
