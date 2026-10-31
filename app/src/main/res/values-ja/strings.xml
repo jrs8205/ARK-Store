@@ -326,4 +326,6 @@
     <string name="backup_data_failed">次のアプリのデータは保存されませんでした：%1$s</string>
     <string name="restore_data_failed">次のアプリのデータは復元されませんでした：%1$s</string>
     <string name="restore_wrong_password">パスワードが、データの暗号化に使われたものと一致しません。</string>
+    <string name="support_title">ARK-Store を支援</string>
+    <string name="support_description">ARK-Store はいつでも無料のオープンソースで、これからもそれは変わりません。スマートフォンがより快適になったと感じていただけたら、コーヒーをごちそうしていただくか、開発をスポンサーとして支援していただけるとうれしいです。</string>
 </resources>

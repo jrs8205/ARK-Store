@@ -348,4 +348,6 @@
     <string name="backup_data_failed">I dati di queste app non sono stati salvati: %1$s</string>
     <string name="restore_data_failed">I dati di queste app non sono stati ripristinati: %1$s</string>
     <string name="restore_wrong_password">La password non corrisponde a quella usata per crittografare i dati.</string>
+    <string name="support_title">Sostieni ARK-Store</string>
+    <string name="support_description">ARK-Store è gratuito e open source, e lo resterà sempre. Se rende il tuo telefono più piacevole da usare, puoi offrirmi un caffè o sponsorizzare il mio lavoro.</string>
 </resources>

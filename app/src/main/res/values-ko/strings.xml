@@ -326,4 +326,6 @@
     <string name="backup_data_failed">다음 앱의 데이터를 저장하지 못했습니다: %1$s</string>
     <string name="restore_data_failed">다음 앱의 데이터를 복원하지 못했습니다: %1$s</string>
     <string name="restore_wrong_password">데이터를 암호화할 때 사용한 비밀번호가 아닙니다.</string>
+    <string name="support_title">ARK-Store 후원하기</string>
+    <string name="support_description">ARK-Store는 언제나 무료 오픈 소스이며 앞으로도 변함없습니다. 휴대전화를 더 편하게 쓰는 데 도움이 되었다면 커피 한 잔을 사 주시거나 제 작업을 후원해 주세요.</string>
 </resources>

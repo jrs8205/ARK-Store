@@ -195,7 +195,7 @@ internal fun SettingsScreen(
         NotificationSetting()
         TransferSettings(viewModel)
         AppBackupSettings(onBackup, onRestore)
-        SupportButtons()
+        SupportSettings()
         Text(
             text = stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
             style = MaterialTheme.typography.bodyMedium,
@@ -213,13 +213,26 @@ private val supportLinks = listOf(
 )
 
 @Composable
-private fun SupportButtons() {
+private fun SupportSettings() {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
+    Text(
+        text = stringResource(R.string.support_title),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = Modifier
+            .padding(top = 24.dp)
+            .semantics { heading() }
+    )
+    Text(
+        text = stringResource(R.string.support_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 4.dp)
+    )
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.padding(top = 24.dp)
+        modifier = Modifier.padding(top = 8.dp)
     ) {
         supportLinks.forEach { (name, url) ->
             StoreOutlinedButton(

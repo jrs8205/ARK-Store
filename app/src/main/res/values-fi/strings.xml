@@ -337,4 +337,6 @@
     <string name="backup_data_failed">Näiden sovellusten tietoja ei tallennettu: %1$s</string>
     <string name="restore_data_failed">Näiden sovellusten tietoja ei palautettu: %1$s</string>
     <string name="restore_wrong_password">Salasana ei ole se, jolla tiedot salattiin.</string>
+    <string name="support_title">Tue ARK-Storea</string>
+    <string name="support_description">ARK-Store on aina ilmainen ja avointa lähdekoodia, ja sellaisena se pysyy. Jos se tekee puhelimestasi mukavamman, voit tarjota minulle kahvin tai sponsoroida työtäni.</string>
 </resources>

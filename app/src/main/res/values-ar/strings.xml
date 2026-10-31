@@ -381,4 +381,6 @@
     <string name="backup_data_failed">لم تُحفَظ بيانات هذه التطبيقات: %1$s</string>
     <string name="restore_data_failed">لم تُستعَد بيانات هذه التطبيقات: %1$s</string>
     <string name="restore_wrong_password">ليست هذه كلمة المرور التي شُفِّرت بها البيانات.</string>
+    <string name="support_title">ادعم ARK-Store</string>
+    <string name="support_description">إن ARK-Store مجاني ومفتوح المصدر دائمًا، وسيبقى كذلك. إذا جعل استخدام هاتفك أكثر راحة، فيمكنك أن تدعوني إلى فنجان قهوة أو أن ترعى عملي.</string>
 </resources>

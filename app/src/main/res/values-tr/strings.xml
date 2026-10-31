@@ -337,4 +337,6 @@
     <string name="backup_data_failed">Şu uygulamaların verileri kaydedilmedi: %1$s</string>
     <string name="restore_data_failed">Şu uygulamaların verileri geri yüklenmedi: %1$s</string>
     <string name="restore_wrong_password">Bu parola, verilerin şifrelendiği parola değil.</string>
+    <string name="support_title">ARK-Store\'u destekleyin</string>
+    <string name="support_description">ARK-Store her zaman ücretsiz ve açık kaynaklıdır, böyle de kalacak. Telefonunuzu kullanmayı daha keyifli hale getiriyorsa bana bir kahve ısmarlayabilir veya çalışmama sponsor olabilirsiniz.</string>
 </resources>

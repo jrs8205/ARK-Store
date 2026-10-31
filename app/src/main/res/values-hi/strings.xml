@@ -337,4 +337,6 @@
     <string name="backup_data_failed">इन ऐप का डेटा सेव नहीं हुआ: %1$s</string>
     <string name="restore_data_failed">इन ऐप का डेटा वापस नहीं लाया जा सका: %1$s</string>
     <string name="restore_wrong_password">यह वह पासवर्ड नहीं है, जिससे डेटा एन्क्रिप्ट किया गया था।</string>
+    <string name="support_title">ARK-Store का समर्थन करें</string>
+    <string name="support_description">ARK-Store हमेशा मुफ़्त और ओपन सोर्स है, और ऐसा ही रहेगा। अगर इससे आपका फ़ोन इस्तेमाल करना ज़्यादा सुखद हो गया है, तो आप मुझे एक कॉफ़ी पिला सकते हैं या मेरे काम को स्पॉन्सर कर सकते हैं।</string>
 </resources>

@@ -359,4 +359,6 @@
     <string name="backup_data_failed">Не вдалося зберегти дані цих додатків: %1$s</string>
     <string name="restore_data_failed">Не вдалося відновити дані цих додатків: %1$s</string>
     <string name="restore_wrong_password">Це не той пароль, яким було зашифровано дані.</string>
+    <string name="support_title">Підтримати ARK-Store</string>
+    <string name="support_description">ARK-Store — безкоштовний додаток із відкритим кодом, і таким він залишиться завжди. Якщо з ним вашим телефоном приємніше користуватися, можете пригостити мене кавою або спонсорувати мою роботу.</string>
 </resources>

@@ -337,4 +337,6 @@
     <string name="backup_data_failed">De gegevens van deze apps zijn niet opgeslagen: %1$s</string>
     <string name="restore_data_failed">De gegevens van deze apps zijn niet teruggezet: %1$s</string>
     <string name="restore_wrong_password">Dit is niet het wachtwoord waarmee de gegevens zijn versleuteld.</string>
+    <string name="support_title">Steun ARK-Store</string>
+    <string name="support_description">ARK-Store is altijd gratis en open source, en dat blijft ook zo. Maakt het je telefoon prettiger in gebruik, dan kun je me op een kopje koffie trakteren of mijn werk sponsoren.</string>
 </resources>

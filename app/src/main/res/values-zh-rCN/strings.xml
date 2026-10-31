@@ -326,4 +326,6 @@
     <string name="backup_data_failed">以下应用的数据未能保存：%1$s</string>
     <string name="restore_data_failed">以下应用的数据未能恢复：%1$s</string>
     <string name="restore_wrong_password">此密码与加密数据时使用的密码不一致。</string>
+    <string name="support_title">支持 ARK-Store</string>
+    <string name="support_description">ARK-Store 始终免费且开源，今后也不会改变。如果它让您的手机用起来更顺手，欢迎请我喝杯咖啡，或赞助我的工作。</string>
 </resources>
