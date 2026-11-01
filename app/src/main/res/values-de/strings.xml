@@ -30,7 +30,7 @@
     <string name="fail_invalid_apk">Die heruntergeladene Datei ist kein gültiges App-Paket.</string>
     <string name="fail_signature">Die installierte App ist mit einem anderen Schlüssel signiert und lässt sich daher nicht direkt aktualisieren. Deinstalliere sie zuerst und installiere sie dann neu. Dabei werden die Daten der App gelöscht.</string>
     <string name="fail_install">Die Installation ist fehlgeschlagen.</string>
-    <string name="fail_aborted">Das System hat die Installation abgebrochen, bevor es nachfragen konnte. Tippe auf Wiederholen, um es erneut zu versuchen.</string>
+    <string name="fail_aborted">Die Installation wurde abgebrochen, bevor sie abgeschlossen war. Tippe auf Wiederholen, um es erneut zu versuchen.</string>
 
     <string name="detail_latest">Neueste Version</string>
     <string name="detail_installed">Installiert</string>

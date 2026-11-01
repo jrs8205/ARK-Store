@@ -29,7 +29,7 @@
     <string name="fail_invalid_apk">下载的文件不是有效的应用安装包。</string>
     <string name="fail_signature">已安装的应用使用了不同的签名密钥，因此无法直接更新。请先卸载该应用，然后重新安装。这会删除该应用的数据。</string>
     <string name="fail_install">安装失败。</string>
-    <string name="fail_aborted">系统在询问您之前取消了安装。点按“重试”再试一次。</string>
+    <string name="fail_aborted">安装在完成前已取消。点按“重试”再试一次。</string>
 
     <string name="detail_latest">最新版本</string>
     <string name="detail_installed">已安装版本</string>

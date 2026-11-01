@@ -31,7 +31,7 @@
     <string name="fail_invalid_apk">El archivo descargado no es un paquete de aplicación válido.</string>
     <string name="fail_signature">La aplicación instalada está firmada con otra clave, así que no se puede actualizar directamente. Desinstálala primero y vuelve a instalarla. Al desinstalarla se borran sus datos.</string>
     <string name="fail_install">No se ha podido completar la instalación.</string>
-    <string name="fail_aborted">El sistema canceló la instalación antes de poder preguntarte. Toca Reintentar para intentarlo de nuevo.</string>
+    <string name="fail_aborted">La instalación se canceló antes de terminar. Toca Reintentar para intentarlo de nuevo.</string>
 
     <string name="detail_latest">Última versión</string>
     <string name="detail_installed">Instalada</string>

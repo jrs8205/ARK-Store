@@ -134,6 +134,68 @@ class InstallManagerTest {
         )
     }
 
+    @Test
+    fun aRefusalAfterThePromptWasPresentedIsStillShownWithItsReason() {
+        val pending = pending("owner/refused-after-prompt", 305)
+        handedOver(pending, aFile())
+        assertNotNull(InstallManager.confirmations.hold(pending.repo))
+        val reason = "INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed"
+
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, reason, 305) {}
+
+        assertFalse(settlement!!.retry)
+        assertEquals(InstallState.Failed(FailReason.INSTALL, reason), InstallManager.states.value[pending.repo])
+        assertFalse(InstallManager.confirmations.holds(pending.repo))
+    }
+
+    @Test
+    fun aRefusalOfTheSecondSessionEndsTheAttemptWithItsReason() {
+        val pending = pending("owner/refused-second", 306)
+        val file = aFile()
+        handedOver(pending, file)
+        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 306) {}!!.retry)
+        assertNotNull(InstallManager.takeRetry(pending.repo))
+        InstallManager.sessionMade(
+            pending.repo, null, pending.packageName, 307, 1,
+            files = listOf("base.apk" to file), keep = file, retried = true
+        )
+        val reason = "INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed"
+
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, reason, 307) {}
+
+        assertFalse(settlement!!.retry)
+        assertNull(InstallManager.takeRetry(pending.repo))
+        assertEquals(InstallState.Failed(FailReason.INSTALL, reason), InstallManager.states.value[pending.repo])
+        assertFalse(file.exists())
+    }
+
+    @Test
+    fun aRefusalOfAnEarlierSessionLeavesTheAttemptOnItsWayAlone() {
+        val pending = pending("owner/refused-late", 308)
+        val file = aFile()
+        handedOver(pending, file)
+        val reason = "INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed"
+
+        assertNull(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, reason, 309) {})
+
+        assertEquals(InstallState.Installing, InstallManager.states.value[pending.repo])
+        assertNull(InstallManager.takeRetry(pending.repo))
+        assertTrue(file.exists())
+    }
+
+    @Test
+    fun anAbandonedSessionWhoseFilesAreGoneIsLeftToTheUser() {
+        // As after the process was restarted: the session is known from its record, the files are not.
+        val pending = pending("owner/abandoned-restored", 310)
+        assertTrue(InstallManager.restore(pending, Intent()))
+
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 310) {}
+
+        assertFalse(settlement!!.retry)
+        assertNull(InstallManager.takeRetry(pending.repo))
+        assertEquals(InstallState.Failed(FailReason.ABORTED), InstallManager.states.value[pending.repo])
+    }
+
     /** A context that notes the services started and holds a hand-over at its first question until told. */
     private class HoldingContext : ContextWrapper(null) {
         val reached = CountDownLatch(1)

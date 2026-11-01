@@ -34,7 +34,7 @@
     <string name="fail_invalid_apk">الملف الذي تم تنزيله ليس حزمة تطبيق صالحة.</string>
     <string name="fail_signature">التطبيق المثبّت موقَّع بمفتاح مختلف، لذا لا يمكن تحديثه مباشرةً. ألغِ تثبيته أولًا ثم ثبّته من جديد. سيؤدي ذلك إلى حذف بيانات التطبيق.</string>
     <string name="fail_install">تعذّر التثبيت.</string>
-    <string name="fail_aborted">ألغى النظام التثبيت قبل أن يتمكن من سؤالك. انقر على إعادة المحاولة للمحاولة مرة أخرى.</string>
+    <string name="fail_aborted">أُلغي التثبيت قبل اكتماله. انقر على إعادة المحاولة للمحاولة مرة أخرى.</string>
 
     <string name="detail_latest">أحدث إصدار</string>
     <string name="detail_installed">الإصدار المثبّت</string>

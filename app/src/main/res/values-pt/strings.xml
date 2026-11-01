@@ -31,7 +31,7 @@
     <string name="fail_invalid_apk">O arquivo baixado não é um pacote de app válido.</string>
     <string name="fail_signature">O app instalado foi assinado com uma chave diferente, por isso não pode ser atualizado diretamente. Desinstale o app primeiro e depois instale de novo. Isso apaga os dados do app.</string>
     <string name="fail_install">Falha na instalação.</string>
-    <string name="fail_aborted">O sistema cancelou a instalação antes de poder perguntar. Toque em Tentar novamente para repetir.</string>
+    <string name="fail_aborted">A instalação foi cancelada antes de terminar. Toque em Tentar novamente para repetir.</string>
 
     <string name="detail_latest">Versão mais recente</string>
     <string name="detail_installed">Versão instalada</string>

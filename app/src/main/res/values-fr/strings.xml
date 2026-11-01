@@ -31,7 +31,7 @@
     <string name="fail_invalid_apk">Le fichier téléchargé n\'est pas un package d\'application valide.</string>
     <string name="fail_signature">L\'application installée est signée avec une autre clé ; elle ne peut donc pas être mise à jour directement. Désinstallez-la d\'abord, puis réinstallez-la. Cette opération supprime les données de l\'application.</string>
     <string name="fail_install">Échec de l\'installation.</string>
-    <string name="fail_aborted">Le système a annulé l’installation avant de pouvoir vous demander confirmation. Touchez Réessayer pour recommencer.</string>
+    <string name="fail_aborted">L’installation a été annulée avant la fin. Touchez Réessayer pour recommencer.</string>
 
     <string name="detail_latest">Dernière version</string>
     <string name="detail_installed">Version installée</string>

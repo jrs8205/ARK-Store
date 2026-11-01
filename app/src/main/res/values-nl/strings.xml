@@ -30,7 +30,7 @@
     <string name="fail_invalid_apk">Het gedownloade bestand is geen geldig app-pakket.</string>
     <string name="fail_signature">De geïnstalleerde app is ondertekend met een andere sleutel en kan daarom niet direct worden geüpdatet. Verwijder de app eerst en installeer deze daarna opnieuw. Daarbij worden de gegevens van de app verwijderd.</string>
     <string name="fail_install">De installatie is mislukt.</string>
-    <string name="fail_aborted">Het systeem heeft de installatie geannuleerd voordat het om toestemming kon vragen. Tik op Opnieuw proberen om het nog eens te proberen.</string>
+    <string name="fail_aborted">De installatie is geannuleerd voordat deze was voltooid. Tik op Opnieuw proberen om het nog eens te proberen.</string>
 
     <string name="detail_latest">Nieuwste versie</string>
     <string name="detail_installed">Geïnstalleerd</string>

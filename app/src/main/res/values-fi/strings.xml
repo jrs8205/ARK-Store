@@ -30,7 +30,7 @@
     <string name="fail_invalid_apk">Ladattu tiedosto ei ole kelvollinen sovelluspaketti.</string>
     <string name="fail_signature">Asennettu sovellus on allekirjoitettu eri avaimella, joten sitä ei voi päivittää suoraan. Poista sovellus ensin ja asenna se sitten uudelleen. Tämä poistaa sovelluksen tiedot.</string>
     <string name="fail_install">Asennus epäonnistui.</string>
-    <string name="fail_aborted">Järjestelmä perui asennuksen ennen kuin ehti kysyä sinulta. Napauta Yritä uudelleen.</string>
+    <string name="fail_aborted">Asennus keskeytyi ennen kuin se valmistui. Napauta Yritä uudelleen.</string>
 
     <string name="detail_latest">Uusin versio</string>
     <string name="detail_installed">Asennettu</string>
