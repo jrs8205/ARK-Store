@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.1
+
+- Everything from 1.10.0 below, which was withdrawn after Play Protect warnings were
+  reported. Their cause is not known
+- An install the system cancels before anyone can answer, as has been seen on Xiaomi phones,
+  no longer ends in silence. A session the system merely abandoned is handed over once more
+  by itself, with no new download; otherwise the app says so and leaves trying again to you
+- An install refused by the system's check, such as Play Protect, is not tried again by
+  itself, and the app shows the reason
+
 ## 1.10.0
 
 - The search for apps on GitHub reaches much further, and takes in forks with stars of their
@@ -11,10 +21,8 @@
   again without a new download, and a prompt left unanswered can be opened again from the
   app's row
 - An install the system cancels before anyone can answer, as has been seen on Xiaomi phones,
-  no longer ends in silence. A session the system merely abandoned is handed over once more
-  by itself, with no new download; otherwise the app says so and leaves trying again to you
-- An install refused by the system's check, such as Play Protect, is not tried again by
-  itself, and the app shows the reason
+  is handed over once more by itself, with no new download. If it happens again, the app
+  says so
 - Scrolling the list is smoother with the metal surfaces on
 - The settings end with ways to support the development: GitHub Sponsors, Buy Me a Coffee
   and PayPal
