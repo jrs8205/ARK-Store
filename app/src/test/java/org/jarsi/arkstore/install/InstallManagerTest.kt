@@ -24,6 +24,11 @@ import org.junit.Test
  * leaves on its way.
  */
 class InstallManagerTest {
+    private companion object {
+        /** What PackageInstallerSession reports for an abandoned session, from Android 9 on. */
+        const val ABANDONED = "INSTALL_FAILED_ABORTED: Session was abandoned"
+    }
+
     private val repos = mutableListOf<String>()
 
     private fun pending(repo: String, sessionId: Int): PendingConfirmation {
@@ -37,15 +42,29 @@ class InstallManagerTest {
     }
 
     @Test
-    fun anAbortBeforeThePromptCouldBeAnsweredIsTheSystemsNotTheUsers() {
+    fun whatAnAbortCameToIsToldByTheSystemsReasonAndByWhetherAnyoneCouldHaveAnswered() {
         val now = 1_000_000L
-        // Nothing was presented: the system gave up on its own.
-        assertTrue(abortedBySystem(presentedAt = null, now = now, graceMillis = 1500))
-        // Presented a moment ago: nobody could have read and refused it yet.
-        assertTrue(abortedBySystem(presentedAt = now - 1499, now = now, graceMillis = 1500))
+        val rejected = "INSTALL_FAILED_ABORTED: User rejected permissions"
+        val refused = "INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed"
+        fun kind(message: String?, presentedAt: Long?) = abortKind(message, presentedAt, now, graceMillis = 1500)
+
+        // A verifier's refusal is that, whenever it comes, also after the user said yes to a prompt.
+        assertEquals(AbortKind.REFUSED, kind(refused, null))
+        assertEquals(AbortKind.REFUSED, kind(refused, now - 1499))
+        assertEquals(AbortKind.REFUSED, kind(refused, now - 60_000))
+        assertEquals(AbortKind.REFUSED, kind("INSTALL_FAILED_VERIFICATION_TIMEOUT", null))
         // Presented long enough ago: the user refused.
-        assertFalse(abortedBySystem(presentedAt = now - 1500, now = now, graceMillis = 1500))
-        assertFalse(abortedBySystem(presentedAt = now - 60_000, now = now, graceMillis = 1500))
+        assertEquals(AbortKind.BY_USER, kind(rejected, now - 1500))
+        assertEquals(AbortKind.BY_USER, kind(ABANDONED, now - 1500))
+        assertEquals(AbortKind.BY_USER, kind(null, now - 60_000))
+        // Nothing presented, or a moment ago, and the session merely abandoned.
+        assertEquals(AbortKind.GIVEN_UP, kind(ABANDONED, null))
+        assertEquals(AbortKind.GIVEN_UP, kind(ABANDONED, now - 1499))
+        // Too soon for an answer, with a reason that shows no passing fault: a quick "no" among them.
+        assertEquals(AbortKind.UNEXPLAINED, kind(rejected, null))
+        assertEquals(AbortKind.UNEXPLAINED, kind(rejected, now - 1499))
+        assertEquals(AbortKind.UNEXPLAINED, kind(null, null))
+        assertEquals(AbortKind.UNEXPLAINED, kind("INSTALL_FAILED_ABORTED", null))
     }
 
     /** An attempt of [pending]'s app on its way, whose session holds a [file] of its own. */
@@ -65,13 +84,54 @@ class InstallManagerTest {
         val file = aFile()
         handedOver(pending, file)
 
-        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 91) {}
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 91) {}
         assertTrue(settlement!!.retry)
         assertEquals(InstallState.Installing, InstallManager.states.value[pending.repo])
         assertTrue(file.exists())
         // Whoever comes first takes it: the worker or a screen coming into view.
         assertNotNull(InstallManager.takeRetry(pending.repo))
         assertNull(InstallManager.takeRetry(pending.repo))
+    }
+
+    /** Settles an attempt with a file of its own as aborted for [reason], and checks it is over: nothing is handed over again. */
+    private fun abortedFor(reason: String?, repo: String, sessionId: Int): InstallState? {
+        val pending = pending(repo, sessionId)
+        val file = aFile()
+        handedOver(pending, file)
+
+        val settlement = InstallManager.settle(repo, PackageInstaller.STATUS_FAILURE_ABORTED, reason, sessionId) {}
+
+        assertFalse(settlement!!.retry)
+        assertNull(InstallManager.takeRetry(repo))
+        assertFalse(file.exists())
+        return InstallManager.states.value[repo]
+    }
+
+    @Test
+    fun anInstallTheVerifierRefusedIsNotHandedOverAgainAndItsReasonIsShown() {
+        val reason = "INSTALL_FAILED_VERIFICATION_FAILURE: Install not allowed"
+        assertEquals(InstallState.Failed(FailReason.INSTALL, reason), abortedFor(reason, "owner/refused", 301))
+    }
+
+    @Test
+    fun anInstallWhoseVerificationTimedOutIsNotHandedOverAgainAndItsReasonIsShown() {
+        val reason = "INSTALL_FAILED_VERIFICATION_TIMEOUT"
+        assertEquals(InstallState.Failed(FailReason.INSTALL, reason), abortedFor(reason, "owner/timed-out", 302))
+    }
+
+    @Test
+    fun anAbortForNoReasonGivenIsLeftToTheUserToTryAgain() {
+        assertEquals(InstallState.Failed(FailReason.ABORTED), abortedFor(null, "owner/no-reason", 303))
+    }
+
+    @Test
+    fun anAbortThatCallsItselfTheUsersIsNotHandedOverAgain() {
+        // Nothing was presented, so the user cannot be said to have refused: it is explained,
+        // and trying again is left to the user all the same.
+        assertEquals(
+            InstallState.Failed(FailReason.ABORTED),
+            abortedFor("INSTALL_FAILED_ABORTED: User rejected permissions", "owner/rejected", 304)
+        )
     }
 
     /** A context that notes the services started and holds a hand-over at its first question until told. */
@@ -99,7 +159,7 @@ class InstallManagerTest {
         val pending = pending(repo, sessionId)
         val file = aFile()
         handedOver(pending, file)
-        assertTrue(InstallManager.settle(repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, sessionId) {}!!.retry)
+        assertTrue(InstallManager.settle(repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, sessionId) {}!!.retry)
         return file
     }
 
@@ -143,7 +203,7 @@ class InstallManagerTest {
         val file = aFile()
         handedOver(pending, file, retried = true)
 
-        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 92) {}
+        val settlement = InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 92) {}
         assertFalse(settlement!!.retry)
         assertNull(InstallManager.takeRetry(pending.repo))
         assertEquals(InstallState.Failed(FailReason.ABORTED), InstallManager.states.value[pending.repo])
@@ -165,7 +225,7 @@ class InstallManagerTest {
         val pending = pending("owner/root-after", 94)
         val file = aFile()
         handedOver(pending, file)
-        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 94) {}!!.retry)
+        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 94) {}!!.retry)
         assertNotNull(InstallManager.takeRetry(pending.repo))
 
         // As root, the session is made with no files to speak of, and settles at once.
@@ -180,7 +240,7 @@ class InstallManagerTest {
         val pending = pending("owner/waiting-files", 96)
         val file = aFile()
         handedOver(pending, file)
-        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, null, 96) {}!!.retry)
+        assertTrue(InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE_ABORTED, ABANDONED, 96) {}!!.retry)
 
         InstallManager.settle(pending.repo, PackageInstaller.STATUS_FAILURE, "no prompt", null) {}
         assertEquals(InstallState.Installing, InstallManager.states.value[pending.repo])

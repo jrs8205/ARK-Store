@@ -57,7 +57,7 @@ sealed interface InstallState {
 
 enum class FailReason {
     DOWNLOAD, INVALID_APK, SIGNATURE_MISMATCH, INSTALL,
-    /** The system gave the install up before the user could answer, and not for the first time; see [abortedBySystem]. */
+    /** The system gave the install up before the user could answer, and trying again is left to the user; see [abortKind]. */
     ABORTED
 }
 
@@ -142,15 +142,33 @@ internal data class Settled(val repo: String, val attempt: Int, val outcome: Out
 internal fun isAttempt(job: InstallJob?, attempt: Int?): Boolean =
     job != null && (attempt == null || job.id == attempt)
 
+/** What an install the system reports as aborted came to, see [abortKind]. */
+internal enum class AbortKind {
+    /** A verifier refused it or gave no answer: shown with the system's reason, and not tried again unasked. */
+    REFUSED,
+    /** The user had a prompt long enough to answer it and backed out: nothing to show. */
+    BY_USER,
+    /** The session was abandoned before anyone could answer: it may be handed over once more. */
+    GIVEN_UP,
+    /** It ended before anyone could answer, for no reason that shows a passing fault: explained, and left to the user. */
+    UNEXPLAINED
+}
+
 /**
- * Whether an install the system reports as aborted was given up by the system itself rather
- * than refused by the user: no prompt was [presentedAt] all for the user to answer, or one
- * was presented less than [graceMillis] before [now], too short a time to read it and refuse.
- * Some devices give up the first session this way and ask only on the next, which the user
- * saw as a download that led nowhere until tried again.
+ * What an install the system reports as aborted came to, by the [message] on its result and by
+ * when a prompt was [presentedAt], if ever; less than [graceMillis] before [now] is too short a
+ * time to read it and refuse. The system reports a verifier's refusal, a session abandoned and
+ * the user's own "no" with the same status, and only the message tells them apart. Some devices
+ * give up the first session and ask only on the next, which the user saw as a download that led
+ * nowhere until tried again; a refusal is not such a fault, and the time alone does not show
+ * that nobody said no, so nothing but an abandoned session goes back to the system unasked.
  */
-internal fun abortedBySystem(presentedAt: Long?, now: Long, graceMillis: Long): Boolean =
-    presentedAt == null || now - presentedAt < graceMillis
+internal fun abortKind(message: String?, presentedAt: Long?, now: Long, graceMillis: Long): AbortKind = when {
+    message?.startsWith("INSTALL_FAILED_VERIFICATION") == true -> AbortKind.REFUSED
+    presentedAt != null && now - presentedAt >= graceMillis -> AbortKind.BY_USER
+    message?.startsWith("INSTALL_FAILED_ABORTED: Session was abandoned") == true -> AbortKind.GIVEN_UP
+    else -> AbortKind.UNEXPLAINED
+}
 
 /** The step of a download that has [read] bytes of [total], or of [fallback] when the response did not say. */
 internal const val UNKNOWN_STEP = -1
@@ -200,7 +218,7 @@ object InstallManager {
      * seconds for most apps; a prompt that the user left open or put aside reports nothing.
      */
     private const val PROMPT_GRACE_MS = 20 * 1000L
-    /** A prompt presented this shortly before the system gave the install up was never answered, see [abortedBySystem]. */
+    /** A prompt presented this shortly before the system gave the install up was too recent to answer, see [abortKind]. */
     private const val INSTANT_ABORT_MS = 1500L
     /** A file in the download folder untouched this long belongs to no attempt of any process that lives. */
     private const val LEFTOVER_FILE_AGE_MS = 60 * 60 * 1000L
@@ -1018,10 +1036,11 @@ object InstallManager {
      * of its own, which the old attempt's cleanup must not take. The result of an earlier
      * attempt, or of one settled already, is left alone: then null, and no cleanup.
      *
-     * An install the system reports as aborted was refused by the user, which is no failure
-     * worth showing, unless nobody could have answered yet, see [abortedBySystem]: then the
-     * files are handed over once more when they are still here, and the state is not
-     * settled; a second time, or without the files, the failure is shown and explained.
+     * What an install the system reports as aborted came to is told by [abortKind]. The user's
+     * own "no" is no failure worth showing, and a verifier's refusal is shown with its reason.
+     * A session merely abandoned is handed over once more when the files are still here, and
+     * the state is not settled; a second time, without the files, or for any other reason, the
+     * failure is shown and explained, and trying again is left to the user.
      * Otherwise the attempt's files have served, whichever session it came to, and go under
      * the lock: no later attempt can have kept any while this one is on its way.
      */
@@ -1040,20 +1059,27 @@ object InstallManager {
                 return null
             }
             sessionId?.let { settledSessions += it }
-            val bySystem = status == PackageInstaller.STATUS_FAILURE_ABORTED &&
-                abortedBySystem(confirmations.presentedAt(repo), System.currentTimeMillis(), INSTANT_ABORT_MS)
+            val abort = if (status == PackageInstaller.STATUS_FAILURE_ABORTED) {
+                abortKind(message, confirmations.presentedAt(repo), System.currentTimeMillis(), INSTANT_ABORT_MS)
+                    .also { Log.i(TAG, "Install of $repo aborted ($it): $message") }
+            } else {
+                null
+            }
             confirmations.remove(repo)
             cleanup()
-            if (bySystem && attempted?.files != null && !attempted.retried) {
+            if (abort == AbortKind.GIVEN_UP && attempted?.files != null && !attempted.retried) {
                 retries[repo] = attempted
                 return Settlement(attempted, null, retry = true)
             }
             if (attempted != null) keeps.remove(repo)?.deleteRecursively()
             val (state, outcome) = when (status) {
                 PackageInstaller.STATUS_SUCCESS -> null to Outcome.INSTALLED
-                // The user backed out of the system prompt; that is not an error worth showing.
-                PackageInstaller.STATUS_FAILURE_ABORTED ->
-                    (if (bySystem) InstallState.Failed(FailReason.ABORTED) else null) to Outcome.FAILED
+                PackageInstaller.STATUS_FAILURE_ABORTED -> when (abort) {
+                    // The user backed out of the system prompt; that is not an error worth showing.
+                    AbortKind.BY_USER -> null
+                    AbortKind.REFUSED -> InstallState.Failed(FailReason.INSTALL, message)
+                    else -> InstallState.Failed(FailReason.ABORTED)
+                } to Outcome.FAILED
                 PackageInstaller.STATUS_FAILURE_CONFLICT,
                 PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
                     InstallState.Failed(conflictReason(message), message) to Outcome.FAILED

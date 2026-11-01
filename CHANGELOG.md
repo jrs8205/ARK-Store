@@ -11,8 +11,10 @@
   again without a new download, and a prompt left unanswered can be opened again from the
   app's row
 - An install the system cancels before anyone can answer, as has been seen on Xiaomi phones,
-  is handed over once more by itself, with no new download. If it happens again, the app
-  says so
+  no longer ends in silence. A session the system merely abandoned is handed over once more
+  by itself, with no new download; otherwise the app says so and leaves trying again to you
+- An install refused by the system's check, such as Play Protect, is not tried again by
+  itself, and the app shows the reason
 - Scrolling the list is smoother with the metal surfaces on
 - The settings end with ways to support the development: GitHub Sponsors, Buy Me a Coffee
   and PayPal
