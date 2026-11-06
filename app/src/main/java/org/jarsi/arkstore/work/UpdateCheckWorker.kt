@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.os.BatteryManager
-import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -35,6 +34,8 @@ import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
+import org.jarsi.arkstore.install.Root
+import org.jarsi.arkstore.install.RootCheck
 import org.jarsi.arkstore.install.installOrder
 import org.jarsi.arkstore.ui.MainActivity
 
@@ -148,9 +149,9 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
 
     /**
      * Installs, without asking, the updates among [found] that the settings allow now and
-     * that the store itself installed, one after the other, as long as the time a run
-     * [started] at is given lasts. Returns the full names of those settled: installed, or
-     * handed to the user to confirm. One that failed is announced like any other update,
+     * that the store itself installed, through root, one after the other, as long as the time
+     * a run [started] at is given lasts. Returns the full names of those installed. One that
+     * failed is announced like any other update,
      * and not tried unasked again until a newer version is offered; its failure is not
      * left for the user to find on a screen, as they did not ask for the install.
      */
@@ -161,13 +162,16 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     ): Set<String> {
         val context = applicationContext
         val settings = AutoUpdate.read(context)
-        if (!settings.allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) return emptySet()
+        // Asked once a run: the root app may ask the user the first time, and the answer holds
+        // for the run. A refusal later on, in the middle of an install, fails that install alone.
+        val root = rootReady(context)
+        if (!settings.allows(root, unmetered(context), charging(context))) return emptySet()
         val updates = found.map { it.first }
         val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
         val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
-        fun allowed() = AutoUpdate.read(context).allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))
+        fun allowed() = AutoUpdate.read(context).allows(root, unmetered(context), charging(context))
         for (app in installOrder(toTry(owned, failed), context.packageName)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
@@ -299,3 +303,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         }
     }
 }
+
+/** Whether root is turned on and the root app gives it now; asks the root app, which may ask the user. */
+internal suspend fun rootReady(context: Context): Boolean =
+    Root.enabled(context) && Root.check() is RootCheck.Granted
