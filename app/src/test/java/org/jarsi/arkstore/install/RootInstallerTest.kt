@@ -92,4 +92,22 @@ class RootInstallerTest {
         assertEquals(RootInstaller.Result.Done(PackageInstaller.STATUS_SUCCESS, null), RootInstaller.uninstall("org.example.app"))
         assertEquals(listOf("pm uninstall --user 0 org.example.app"), commands)
     }
+
+    @Test
+    fun isInstalledReadsPmPath() = runBlocking {
+        answering { Root.Outcome.Ran(0, "package:/data/app/~~x==/org.example.app-y==/base.apk\n", "") }
+        assertEquals(true, RootInstaller.isInstalled("org.example.app"))
+        assertEquals("pm path --user 0 org.example.app", commands.last())
+        answering { Root.Outcome.Ran(1, "", "") }
+        assertEquals(false, RootInstaller.isInstalled("org.example.app"))
+        answering { Root.Outcome.Ran(0, "", "") }
+        assertEquals(false, RootInstaller.isInstalled("org.example.app"))
+        answering { Root.Outcome.NoRoot }
+        assertNull(RootInstaller.isInstalled("org.example.app"))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun isInstalledTakesOnlyAPackageName() {
+        RootCommands.isInstalled("org.example.app; reboot", 0)
+    }
 }

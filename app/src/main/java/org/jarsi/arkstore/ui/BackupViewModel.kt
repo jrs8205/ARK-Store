@@ -19,6 +19,8 @@ import org.jarsi.arkstore.backup.BackupState
 import org.jarsi.arkstore.backup.DataChoice
 import org.jarsi.arkstore.backup.Installers
 import org.jarsi.arkstore.backup.Selection
+import org.jarsi.arkstore.backup.choosable
+import org.jarsi.arkstore.install.Root
 
 /**
  * What the pages of the backup show and hold across their recreation: the folder, the apps
@@ -243,7 +245,12 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
      * afresh each time. What is read is kept only if it is still the one chosen: one chosen
      * meanwhile has a read of its own.
      */
+    private val _rootOn = MutableStateFlow(Root.enabled(context))
+    /** Whether a restore goes through root; without it the files are gathered for the user to install. */
+    val rootOn: StateFlow<Boolean> = _rootOn.asStateFlow()
+
     fun loadFolder() {
+        _rootOn.value = Root.enabled(context)
         val zip = _zip.value
         val source = zip ?: _tree.value ?: return
         readJob?.cancel()
@@ -283,9 +290,10 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun chooseForRestore(folder: BackupFolder) {
+        val root = _rootOn.value
         _restoreSelected.value = Selection.chosen(
             folder.entries.map { it.entry.packageName to it.status.preselected },
-            folder.entries.filter { it.status.selectable }.mapTo(HashSet()) { it.entry.packageName },
+            folder.entries.filter { it.choosable(root) }.mapTo(HashSet()) { it.entry.packageName },
             restoreSaid
         )
     }
@@ -298,7 +306,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     /** Chooses every app that can be restored, or none; [among] the apps on the screen alone when it is given. */
     fun selectAllRestore(all: Boolean, among: Collection<String>? = null) {
         val folder = _folder.value ?: return
-        val names = folder.entries.filter { it.status.selectable && (among == null || it.entry.packageName in among) }.map { it.entry.packageName }
+        val names = folder.entries.filter { it.choosable(_rootOn.value) && (among == null || it.entry.packageName in among) }.map { it.entry.packageName }
         restoreSaid = restoreSaid.all(names, all)
         chooseForRestore(folder)
     }
@@ -313,7 +321,7 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun startRestore(onImportSettings: (Uri) -> Unit): Boolean {
         val folder = _folder.value ?: return false
-        val chosen = folder.entries.filter { it.status.selectable && it.entry.packageName in _restoreSelected.value }
+        val chosen = folder.entries.filter { it.choosable(_rootOn.value) && it.entry.packageName in _restoreSelected.value }
         val settings = folder.settings
         if (_importSettings.value && settings != null) onImportSettings(settings)
         if (chosen.isEmpty()) return settings != null && _importSettings.value
