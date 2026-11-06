@@ -73,6 +73,12 @@ internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<Sto
     updates.filter { it.fullName !in settled }
 
 /** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
+/**
+ * Whether the background check asks the root app at all: only when unasked updates are turned on
+ * and there is an update [toTry]. Asking makes some root apps show a note every time.
+ */
+internal fun asksRoot(enabled: Boolean, toTry: List<StoreApp>): Boolean = enabled && toTry.isNotEmpty()
+
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
     updates.filter { announcement(it) !in failed }
 
@@ -162,13 +168,14 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     ): Set<String> {
         val context = applicationContext
         val settings = AutoUpdate.read(context)
+        val updates = found.map { it.first }
+        val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
+        val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
+        if (!asksRoot(settings.enabled, toTry(owned, failed))) return emptySet()
         // Asked once a run: the root app may ask the user the first time, and the answer holds
         // for the run. A refusal later on, in the middle of an install, fails that install alone.
         val root = rootReady(context)
         if (!settings.allows(root, unmetered(context), charging(context))) return emptySet()
-        val updates = found.map { it.first }
-        val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
-        val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
         fun allowed() = AutoUpdate.read(context).allows(root, unmetered(context), charging(context))

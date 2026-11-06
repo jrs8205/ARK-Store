@@ -94,4 +94,12 @@ class UpdateCheckWorkerTest {
         // What is no longer offered is forgotten, so that the set does not grow for ever.
         assertEquals(setOf(announcement(broken)), stillFailed(failed, listOf(broken, other)))
     }
+
+    @Test
+    fun rootIsAskedOnlyWhenAnUpdateMayBeInstalledUnasked() {
+        val app = testApp(fullName = "alice/app", versionCode = 2)
+        assertFalse(asksRoot(enabled = false, toTry = listOf(app)))
+        assertFalse(asksRoot(enabled = true, toTry = emptyList()))
+        assertTrue(asksRoot(enabled = true, toTry = listOf(app)))
+    }
 }

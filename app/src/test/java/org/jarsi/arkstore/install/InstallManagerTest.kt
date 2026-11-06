@@ -144,4 +144,15 @@ class InstallManagerTest {
         // A root install that failed is not saved instead: the system has said why.
         assertEquals(emptyList<String>(), saves)
     }
+
+    @Test
+    fun aRecordFromAnEarlierRunIsReplacedAndItsFileDeleted() = runBlocking {
+        // Written down by an earlier run, or kept after the user installed it: not among those shown.
+        val earlier = SavedApk("org.example.earlier", 5, "1.5", "content://downloads/21", "owner/earlier")
+        context.getSharedPreferences("saved_apks", 0).edit()
+            .putString("records", SavedApks.toJson(mapOf(earlier.packageName to earlier))).apply()
+        saving("content://downloads/22")
+        InstallManager.handOver(context, "owner/earlier", null, "org.example.earlier", listOf("base.apk" to aFile()), false, saveAs(6))
+        assertEquals(listOf("content://downloads/21"), deleted)
+    }
 }

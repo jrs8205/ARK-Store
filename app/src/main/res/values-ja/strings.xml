@@ -223,7 +223,7 @@
     <string name="root_granted_unknown">Root 権限を取得しました。</string>
     <string name="root_denied">Root 権限が拒否されました。Root 管理アプリで ARK-Store を許可してから、もう一度お試しください。それまでは、ご自身でインストールできるようにファイルが保存されます。</string>
     <string name="root_missing">利用できません。このデバイスは Root 化されていません。</string>
-    <string name="root_lost">前回のインストールでは Root 権限を取得できなかったため、通常の方法で行われました。</string>
+    <string name="root_lost">前回のインストールでは Root 権限を取得できなかったため、ご自身でインストールできるようにファイルを保存しました。</string>
     <string name="uninstall_confirm_title">%1$s をアンインストールしますか？</string>
     <string name="uninstall_confirm_message">アプリとそのデータは、Android の確認なしですぐに削除されます。</string>
     <string name="uninstall_failed">アンインストールできませんでした：%1$s</string>

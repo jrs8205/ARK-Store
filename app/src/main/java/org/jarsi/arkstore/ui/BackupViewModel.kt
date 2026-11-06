@@ -240,15 +240,15 @@ class BackupViewModel(application: Application) : AndroidViewModel(application) 
     private fun chosenForBackup(): List<BackupCandidate> =
         _candidates.value.orEmpty().filter { it.readable && it.entry.packageName in _selected.value }
 
+    private val _rootOn = MutableStateFlow(Root.enabled(context))
+    /** Whether a restore goes through root; without it the files are gathered for the user to install. */
+    val rootOn: StateFlow<Boolean> = _rootOn.asStateFlow()
+
     /**
      * Reads the backup for a restore, the zip file when one is chosen and the folder otherwise,
      * afresh each time. What is read is kept only if it is still the one chosen: one chosen
      * meanwhile has a read of its own.
      */
-    private val _rootOn = MutableStateFlow(Root.enabled(context))
-    /** Whether a restore goes through root; without it the files are gathered for the user to install. */
-    val rootOn: StateFlow<Boolean> = _rootOn.asStateFlow()
-
     fun loadFolder() {
         _rootOn.value = Root.enabled(context)
         val zip = _zip.value

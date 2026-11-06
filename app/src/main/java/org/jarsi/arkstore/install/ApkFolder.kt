@@ -107,18 +107,32 @@ object ApkFolder {
         }
     }
 
-    /** Deletes the file the store saved at [uri]; one already gone, or not the store's to delete, is left. */
+    /**
+     * Deletes the file the store saved at [uri]; one already gone, not the store's to delete, or
+     * moved out of the folder by the user, which keeps its entry in MediaStore, is left.
+     */
     fun delete(context: Context, uri: String) {
         val parsed = uri.toUri()
         try {
             if (parsed.scheme == "file") {
                 parsed.path?.let { File(it).delete() }
-            } else {
+            } else if (SavedApks.inFolder(relativePath(context, parsed))) {
                 context.contentResolver.delete(parsed, null, null)
+            } else {
+                Log.i(TAG, "Not deleting $uri: it is no longer in the folder")
             }
         } catch (e: Exception) {
             Log.i(TAG, "Could not delete $uri: ${e.message}")
         }
+    }
+
+    /** Where MediaStore has the file at [uri], or null when it cannot tell. */
+    private fun relativePath(context: Context, uri: Uri): String? = try {
+        context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use {
+            if (it.moveToFirst()) it.getString(0) else null
+        }
+    } catch (e: Exception) {
+        null
     }
 
     /** The folder as the Files app shows its path, for the texts that point the user to it. */

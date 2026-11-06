@@ -263,7 +263,7 @@
     <string name="root_granted_unknown">تم منح صلاحيات الروت.</string>
     <string name="root_denied">رُفض منح صلاحيات الروت. امنح ARK-Store الإذن في تطبيق الروت ثم حاول مرة أخرى؛ وحتى ذلك الحين تُحفظ الملفات لتثبّتها بنفسك.</string>
     <string name="root_missing">غير متاح: هذا الجهاز غير مزوّد بصلاحيات الروت.</string>
-    <string name="root_lost">لم تحصل عملية التثبيت الأخيرة على صلاحيات الروت، فتمّت بالطريقة المعتادة.</string>
+    <string name="root_lost">لم تحصل عملية التثبيت الأخيرة على صلاحيات الروت، لذا حُفظ الملف لتثبّته بنفسك.</string>
     <string name="uninstall_confirm_title">هل تريد إلغاء تثبيت %1$s؟</string>
     <string name="uninstall_confirm_message">ستتم إزالة التطبيق وبياناته فورًا، دون أن يسألك Android.</string>
     <string name="uninstall_failed">تعذّر إلغاء التثبيت: %1$s</string>

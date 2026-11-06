@@ -1236,7 +1236,7 @@ object BackupManager {
                 return LeftOut.OTHER_SIGNER
             }
             val versionCode = PackageInfoCompat.getLongVersionCode(archive)
-            ApkFolder.save(context, file, SavedApks.fileName(entry.label, archive.versionName, versionCode), subfolder)
+            ApkFolder.save(context, file, SavedApks.fileName(entry.label, archive.versionName, versionCode, entry.packageName), subfolder)
             return null
         } catch (e: IOException) {
             Log.w(TAG, "Could not save ${offer.fullName} for the restore", e)
@@ -1306,7 +1306,7 @@ object BackupManager {
             Log.w(TAG, "The backup's file of ${entry.packageName} is not that app")
             return false
         }
-        ApkFolder.save(context, file, SavedApks.fileName(entry.label, entry.versionName, entry.versionCode), subfolder)
+        ApkFolder.save(context, file, SavedApks.fileName(entry.label, entry.versionName, entry.versionCode, entry.packageName), subfolder)
         return true
     }
 

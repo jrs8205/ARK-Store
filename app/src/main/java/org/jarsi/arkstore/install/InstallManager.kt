@@ -2,7 +2,6 @@ package org.jarsi.arkstore.install
 
 import android.content.Context
 import android.content.pm.PackageInstaller
-import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import android.widget.Toast
@@ -155,6 +154,13 @@ object InstallManager {
 
     /** Guards [saved] and its record, which a save and a reload may change at the same moment. */
     private val savedLock = Any()
+
+    private val _rootLost = MutableStateFlow(false)
+    /**
+     * Root is turned on, but the last install could not have it: the files are then saved for
+     * the user, and the rows say so rather than offering installs that root would do.
+     */
+    val rootLost: StateFlow<Boolean> = _rootLost.asStateFlow()
 
     /** How many of the store's screens are showing; there can be one per window. */
     internal val screens = AtomicInteger(0)
@@ -514,7 +520,12 @@ object InstallManager {
         setState(app.fullName, InstallState.Installing)
         if (app.prerelease) InstalledApps.rememberBeta(appContext, archive.packageName, versionCode)
         val saveAs = if (saveWithoutRoot) {
-            SaveAs(SavedApks.fileName(app.title, archive.versionName, versionCode), versionCode, archive.versionName, app.fullName)
+            SaveAs(
+                SavedApks.fileName(app.title, archive.versionName, versionCode, archive.packageName),
+                versionCode,
+                archive.versionName,
+                app.fullName
+            )
         } else {
             null
         }
@@ -557,8 +568,10 @@ object InstallManager {
             return HandOver.Failed(InstallState.Failed(FailReason.SAVE, e.message))
         }
         val record = SavedApk(packageName, saveAs.versionCode, saveAs.versionName, uri, saveAs.repo)
+        // From what is written down, not from what the rows show: a file whose version is
+        // installed by now, or one from before this run, goes all the same.
         val older = synchronized(savedLock) {
-            val current = _saved.value
+            val current = readSaved(context)
             val older = SavedApks.olderToDelete(current, packageName, uri)
             writeSaved(context, current + (packageName to record))
             older
@@ -579,14 +592,14 @@ object InstallManager {
     ): HandOver? {
         if (Root.check() !is RootCheck.Granted) {
             Log.w(TAG, "Root was not given; $key is not installed through it")
-            Root.markLost(context, true)
+            markRootLost(context, true)
             return null
         }
-        Root.markLost(context, false)
+        markRootLost(context, false)
         return when (val result = RootInstaller.install(context.packageName, packageName, files) {}) {
             RootInstaller.Result.NoRoot -> {
                 Log.w(TAG, "Root was lost during the install of $key")
-                Root.markLost(context, true)
+                markRootLost(context, true)
                 null
             }
             is RootInstaller.Result.Done -> when (result.status) {
@@ -630,6 +643,16 @@ object InstallManager {
         }
     }
 
+    /** Notes whether root could be had, for the settings and for the rows; see [rootLost]. */
+    private fun markRootLost(context: Context, lost: Boolean) {
+        Root.markLost(context, lost)
+        _rootLost.value = lost
+    }
+
+    private fun readSaved(context: Context): Map<String, SavedApk> = SavedApks.parse(
+        context.getSharedPreferences(PREFS_SAVED, Context.MODE_PRIVATE).getString(PREF_RECORDS, null)
+    )
+
     /** Writes [records] down and shows them, as they are, for the rows to read. */
     private fun writeSaved(context: Context, records: Map<String, SavedApk>) {
         context.getSharedPreferences(PREFS_SAVED, Context.MODE_PRIVATE).edit {
@@ -639,32 +662,24 @@ object InstallManager {
     }
 
     /**
-     * Reads the files saved for the user, and lets go of those whose version is installed by
-     * now and of those the user removed, see [SavedApks.pending]. The files themselves stay:
-     * the newest of each app is kept in the folder for the user to install again or to share.
-     * Asks the system about each, so not for the main thread.
+     * Reads the files saved for the user, and lets go of those the user removed, see
+     * [SavedApks.kept]. The files themselves stay: the newest of each app is kept in the folder
+     * for the user to install again or to share, and the rows hide one whose version is
+     * installed. Asks MediaStore about each, so not for the main thread. Nothing here may take
+     * the app down: what cannot be read is read again the next time.
      */
     fun loadSaved(context: Context) {
         val appContext = context.applicationContext
-        synchronized(savedLock) {
-            val prefs = appContext.getSharedPreferences(PREFS_SAVED, Context.MODE_PRIVATE)
-            val records = SavedApks.parse(prefs.getString(PREF_RECORDS, null))
-            val pending = SavedApks.pending(
-                records,
-                installedVersion = { packageName -> installedVersion(appContext, packageName) },
-                exists = { ApkFolder.exists(appContext, it.uri) }
-            )
-            if (pending != records) {
-                prefs.edit { putString(PREF_RECORDS, SavedApks.toJson(pending)) }
+        _rootLost.value = Root.enabled(appContext) && Root.lost(appContext)
+        try {
+            synchronized(savedLock) {
+                val records = readSaved(appContext)
+                val kept = SavedApks.kept(records) { ApkFolder.exists(appContext, it.uri) }
+                if (kept != records) writeSaved(appContext, kept) else _saved.value = kept
             }
-            _saved.value = pending
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "Could not read the saved files", e)
         }
-    }
-
-    private fun installedVersion(context: Context, packageName: String): Long? = try {
-        PackageInfoCompat.getLongVersionCode(context.packageManager.getPackageInfo(packageName, 0))
-    } catch (_: PackageManager.NameNotFoundException) {
-        null
     }
 
     /**
@@ -725,11 +740,11 @@ object InstallManager {
             val result = if (Root.check() is RootCheck.Granted) RootInstaller.uninstall(packageName) else RootInstaller.Result.NoRoot
             when (result) {
                 RootInstaller.Result.NoRoot -> {
-                    Root.markLost(appContext, true)
+                    markRootLost(appContext, true)
                     withContext(Dispatchers.Main) { onNoRoot() }
                 }
                 is RootInstaller.Result.Done -> {
-                    Root.markLost(appContext, false)
+                    markRootLost(appContext, false)
                     if (result.status == PackageInstaller.STATUS_SUCCESS) {
                         notifyInstalledChanged()
                     } else {

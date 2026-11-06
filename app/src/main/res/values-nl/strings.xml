@@ -231,7 +231,7 @@
     <string name="root_granted_unknown">Root-toegang verleend.</string>
     <string name="root_denied">Root-toegang geweigerd. Sta ARK-Store toe in de root-app en probeer het opnieuw; tot die tijd worden de bestanden opgeslagen zodat je ze zelf kunt installeren.</string>
     <string name="root_missing">Niet beschikbaar: dit apparaat is niet geroot.</string>
-    <string name="root_lost">De laatste installatie kreeg geen root-toegang en ging op de gewone manier.</string>
+    <string name="root_lost">De laatste installatie kreeg geen root, dus het bestand is opgeslagen zodat je het zelf kunt installeren.</string>
     <string name="uninstall_confirm_title">%1$s verwijderen?</string>
     <string name="uninstall_confirm_message">De app en de bijbehorende gegevens worden meteen verwijderd, zonder dat Android iets vraagt.</string>
     <string name="uninstall_failed">Verwijderen mislukt: %1$s</string>

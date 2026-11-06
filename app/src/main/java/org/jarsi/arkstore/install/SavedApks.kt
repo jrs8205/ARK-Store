@@ -23,17 +23,34 @@ object SavedApks {
     private const val MAX_VERSION = 40
     private const val EXTENSION = ".apk"
 
+    /** Where the store's files are, as MediaStore gives a file's relative path. */
+    private const val FOLDER_PATH = "Download/ARK-Store"
+
     /**
      * The name a file of [title] at [versionName] (or [versionCode] when it has none) is saved
      * under: letters, digits, dots, hyphens and underscores only, never hidden, never more
-     * than [MAX_NAME] characters, so that any app's name makes a name the folder takes.
+     * than [MAX_NAME] characters, so that any app's name makes a name the folder takes. A
+     * title in a script of its own, which leaves nothing of that, is named by its [fallback],
+     * the package, so that the files can still be told apart.
      */
-    fun fileName(title: String, versionName: String?, versionCode: Long): String {
+    fun fileName(title: String, versionName: String?, versionCode: Long, fallback: String? = null): String {
         val version = clean(versionName.orEmpty()).take(MAX_VERSION).trimEnd('-', '.')
             .ifEmpty { versionCode.toString() }
         val tail = "-$version$EXTENSION"
-        val name = clean(title).take(MAX_NAME - tail.length).trimEnd('-', '.').ifEmpty { "app" }
+        val room = MAX_NAME - tail.length
+        val name = clean(title).take(room).trimEnd('-', '.')
+            .ifEmpty { clean(fallback.orEmpty()).take(room).trimEnd('-', '.') }
+            .ifEmpty { "app" }
         return name + tail
+    }
+
+    /**
+     * Whether a file at [relativePath], as MediaStore tells it, is still in the store's folder:
+     * one the user moved elsewhere is theirs, and is never deleted.
+     */
+    fun inFolder(relativePath: String?): Boolean {
+        val path = relativePath?.trimEnd('/') ?: return false
+        return path == FOLDER_PATH || path.startsWith("$FOLDER_PATH/")
     }
 
     private fun clean(text: String): String =
@@ -78,18 +95,12 @@ object SavedApks {
     }
 
     /**
-     * The records of [saved] still waiting to be installed: the version is not installed yet,
-     * by [installedVersion] (null when the app is not installed), and the file is still there,
-     * by [exists]. A file the user removed is no longer offered.
+     * The records of [saved] whose file is still there, by [exists]: a file the user removed is
+     * no longer offered. One whose version is installed by now is kept all the same, so that
+     * its file goes when a newer one comes; the rows no longer show it, see [shownFor].
      */
-    fun pending(
-        saved: Map<String, SavedApk>,
-        installedVersion: (String) -> Long?,
-        exists: (SavedApk) -> Boolean
-    ): Map<String, SavedApk> =
-        saved.filter { (packageName, record) ->
-            installedVersion(packageName).let { it == null || it < record.versionCode } && exists(record)
-        }
+    fun kept(saved: Map<String, SavedApk>, exists: (SavedApk) -> Boolean): Map<String, SavedApk> =
+        saved.filterValues(exists)
 
     /**
      * [saved], when a row shows it as waiting to be installed: it is newer than the

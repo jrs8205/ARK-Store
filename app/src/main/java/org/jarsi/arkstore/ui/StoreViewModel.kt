@@ -76,16 +76,20 @@ enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 
 enum class TransferError { NOT_A_BACKUP, FAILED }
 
-/** How root stands in the settings: off, being asked for, on, or refused one way or another. */
 /**
  * The file saved for this row's app for the user to install, when the row shows it: an update or
- * a new install whose file is newer than what is installed, see [SavedApks.shownFor].
+ * a new install, downloaded for this very row's repository, whose file is newer than what is
+ * installed, see [SavedApks.shownFor]. Another build of the package has a row of its own.
  */
 fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
     if (status != AppStatus.UPDATE_AVAILABLE && status != AppStatus.NOT_INSTALLED) {
         null
     } else {
-        SavedApks.shownFor(app.packageName?.let(saved::get), installed?.versionCode, app.versionCode)
+        SavedApks.shownFor(
+            app.packageName?.let(saved::get)?.takeIf { it.repo == app.fullName },
+            installed?.versionCode,
+            app.versionCode
+        )
     }
 
 /**
@@ -95,8 +99,13 @@ fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
 fun toDownload(updates: List<AppRow>, saved: Map<String, SavedApk>, direct: Boolean): List<AppRow> =
     if (direct) updates else updates.filter { it.downloaded(saved) == null }
 
-/** Whether the store installs apps itself, through root, rather than saving their files for the user. */
-internal fun installsDirectly(root: RootUiState): Boolean = root is RootUiState.On
+/**
+ * Whether the store installs apps itself, through root, rather than saving their files for the
+ * user: root is on and given, and was not [lost] at the last install.
+ */
+internal fun installsDirectly(root: RootUiState, lost: Boolean = false): Boolean = root is RootUiState.On && !lost
+
+/** How root stands in the settings: off, being asked for, on, or refused one way or another. */
 
 sealed interface RootUiState {
     data object Off : RootUiState
@@ -469,6 +478,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The files saved for the user to install, by package; see [InstallManager.saved]. */
     val saved: StateFlow<Map<String, SavedApk>> = InstallManager.saved
+
+    /** Root is on but could not be had at the last install; see [InstallManager.rootLost]. */
+    val rootLost: StateFlow<Boolean> = InstallManager.rootLost
 
     /** Opens the folder the files are saved to, in the Files app. */
     fun openFolder() = ApkFolder.open(getApplication())

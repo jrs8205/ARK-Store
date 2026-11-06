@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.install
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -40,18 +41,32 @@ class SavedApksTest {
     }
 
     @Test
-    fun pendingDropsInstalledVersions() {
+    fun aRecordIsKeptAfterItsVersionIsInstalled() {
+        // Kept so that the file is deleted when a newer one comes; the rows hide it once installed.
         val records = mapOf("org.example" to saved(versionCode = 5))
-        assertEquals(emptyMap<String, SavedApk>(), SavedApks.pending(records, { 5L }, { true }))
-        assertEquals(emptyMap<String, SavedApk>(), SavedApks.pending(records, { 6L }, { true }))
-        assertEquals(records, SavedApks.pending(records, { 4L }, { true }))
-        assertEquals(records, SavedApks.pending(records, { null }, { true }))
+        assertEquals(records, SavedApks.kept(records) { true })
     }
 
     @Test
     fun pendingDropsRecordsWhoseFileIsGone() {
         val records = mapOf("org.example" to saved(versionCode = 5))
-        assertEquals(emptyMap<String, SavedApk>(), SavedApks.pending(records, { null }, { false }))
+        assertEquals(emptyMap<String, SavedApk>(), SavedApks.kept(records) { false })
+    }
+
+    @Test
+    fun fileNameFallsBackToThePackageForATitleOfOtherScripts() {
+        assertEquals("org.telegram-1.0.apk", SavedApks.fileName("Телеграм", "1.0", 1, "org.telegram"))
+        assertEquals("app-1.0.apk", SavedApks.fileName("微信", "1.0", 1, null))
+    }
+
+    @Test
+    fun onlyAFileStillInTheFolderIsTheStoresToDelete() {
+        assertTrue(SavedApks.inFolder("Download/ARK-Store/"))
+        assertTrue(SavedApks.inFolder("Download/ARK-Store/restore-2026-11-07/"))
+        assertFalse(SavedApks.inFolder("Download/"))
+        assertFalse(SavedApks.inFolder("Download/ARK-Store-old/"))
+        assertFalse(SavedApks.inFolder("Documents/ARK-Store/"))
+        assertFalse(SavedApks.inFolder(null))
     }
 
     @Test

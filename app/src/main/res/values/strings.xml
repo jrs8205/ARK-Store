@@ -246,7 +246,7 @@
     <string name="root_granted_unknown">Root granted.</string>
     <string name="root_denied">Root was refused. Allow ARK-Store in the root app and try again; until then the files are saved for you to install.</string>
     <string name="root_missing">Not available: this device is not rooted.</string>
-    <string name="root_lost">The last install did not get root and went the ordinary way.</string>
+    <string name="root_lost">The last install did not get root, so its file was saved for you to install.</string>
     <string name="uninstall_confirm_title">Uninstall %1$s?</string>
     <string name="uninstall_confirm_message">The app and its data are removed right away, without a question from Android.</string>
     <string name="uninstall_failed">Could not uninstall: %1$s</string>

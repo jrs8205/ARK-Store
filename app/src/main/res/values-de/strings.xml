@@ -231,7 +231,7 @@
     <string name="root_granted_unknown">Root-Zugriff gewährt.</string>
     <string name="root_denied">Root-Zugriff wurde verweigert. Erlaube ARK-Store in der Root-App und versuche es noch einmal; bis dahin werden die Dateien gespeichert, damit du sie selbst installierst.</string>
     <string name="root_missing">Nicht verfügbar: Dieses Gerät ist nicht gerootet.</string>
-    <string name="root_lost">Die letzte Installation hat keinen Root-Zugriff erhalten und lief auf dem üblichen Weg.</string>
+    <string name="root_lost">Die letzte Installation bekam kein Root, daher wurde die Datei gespeichert, damit du sie selbst installierst.</string>
     <string name="uninstall_confirm_title">%1$s deinstallieren?</string>
     <string name="uninstall_confirm_message">Die App und ihre Daten werden sofort entfernt, ohne Rückfrage von Android.</string>
     <string name="uninstall_failed">Deinstallation fehlgeschlagen: %1$s</string>

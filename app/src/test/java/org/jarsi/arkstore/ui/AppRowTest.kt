@@ -84,4 +84,17 @@ class AppRowTest {
         // Through root every update is installed, whatever was saved before.
         assertEquals(listOf(savedRow, other), toDownload(listOf(savedRow, other), saved, direct = true))
     }
+
+    @Test
+    fun downloadedOnlyOnTheRowOfTheRepositoryItWasDownloadedFor() {
+        val saved = mapOf("org.example.app" to record)
+        val fork = withStatus(AppStatus.NOT_INSTALLED, installed = null).let { it.copy(app = it.app.copy(fullName = "fork/app")) }
+        assertNull(fork.downloaded(saved))
+    }
+
+    @Test
+    fun installsDirectlyNotOnceRootWasRefused() {
+        assertFalse(installsDirectly(RootUiState.On(null), lost = true))
+        assertTrue(installsDirectly(RootUiState.On(null), lost = false))
+    }
 }

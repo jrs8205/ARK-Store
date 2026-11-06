@@ -231,7 +231,7 @@
     <string name="root_granted_unknown">रूट की अनुमति मिल गई।</string>
     <string name="root_denied">रूट की अनुमति अस्वीकार कर दी गई। रूट ऐप में ARK-Store को अनुमति दें और फिर से कोशिश करें; तब तक फ़ाइलें सेव की जाएंगी ताकि आप उन्हें खुद इंस्टॉल कर सकें।</string>
     <string name="root_missing">उपलब्ध नहीं है: यह डिवाइस रूट नहीं किया गया है।</string>
-    <string name="root_lost">पिछले इंस्टॉलेशन को रूट नहीं मिला, इसलिए वह सामान्य तरीके से हुआ।</string>
+    <string name="root_lost">पिछले इंस्टॉल को रूट नहीं मिला, इसलिए फ़ाइल सेव कर दी गई ताकि आप उसे खुद इंस्टॉल कर सकें।</string>
     <string name="uninstall_confirm_title">%1$s अनइंस्टॉल करें?</string>
     <string name="uninstall_confirm_message">ऐप और उसका डेटा Android के पूछे बिना तुरंत हटा दिया जाएगा।</string>
     <string name="uninstall_failed">अनइंस्टॉल नहीं हो सका: %1$s</string>

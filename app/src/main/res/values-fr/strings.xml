@@ -239,7 +239,7 @@
     <string name="root_granted_unknown">Accès root accordé.</string>
     <string name="root_denied">L\'accès root a été refusé. Autorisez ARK-Store dans l\'application root, puis réessayez ; en attendant, les fichiers sont enregistrés pour que vous les installiez vous-même.</string>
     <string name="root_missing">Indisponible : cet appareil n\'est pas rooté.</string>
-    <string name="root_lost">La dernière installation n\'a pas obtenu l\'accès root et s\'est faite de la manière habituelle.</string>
+    <string name="root_lost">La dernière installation n\'a pas obtenu l\'accès root ; le fichier a donc été enregistré pour que vous l\'installiez vous-même.</string>
     <string name="uninstall_confirm_title">Désinstaller %1$s ?</string>
     <string name="uninstall_confirm_message">L\'application et ses données vont être supprimées immédiatement, sans confirmation d\'Android.</string>
     <string name="uninstall_failed">Impossible de désinstaller : %1$s</string>
