@@ -7,7 +7,7 @@
     <string name="action_install">Zainstaluj</string>
     <string name="action_open">Otwórz</string>
     <string name="action_download">Pobierz</string>
-    <string name="action_download_update">Pobierz aktualizację</string>
+    <string name="action_download_update">Pobierz</string>
     <string name="action_open_folder">Otwórz folder</string>
     <string name="open_folder_by_hand">Otwórz %1$s w aplikacji Pliki.</string>
     <string name="downloaded_note">Pobrano do folderu %1$s. Zainstaluj ją w aplikacji Pliki.</string>

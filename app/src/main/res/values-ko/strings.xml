@@ -7,7 +7,7 @@
     <string name="action_install">설치</string>
     <string name="action_open">열기</string>
     <string name="action_download">다운로드</string>
-    <string name="action_download_update">업데이트 다운로드</string>
+    <string name="action_download_update">다운로드</string>
     <string name="action_open_folder">폴더 열기</string>
     <string name="open_folder_by_hand">파일 앱에서 %1$s 폴더를 여세요.</string>
     <string name="downloaded_note">%1$s에 다운로드했습니다. 파일 앱에서 설치하세요.</string>

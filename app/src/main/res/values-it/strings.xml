@@ -7,7 +7,7 @@
     <string name="action_install">Installa</string>
     <string name="action_open">Apri</string>
     <string name="action_download">Scarica</string>
-    <string name="action_download_update">Scarica aggiornamento</string>
+    <string name="action_download_update">Scarica</string>
     <string name="action_open_folder">Apri cartella</string>
     <string name="open_folder_by_hand">Apri %1$s nell\'app File.</string>
     <string name="downloaded_note">Scaricata in %1$s. Installala dall\'app File.</string>

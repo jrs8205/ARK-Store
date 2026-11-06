@@ -7,7 +7,7 @@
     <string name="action_install">Instalar</string>
     <string name="action_open">Abrir</string>
     <string name="action_download">Baixar</string>
-    <string name="action_download_update">Baixar atualização</string>
+    <string name="action_download_update">Baixar</string>
     <string name="action_open_folder">Abrir pasta</string>
     <string name="open_folder_by_hand">Abra %1$s no app Arquivos.</string>
     <string name="downloaded_note">Baixado em %1$s. Instale pelo app Arquivos.</string>

@@ -7,7 +7,7 @@
     <string name="action_install">Installer</string>
     <string name="action_open">Ouvrir</string>
     <string name="action_download">Télécharger</string>
-    <string name="action_download_update">Télécharger la mise à jour</string>
+    <string name="action_download_update">Télécharger</string>
     <string name="action_open_folder">Ouvrir le dossier</string>
     <string name="open_folder_by_hand">Ouvrez %1$s dans l\'application Fichiers.</string>
     <string name="downloaded_note">Téléchargée dans %1$s. Installez-la depuis l\'application Fichiers.</string>

@@ -7,7 +7,7 @@
     <string name="action_install">इंस्टॉल करें</string>
     <string name="action_open">खोलें</string>
     <string name="action_download">डाउनलोड करें</string>
-    <string name="action_download_update">अपडेट डाउनलोड करें</string>
+    <string name="action_download_update">डाउनलोड करें</string>
     <string name="action_open_folder">फ़ोल्डर खोलें</string>
     <string name="open_folder_by_hand">Files ऐप में %1$s खोलें।</string>
     <string name="downloaded_note">%1$s में डाउनलोड हो गया। इसे Files ऐप से इंस्टॉल करें।</string>

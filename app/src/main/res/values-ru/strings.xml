@@ -7,7 +7,7 @@
     <string name="action_install">Установить</string>
     <string name="action_open">Открыть</string>
     <string name="action_download">Скачать</string>
-    <string name="action_download_update">Скачать обновление</string>
+    <string name="action_download_update">Скачать</string>
     <string name="action_open_folder">Открыть папку</string>
     <string name="open_folder_by_hand">Откройте %1$s в приложении «Файлы».</string>
     <string name="downloaded_note">Скачано в папку %1$s. Установите его через приложение «Файлы».</string>

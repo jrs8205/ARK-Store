@@ -7,7 +7,7 @@
     <string name="action_install">Yükle</string>
     <string name="action_open">Aç</string>
     <string name="action_download">İndir</string>
-    <string name="action_download_update">Güncellemeyi indir</string>
+    <string name="action_download_update">İndir</string>
     <string name="action_open_folder">Klasörü aç</string>
     <string name="open_folder_by_hand">Dosyalar uygulamasında %1$s klasörünü açın.</string>
     <string name="downloaded_note">%1$s klasörüne indirildi. Dosyalar uygulamasından yükleyin.</string>

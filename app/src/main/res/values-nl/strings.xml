@@ -7,7 +7,7 @@
     <string name="action_install">Installeren</string>
     <string name="action_open">Openen</string>
     <string name="action_download">Downloaden</string>
-    <string name="action_download_update">Update downloaden</string>
+    <string name="action_download_update">Downloaden</string>
     <string name="action_open_folder">Map openen</string>
     <string name="open_folder_by_hand">Open %1$s in de app Bestanden.</string>
     <string name="downloaded_note">Gedownload naar %1$s. Installeer de app via de app Bestanden.</string>

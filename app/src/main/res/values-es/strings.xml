@@ -7,7 +7,7 @@
     <string name="action_install">Instalar</string>
     <string name="action_open">Abrir</string>
     <string name="action_download">Descargar</string>
-    <string name="action_download_update">Descargar actualización</string>
+    <string name="action_download_update">Descargar</string>
     <string name="action_open_folder">Abrir carpeta</string>
     <string name="open_folder_by_hand">Abre %1$s en la aplicación Archivos.</string>
     <string name="downloaded_note">Descargada en %1$s. Instálala desde la aplicación Archivos.</string>

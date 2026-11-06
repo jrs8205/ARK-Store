@@ -7,7 +7,7 @@
     <string name="action_install">インストール</string>
     <string name="action_open">開く</string>
     <string name="action_download">ダウンロード</string>
-    <string name="action_download_update">更新をダウンロード</string>
+    <string name="action_download_update">ダウンロード</string>
     <string name="action_open_folder">フォルダを開く</string>
     <string name="open_folder_by_hand">ファイルアプリで %1$s を開いてください。</string>
     <string name="downloaded_note">%1$s にダウンロードしました。ファイルアプリからインストールしてください。</string>
