@@ -42,8 +42,7 @@
     <string name="fail_invalid_apk">The downloaded file is not a valid app package.</string>
     <string name="fail_signature">The installed app is signed with a different key, so it cannot be updated in place. Uninstall it first and then install it again. This removes the app\'s data.</string>
     <string name="fail_install">The installation failed.</string>
-    <string name="fail_aborted">The installation was cancelled before it finished. Tap Try again to try once more.</string>
-    <string name="fail_save">The file could not be saved to %1$s.</string>
+    <string name="fail_save">The file could not be saved to the downloads folder.</string>
     <string name="fail_no_root">Root could not be had, so nothing was installed.</string>
 
     <string name="detail_latest">Latest version</string>
@@ -204,8 +203,6 @@
     <string name="detail_source">Source</string>
     <string name="detail_also_from">Also available from</string>
     <string name="detail_warnings">Warnings</string>
-    <string name="install_ready_title">%1$s is ready to install</string>
-    <string name="install_ready_text">Tap to continue</string>
     <string name="newer_version_note">A newer version than the one offered here is installed.</string>
     <string name="detail_installed_from">Installed from</string>
     <string name="detail_updated_at">Last updated</string>
@@ -231,12 +228,11 @@
     <string name="other_app_detail">What is installed under this package name is %1$s, from %2$s: a different app, signed with another key. This app is not installed, and it cannot be installed while the other is; removing the other removes its data.</string>
     <string name="other_build_detail">The installed app is signed with the key that another place offering this package uses, and the key of this version is not known yet, so it may be another developer\'s build under the same package name. ARK-Store does not offer it as an update. You can still try: the keys are compared once the file has been downloaded, and the update goes through only when they match.</string>
     <string name="channel_installs">Ready to install</string>
-    <string name="channel_installs_description">Tells you when a downloaded app is waiting for you to confirm its installation</string>
+    <string name="channel_installs_description">Tells you when a downloaded app is saved and waiting for you to install it</string>
     <string name="screenshot_description">Screenshot %1$d of %2$d</string>
     <string name="auto_update_title">Automatic updates</string>
     <string name="auto_update_switch">Install updates in the background</string>
-    <string name="auto_update_description">Apps that ARK-Store installed are updated without asking when the background check finds a newer version. Other apps still get a notification, as does an update that Android wants confirmed.</string>
-    <string name="auto_update_unsupported">Needs Android 12 or later. On this device the background check only notifies.</string>
+    <string name="auto_update_description">With root on, apps that ARK-Store installed are updated without asking when the background check finds a newer version. Other apps still get a notification.</string>
     <string name="auto_update_needs_root">Needs root: without it, updates are announced and you download them yourself.</string>
     <string name="auto_update_unmetered_switch">Only on Wi-Fi</string>
     <string name="auto_update_unmetered_description">Not on mobile data or another metered network</string>
@@ -248,7 +244,7 @@
     <string name="root_checking">Asking the root app…</string>
     <string name="root_granted">Root granted: %1$s.</string>
     <string name="root_granted_unknown">Root granted.</string>
-    <string name="root_denied">Root was refused. Allow ARK-Store in the root app and try again; until then installs go the ordinary way.</string>
+    <string name="root_denied">Root was refused. Allow ARK-Store in the root app and try again; until then the files are saved for you to install.</string>
     <string name="root_missing">Not available: this device is not rooted.</string>
     <string name="root_lost">The last install did not get root and went the ordinary way.</string>
     <string name="uninstall_confirm_title">Uninstall %1$s?</string>
