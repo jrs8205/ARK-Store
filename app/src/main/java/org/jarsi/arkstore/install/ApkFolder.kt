@@ -32,11 +32,13 @@ object ApkFolder {
     const val FOLDER = "ARK-Store"
     private const val MIME = "application/vnd.android.package-archive"
     private const val EXTERNAL_STORAGE = "com.android.externalstorage.documents"
+    /** The name of the downloads folder, as [Environment.DIRECTORY_DOWNLOADS] gives it on every Android. */
+    private const val DOWNLOADS = "Download"
+    /** Shows the device's own storage among the places of the Files app of Android 8 and 9. */
+    private const val EXTRA_SHOW_ADVANCED = "android.provider.extra.SHOW_ADVANCED"
 
     /** The folder of one restore, under [FOLDER]. */
     fun restoreSubfolder(date: LocalDate): String = "restore-$date"
-
-    private val viaMediaStore: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
 
     /**
      * Copies [source] to the folder, or to its [subfolder], as [displayName], and returns where
@@ -121,37 +123,67 @@ object ApkFolder {
 
     /** The folder as the Files app shows its path, for the texts that point the user to it. */
     fun displayPath(context: Context, subfolder: String? = null): String =
-        if (viaMediaStore) {
-            "${Environment.DIRECTORY_DOWNLOADS}/${relative(subfolder)}"
+        pathOf(Build.VERSION.SDK_INT, context.packageName, subfolder)
+
+    /** [displayPath] on Android [sdk], for the store [packageName]. */
+    internal fun pathOf(sdk: Int, packageName: String, subfolder: String?): String =
+        if (sdk >= Build.VERSION_CODES.Q) {
+            "$DOWNLOADS/${relative(subfolder)}"
         } else {
-            "Android/data/${context.packageName}/files/${Environment.DIRECTORY_DOWNLOADS}/${relative(subfolder)}"
+            "Android/data/$packageName/files/$DOWNLOADS/${relative(subfolder)}"
         }
 
+    /** One way of asking the Files app to show something: [action], on [uri] of [type]. */
+    internal data class FolderView(val action: String, val uri: String?, val type: String?, val showAdvanced: Boolean = false)
+
     /**
-     * Opens the folder in the Files app; failing that, the downloads; failing that, says where
-     * the folder is. The store sees no app that is not in the launcher, so it cannot ask
-     * beforehand which of these works: it tries them in turn.
+     * What the Files app is asked to show, in turn, on Android [sdk]: from Android 10 on the
+     * folder itself; before that, its Files app takes no folder to open and closes on one, so
+     * the device's storage, from where the path told leads to the folder. Then the downloads.
+     */
+    internal fun folderViews(sdk: Int, packageName: String, subfolder: String?): List<FolderView> {
+        val first = if (sdk >= Build.VERSION_CODES.Q) {
+            val document = "primary:" + pathOf(sdk, packageName, subfolder)
+            FolderView(
+                Intent.ACTION_VIEW,
+                "content://$EXTERNAL_STORAGE/document/" + document.replace(":", "%3A").replace("/", "%2F"),
+                DocumentsContract.Document.MIME_TYPE_DIR
+            )
+        } else {
+            FolderView(Intent.ACTION_VIEW, "content://$EXTERNAL_STORAGE/root/primary", DocumentsContract.Root.MIME_TYPE_ITEM, showAdvanced = true)
+        }
+        return listOf(first, FolderView(DownloadManager.ACTION_VIEW_DOWNLOADS, null, null))
+    }
+
+    /**
+     * Opens the folder in the Files app, see [folderViews]; failing that, says where it is, as
+     * it does too where the Files app cannot open the folder itself. The store sees no app that
+     * is not in the launcher, so it cannot ask beforehand which of these works: it tries them
+     * in turn.
      */
     fun open(context: Context, subfolder: String? = null) {
-        val document = DocumentsContract.buildDocumentUri(EXTERNAL_STORAGE, "primary:${displayPath(context, subfolder)}")
-        val tries = listOf(
-            Intent(Intent.ACTION_VIEW).setDataAndType(document, DocumentsContract.Document.MIME_TYPE_DIR),
-            Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
-        )
-        for (intent in tries) {
+        val sdk = Build.VERSION.SDK_INT
+        var opened = false
+        for (view in folderViews(sdk, context.packageName, subfolder)) {
+            val intent = Intent(view.action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (view.uri != null) intent.setDataAndType(view.uri.toUri(), view.type)
+            if (view.showAdvanced) intent.putExtra(EXTRA_SHOW_ADVANCED, true)
             try {
-                context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                return
+                context.startActivity(intent)
+                opened = true
+                break
             } catch (e: ActivityNotFoundException) {
-                Log.i(TAG, "Nothing opened ${intent.action}")
+                Log.i(TAG, "Nothing opened ${view.action}")
             } catch (e: SecurityException) {
-                Log.i(TAG, "Not allowed to open ${intent.action}")
+                Log.i(TAG, "Not allowed to open ${view.action}")
             }
         }
-        Toast.makeText(
-            context,
-            context.getString(R.string.open_folder_by_hand, displayPath(context, subfolder)),
-            Toast.LENGTH_LONG
-        ).show()
+        if (!opened || sdk < Build.VERSION_CODES.Q) {
+            Toast.makeText(
+                context,
+                context.getString(R.string.open_folder_by_hand, displayPath(context, subfolder)),
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 }
