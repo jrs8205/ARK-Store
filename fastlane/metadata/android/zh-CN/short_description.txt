@@ -1,1 +1,1 @@
-直接从 GitHub 发行版安装和更新 Android 应用
+直接从 GitHub 发行版获取 Android 应用及其更新

@@ -1,4 +1,4 @@
-A ARK-Store instala e atualiza apps direto das versões publicadas no GitHub. Os desenvolvedores publicam um app adicionando o tópico "arkstore" ao repositório público e de código aberto dele. A loja lista todos esses repositórios cuja versão mais recente tem um APK anexado, mostra quais apps estão instalados e quais têm uma versão mais nova, e instala ou atualiza tudo com um toque.
+A ARK-Store traz apps e suas atualizações direto das versões publicadas no GitHub. Os desenvolvedores publicam um app adicionando o tópico "arkstore" ao repositório público e de código aberto dele. A loja lista todos esses repositórios cuja versão mais recente tem um APK anexado, mostra quais apps estão instalados e quais têm uma versão mais nova, e baixa o arquivo com um toque para você instalar. Em um dispositivo com root, ela mesma instala e atualiza os apps.
 
 • Catálogo automático: um app novo aparece assim que uma versão com APK é publicada
 • Também é possível adicionar uma conta ou um repositório do GitHub manualmente
@@ -6,7 +6,7 @@ A ARK-Store instala e atualiza apps direto das versões publicadas no GitHub. Os
 • Pesquisa e categorias
 • Somente apps públicos e de código aberto são listados
 • Versões exatas, lidas do próprio APK
-• Instalação e atualização com um toque, com a opção "Atualizar tudo"
+• Download de apps e atualizações com um toque, com a opção "Baixar tudo", ou instalação e atualização com root
 • Verificação de atualizações em segundo plano, com notificação
 • Avisa quando um app instalado foi assinado com uma chave diferente
 • Sem contas, sem login, sem serviços de terceiros

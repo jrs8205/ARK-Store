@@ -1,1 +1,1 @@
-Android-apps installeren en updaten, rechtstreeks vanuit hun GitHub-releases
+Android-apps en hun updates, rechtstreeks uit hun GitHub-releases

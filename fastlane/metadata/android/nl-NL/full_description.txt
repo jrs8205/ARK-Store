@@ -1,4 +1,4 @@
-ARK-Store installeert apps en houdt ze up-to-date, rechtstreeks vanuit hun GitHub-releases. Ontwikkelaars publiceren een app door het topic "arkstore" toe te voegen aan de openbare opensource-repository van die app. De store toont elke repository waarvan de nieuwste release een APK bevat, laat zien welke apps zijn geïnstalleerd en voor welke er een nieuwere versie is, en laat je ze met één tik installeren of updaten.
+ARK-Store haalt apps en hun updates rechtstreeks uit hun GitHub-releases. Ontwikkelaars publiceren een app door het topic "arkstore" toe te voegen aan de openbare opensource-repository van die app. De store toont elke repository waarvan de nieuwste release een APK bevat, laat zien welke apps zijn geïnstalleerd en voor welke er een nieuwere versie is, en downloadt het bestand met één tik zodat je het zelf installeert. Op een geroot apparaat installeert en updatet de store de apps zelf.
 
 • Automatische catalogus: een nieuwe app verschijnt zodra er een release met een APK is gepubliceerd
 • Voeg daarnaast zelf een GitHub-account of repository toe
@@ -6,7 +6,7 @@ ARK-Store installeert apps en houdt ze up-to-date, rechtstreeks vanuit hun GitHu
 • Zoeken en categorieën
 • Alleen openbare opensource-apps worden vermeld
 • Nauwkeurige versienummers, rechtstreeks uit de APK gelezen
-• Installeren en updaten met één tik, met "Alles updaten"
+• Apps en updates downloaden met één tik, met "Alles downloaden", of installeren en updaten met root
 • Controle op updates op de achtergrond, met een melding
 • Waarschuwt als een geïnstalleerde app met een andere sleutel is ondertekend
 • Geen account en geen aanmelding nodig, geen diensten van derden

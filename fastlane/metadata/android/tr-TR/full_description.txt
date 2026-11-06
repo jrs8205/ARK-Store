@@ -1,4 +1,4 @@
-ARK-Store, uygulamaları doğrudan GitHub yayınlarından yükler ve günceller. Geliştirici, bir uygulamayı yayınlamak için uygulamanın herkese açık, açık kaynak deposuna "arkstore" konusunu ekler. Mağaza, en son yayınına APK dosyası eklenmiş bu tür depoların hepsini listeler; hangi uygulamaların yüklü olduğunu ve hangilerinin daha yeni bir sürümü bulunduğunu gösterir, uygulamaları tek dokunuşla yükler veya günceller.
+ARK-Store, uygulamaları ve güncellemelerini doğrudan GitHub yayınlarından getirir. Geliştirici, bir uygulamayı yayınlamak için uygulamanın herkese açık, açık kaynak deposuna "arkstore" konusunu ekler. Mağaza, en son yayınına APK dosyası eklenmiş bu tür depoların hepsini listeler; hangi uygulamaların yüklü olduğunu ve hangilerinin daha yeni bir sürümü bulunduğunu gösterir, dosyayı tek dokunuşla indirir ve yüklemeyi size bırakır. Root erişimli bir cihazda uygulamaları kendisi yükler ve günceller.
 
 • Otomatik katalog: Yeni bir uygulama, APK içeren bir sürüm yayımlandığında listede görünür
 • GitHub hesapları ve depoları elle de eklenebilir
@@ -6,7 +6,7 @@ ARK-Store, uygulamaları doğrudan GitHub yayınlarından yükler ve günceller.
 • Arama ve kategoriler
 • Yalnızca herkese açık, açık kaynak uygulamalar listelenir
 • Doğru sürüm bilgisi doğrudan APK dosyasından okunur
-• Tek dokunuşla yükleme ve güncelleme, "Tümünü güncelle" seçeneğiyle
+• Uygulamaları ve güncellemeleri tek dokunuşla indirme, "Tümünü indir" seçeneğiyle, root ile yükleme ve güncelleme
 • Arka planda güncelleme kontrolü ve bildirim
 • Yüklü bir uygulama farklı bir anahtarla imzalanmışsa uyarır
 • Hesap yok, oturum açma yok, üçüncü taraf hizmet yok

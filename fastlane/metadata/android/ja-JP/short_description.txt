@@ -1,1 +1,1 @@
-GitHub のリリースから Android アプリを直接インストール・更新
+GitHub のリリースから Android アプリとその更新を直接入手
