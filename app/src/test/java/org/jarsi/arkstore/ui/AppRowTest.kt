@@ -74,4 +74,14 @@ class AppRowTest {
             assertFalse(state.toString(), installsDirectly(state))
         }
     }
+
+    @Test
+    fun downloadAllTakesOnlyTheRowsNotSavedYet() {
+        val saved = mapOf("org.example.app" to record)
+        val savedRow = withStatus(AppStatus.UPDATE_AVAILABLE)
+        val other = withStatus(AppStatus.UPDATE_AVAILABLE).let { it.copy(app = it.app.copy(packageName = "org.other.app")) }
+        assertEquals(listOf(other), toDownload(listOf(savedRow, other), saved, direct = false))
+        // Through root every update is installed, whatever was saved before.
+        assertEquals(listOf(savedRow, other), toDownload(listOf(savedRow, other), saved, direct = true))
+    }
 }

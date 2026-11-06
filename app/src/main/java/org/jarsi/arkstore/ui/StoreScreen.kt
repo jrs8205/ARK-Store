@@ -518,14 +518,14 @@ fun StoreScreen(viewModel: StoreViewModel) {
                                     updates.size,
                                     updates.size
                                 ),
-                                action = if (updates.size > 1) {
+                                action = if (toDownload(updates, saved, direct).size > 1) {
                                     stringResource(if (direct) R.string.action_update_all else R.string.action_download_all)
                                 } else {
                                     null
                                 },
                                 onAction = {
                                     haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                                    viewModel.installAll(updates.map { it.app })
+                                    viewModel.installAll(toDownload(updates, saved, direct).map { it.app })
                                 }
                             )
                         }
@@ -730,7 +730,8 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
-            downloaded = row.downloaded(saved),
+            // Through root the row installs; a file saved before is no matter then.
+            downloaded = if (direct) null else row.downloaded(saved),
             direct = direct,
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },

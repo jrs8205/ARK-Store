@@ -88,6 +88,13 @@ fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
         SavedApks.shownFor(app.packageName?.let(saved::get), installed?.versionCode, app.versionCode)
     }
 
+/**
+ * The [updates] that Update all or Download all takes: through root, every one; otherwise those
+ * whose file is not saved for the user already, see [AppRow.downloaded].
+ */
+fun toDownload(updates: List<AppRow>, saved: Map<String, SavedApk>, direct: Boolean): List<AppRow> =
+    if (direct) updates else updates.filter { it.downloaded(saved) == null }
+
 /** Whether the store installs apps itself, through root, rather than saving their files for the user. */
 internal fun installsDirectly(root: RootUiState): Boolean = root is RootUiState.On
 
