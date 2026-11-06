@@ -12,6 +12,8 @@ import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
+import androidx.annotation.RequiresApi
+import androidx.core.net.toUri
 import java.io.File
 import java.io.IOException
 import java.time.LocalDate
@@ -42,9 +44,14 @@ object ApkFolder {
      */
     suspend fun save(context: Context, source: File, displayName: String, subfolder: String? = null): Uri =
         withContext(Dispatchers.IO) {
-            if (viaMediaStore) saveToMediaStore(context, source, displayName, subfolder) else saveToFile(context, source, displayName, subfolder)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                saveToMediaStore(context, source, displayName, subfolder)
+            } else {
+                saveToFile(context, source, displayName, subfolder)
+            }
         }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun saveToMediaStore(context: Context, source: File, displayName: String, subfolder: String?): Uri {
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -88,7 +95,7 @@ object ApkFolder {
 
     /** Whether the file the store saved at [uri] is still there. */
     fun exists(context: Context, uri: String): Boolean {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         if (parsed.scheme == "file") return parsed.path?.let { File(it).exists() } == true
         return try {
             context.contentResolver.query(parsed, arrayOf(MediaStore.MediaColumns._ID), null, null, null)
@@ -100,7 +107,7 @@ object ApkFolder {
 
     /** Deletes the file the store saved at [uri]; one already gone, or not the store's to delete, is left. */
     fun delete(context: Context, uri: String) {
-        val parsed = Uri.parse(uri)
+        val parsed = uri.toUri()
         try {
             if (parsed.scheme == "file") {
                 parsed.path?.let { File(it).delete() }
