@@ -193,7 +193,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                 throw e
             }
             when (outcome) {
-                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
+                Outcome.INSTALLED, Outcome.SAVED -> settled += app.fullName
                 Outcome.FAILED -> {
                     failed += announcement(app)
                     InstallManager.dismissFailure(app.fullName)

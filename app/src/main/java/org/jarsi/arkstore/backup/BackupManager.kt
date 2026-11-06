@@ -760,8 +760,8 @@ object BackupManager {
                                 return@extract
                             }
                             when (outcome) {
-                                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
-                                Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
+                                Outcome.INSTALLED -> saved++
+                                Outcome.SAVED, Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                                 null -> if (attempt == null) failed += entry.label
                             }
                             if (run != null && entry.data.isNotEmpty()) {
@@ -1045,8 +1045,8 @@ object BackupManager {
                     context, key, entry.label, entry.packageName, dir, copied, INSTALL_TIMEOUT_MS
                 ) { attempt = it }
                 when (outcome) {
-                    Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
-                    Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
+                    Outcome.INSTALLED -> saved++
+                    Outcome.SAVED, Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                     // Nothing settled: an install of the package was already on its way, which
                     // never took these files, or the system has not answered in all this time.
                     // Either way the files are no longer ours.

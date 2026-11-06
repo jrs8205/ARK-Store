@@ -8,6 +8,8 @@
     <string name="action_install">Install</string>
     <string name="action_open">Open</string>
     <string name="open_folder_by_hand">Open %1$s in the Files app.</string>
+    <string name="notification_saved_title">%1$s downloaded</string>
+    <string name="notification_saved_text">Install it from %1$s in the Files app.</string>
     <string name="action_uninstall">Uninstall</string>
     <string name="action_retry">Try again</string>
     <string name="action_dismiss">Dismiss</string>
@@ -36,6 +38,8 @@
     <string name="fail_signature">The installed app is signed with a different key, so it cannot be updated in place. Uninstall it first and then install it again. This removes the app\'s data.</string>
     <string name="fail_install">The installation failed.</string>
     <string name="fail_aborted">The installation was cancelled before it finished. Tap Try again to try once more.</string>
+    <string name="fail_save">The file could not be saved to %1$s.</string>
+    <string name="fail_no_root">Root could not be had, so nothing was installed.</string>
 
     <string name="detail_latest">Latest version</string>
     <string name="detail_installed">Installed</string>

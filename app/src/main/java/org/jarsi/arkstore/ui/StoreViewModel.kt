@@ -443,9 +443,6 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelInstall(fullName: String) = InstallManager.cancel(fullName)
 
-    /** Asks again for the install of [fullName] that waits for the user's go-ahead. */
-    fun resumeInstall(fullName: String) = InstallManager.resumeConfirmation(fullName)
-
     /** Does not offer [app]'s version again; the next one is offered. */
     fun skipVersion(app: StoreApp) = setPolicy(policy.value.skip(app))
 

@@ -171,7 +171,6 @@ import org.jarsi.arkstore.work.UpdateCheckWorker
 fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
-    val awaiting by InstallManager.awaitingUser.collectAsStateWithLifecycle()
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
     val updatePolicy by viewModel.updatePolicy.collectAsStateWithLifecycle()
@@ -501,7 +500,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "updates",
                         rows = updates,
                         installs = installs,
-                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -528,7 +526,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "installed",
                         rows = installed,
                         installs = installs,
-                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -538,7 +535,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "available",
                         rows = available,
                         installs = installs,
-                        awaiting = awaiting,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -708,7 +704,6 @@ private fun LazyListScope.section(
     key: String,
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
-    awaiting: Set<String>,
     bookmarked: Set<String>,
     viewModel: StoreViewModel,
     onSelect: (String) -> Unit,
@@ -720,10 +715,8 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
-            awaiting = row.app.fullName in awaiting,
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
-            onResume = { viewModel.resumeInstall(row.app.fullName) },
             onCancel = { viewModel.cancelInstall(row.app.fullName) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -784,11 +777,8 @@ private fun ErrorBanner(error: LoadError) {
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
-    /** The install waits for the user's go-ahead, which the prompt did not get; see [InstallManager.awaitingUser]. */
-    awaiting: Boolean,
     bookmarked: Boolean,
     onInstall: () -> Unit,
-    onResume: () -> Unit,
     onCancel: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -864,21 +854,6 @@ private fun AppCard(
                 }
                 Spacer(Modifier.width(8.dp))
                 when (install) {
-                    // The system holds the files and waits for the user: the button asks again,
-                    // under the same name as before, and nothing is downloaded anew.
-                    InstallState.Installing if awaiting -> StoreButton(
-                        onClick = {
-                            haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-                            onResume()
-                        }
-                    ) {
-                        Text(
-                            stringResource(
-                                if (row.status == AppStatus.UPDATE_AVAILABLE) R.string.action_update
-                                else R.string.action_install
-                            )
-                        )
-                    }
                     InstallState.Queued, is InstallState.Downloading, InstallState.Installing ->
                         Progress(ringOf(install), onCancel)
                     else -> when (row.status) {
@@ -971,7 +946,8 @@ private fun FailureRow(
                     FailReason.INVALID_APK -> R.string.fail_invalid_apk
                     FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
                     FailReason.INSTALL -> R.string.fail_install
-                    FailReason.ABORTED -> R.string.fail_aborted
+                    FailReason.SAVE -> R.string.fail_save
+                    FailReason.NO_ROOT -> R.string.fail_no_root
                 }
             ),
             style = MaterialTheme.typography.bodyMedium,
