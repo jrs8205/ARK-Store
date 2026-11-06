@@ -3,6 +3,9 @@ package org.jarsi.arkstore.ui
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.testApp
+import org.jarsi.arkstore.install.SavedApk
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -38,5 +41,37 @@ class AppRowTest {
         assertFalse(row(installed = 5, betaVersion = 8).newerInstalled)
         assertFalse(row(installed = 4, betaVersion = 8).betaInstalled)
         assertFalse(row(installed = null, betaVersion = 8).newerInstalled)
+    }
+
+    private val record = SavedApk("org.example.app", 5, "1.5", "content://downloads/1", "owner/app")
+
+    private fun withStatus(status: AppStatus, installed: Long? = 4, offered: Long = 5) = AppRow(
+        app = testApp(versionCode = offered, packageName = "org.example.app"),
+        installed = installed?.let { InstalledVersion(it, null) },
+        status = status
+    )
+
+    @Test
+    fun downloadedShowsOnlyForUpdatesAndNewInstalls() {
+        val saved = mapOf("org.example.app" to record)
+        assertEquals(record, withStatus(AppStatus.UPDATE_AVAILABLE).downloaded(saved))
+        assertEquals(record, withStatus(AppStatus.NOT_INSTALLED, installed = null).downloaded(saved))
+        assertNull(withStatus(AppStatus.UP_TO_DATE, installed = 5).downloaded(saved))
+        assertNull(withStatus(AppStatus.OTHER_SIGNER).downloaded(saved))
+        assertNull(withStatus(AppStatus.UPDATE_AVAILABLE).downloaded(emptyMap()))
+    }
+
+    @Test
+    fun rowShowsDownloadAgainWhenOfferIsNewerThanSaved() {
+        assertNull(withStatus(AppStatus.UPDATE_AVAILABLE, offered = 6).downloaded(mapOf("org.example.app" to record)))
+    }
+
+    @Test
+    fun installsDirectlyOnlyWithRootGranted() {
+        assertTrue(installsDirectly(RootUiState.On(null)))
+        assertTrue(installsDirectly(RootUiState.On("Magisk 30.7")))
+        for (state in listOf(RootUiState.Off, RootUiState.Checking, RootUiState.OnButRefused, RootUiState.Denied, RootUiState.Missing)) {
+            assertFalse(state.toString(), installsDirectly(state))
+        }
     }
 }

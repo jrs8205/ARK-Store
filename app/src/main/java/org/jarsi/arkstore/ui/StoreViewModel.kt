@@ -33,9 +33,12 @@ import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
+import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.RootCheck
+import org.jarsi.arkstore.install.SavedApk
+import org.jarsi.arkstore.install.SavedApks
 import org.jarsi.arkstore.work.AutoUpdate
 
 data class AppRow(
@@ -74,6 +77,20 @@ enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 enum class TransferError { NOT_A_BACKUP, FAILED }
 
 /** How root stands in the settings: off, being asked for, on, or refused one way or another. */
+/**
+ * The file saved for this row's app for the user to install, when the row shows it: an update or
+ * a new install whose file is newer than what is installed, see [SavedApks.shownFor].
+ */
+fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
+    if (status != AppStatus.UPDATE_AVAILABLE && status != AppStatus.NOT_INSTALLED) {
+        null
+    } else {
+        SavedApks.shownFor(app.packageName?.let(saved::get), installed?.versionCode, app.versionCode)
+    }
+
+/** Whether the store installs apps itself, through root, rather than saving their files for the user. */
+internal fun installsDirectly(root: RootUiState): Boolean = root is RootUiState.On
+
 sealed interface RootUiState {
     data object Off : RootUiState
     data object Checking : RootUiState
@@ -443,6 +460,12 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelInstall(fullName: String) = InstallManager.cancel(fullName)
 
+    /** The files saved for the user to install, by package; see [InstallManager.saved]. */
+    val saved: StateFlow<Map<String, SavedApk>> = InstallManager.saved
+
+    /** Opens the folder the files are saved to, in the Files app. */
+    fun openFolder() = ApkFolder.open(getApplication())
+
     /** Does not offer [app]'s version again; the next one is offered. */
     fun skipVersion(app: StoreApp) = setPolicy(policy.value.skip(app))
 
@@ -521,6 +544,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onResume() {
         InstallManager.notifyInstalledChanged()
+        // A saved file may have been installed, or removed, in the Files app meanwhile.
+        viewModelScope.launch(Dispatchers.IO) { InstallManager.loadSaved(getApplication()) }
         val now = System.currentTimeMillis()
         if (now - lastResumeRefresh > RESUME_REFRESH_MS) {
             lastResumeRefresh = now

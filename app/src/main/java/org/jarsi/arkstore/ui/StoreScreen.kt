@@ -159,10 +159,13 @@ import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.Root
+import org.jarsi.arkstore.install.SavedApk
+import org.jarsi.arkstore.install.isOnItsWay
 import org.jarsi.arkstore.work.AutoUpdate
 import org.jarsi.arkstore.work.UpdateCheckWorker
 
@@ -171,6 +174,9 @@ import org.jarsi.arkstore.work.UpdateCheckWorker
 fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
+    val saved by viewModel.saved.collectAsStateWithLifecycle()
+    val root by viewModel.root.collectAsStateWithLifecycle()
+    val direct = installsDirectly(root)
     val catalogues by viewModel.catalogues.collectAsStateWithLifecycle()
     val bookmarked by viewModel.bookmarked.collectAsStateWithLifecycle()
     val updatePolicy by viewModel.updatePolicy.collectAsStateWithLifecycle()
@@ -500,6 +506,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "updates",
                         rows = updates,
                         installs = installs,
+                        saved = saved,
+                        direct = direct,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -511,7 +519,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                                     updates.size
                                 ),
                                 action = if (updates.size > 1) {
-                                    stringResource(R.string.action_update_all)
+                                    stringResource(if (direct) R.string.action_update_all else R.string.action_download_all)
                                 } else {
                                     null
                                 },
@@ -526,6 +534,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "installed",
                         rows = installed,
                         installs = installs,
+                        saved = saved,
+                        direct = direct,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -535,6 +545,8 @@ fun StoreScreen(viewModel: StoreViewModel) {
                         key = "available",
                         rows = available,
                         installs = installs,
+                        saved = saved,
+                        direct = direct,
                         bookmarked = bookmarked,
                         viewModel = viewModel,
                         onSelect = { selectedRepo = it },
@@ -583,6 +595,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
             DetailsSheet(
                 selected,
                 onInstall = { viewModel.install(selected.app) },
+                direct = direct,
                 bookmarked = Bookmarks.marked(selected.app, bookmarked),
                 onBookmarkToggle = { viewModel.toggleBookmark(selected.app) },
                 onSkipVersion = { viewModel.skipVersion(selected.app) },
@@ -704,6 +717,8 @@ private fun LazyListScope.section(
     key: String,
     rows: List<AppRow>,
     installs: Map<String, InstallState>,
+    saved: Map<String, SavedApk>,
+    direct: Boolean,
     bookmarked: Set<String>,
     viewModel: StoreViewModel,
     onSelect: (String) -> Unit,
@@ -715,8 +730,11 @@ private fun LazyListScope.section(
         AppCard(
             row = row,
             install = installs[row.app.fullName],
+            downloaded = row.downloaded(saved),
+            direct = direct,
             bookmarked = Bookmarks.marked(row.app, bookmarked),
             onInstall = { viewModel.install(row.app) },
+            onOpenFolder = viewModel::openFolder,
             onCancel = { viewModel.cancelInstall(row.app.fullName) },
             onDismissFailure = { viewModel.dismissFailure(row.app.fullName) },
             onClick = { onSelect(row.app.fullName) }
@@ -777,8 +795,13 @@ private fun ErrorBanner(error: LoadError) {
 private fun AppCard(
     row: AppRow,
     install: InstallState?,
+    /** The file saved for the user to install, when there is one for this row; see [AppRow.downloaded]. */
+    downloaded: SavedApk?,
+    /** The store installs through root; otherwise it saves the files for the user to install. */
+    direct: Boolean,
     bookmarked: Boolean,
     onInstall: () -> Unit,
+    onOpenFolder: () -> Unit,
     onCancel: () -> Unit,
     onDismissFailure: () -> Unit,
     onClick: () -> Unit
@@ -856,12 +879,30 @@ private fun AppCard(
                 when (install) {
                     InstallState.Queued, is InstallState.Downloading, InstallState.Installing ->
                         Progress(ringOf(install), onCancel)
-                    else -> when (row.status) {
+                    // Saved for the user to install: the folder is where it is installed from.
+                    else -> if (downloaded != null) {
+                        StoreOutlinedButton(
+                            onClick = {
+                                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                                onOpenFolder()
+                            }
+                        ) {
+                            Text(stringResource(R.string.action_open_folder), maxLines = 1, softWrap = false)
+                        }
+                    } else when (row.status) {
                         AppStatus.UPDATE_AVAILABLE -> StoreButton(onClick = startInstall) {
-                            Text(stringResource(R.string.action_update))
+                            Text(
+                                stringResource(if (direct) R.string.action_update else R.string.action_download_update),
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                         AppStatus.NOT_INSTALLED -> StoreButton(onClick = startInstall) {
-                            Text(stringResource(R.string.action_install))
+                            Text(
+                                stringResource(if (direct) R.string.action_install else R.string.action_download),
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                         // Another app under this name: nothing to open and nothing to install
                         // over it; the note below says so.
@@ -900,6 +941,8 @@ private fun AppCard(
             }
 
             val note = when {
+                downloaded != null && !install.isOnItsWay() ->
+                    stringResource(R.string.downloaded_note, ApkFolder.displayPath(context))
                 row.status == AppStatus.NEEDS_NEWER_ANDROID ->
                     stringResource(R.string.newer_android_note, requirement(app).orEmpty())
                 row.status == AppStatus.OTHER_SIGNER -> stringResource(R.string.other_signer_note)
@@ -1106,6 +1149,8 @@ internal fun NotesText(lines: List<ReleaseNotes.Line>, modifier: Modifier = Modi
 private fun DetailsSheet(
     row: AppRow,
     onInstall: () -> Unit,
+    /** The store installs through root; otherwise it saves the files for the user to install. */
+    direct: Boolean,
     bookmarked: Boolean,
     onBookmarkToggle: () -> Unit,
     onSkipVersion: () -> Unit = {},
@@ -1273,7 +1318,7 @@ private fun DetailsSheet(
             // The way out when the names misled: the keys are compared again after the
             // download, and the file installs when they match after all.
             StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
-                Text(stringResource(R.string.action_try_install))
+                Text(stringResource(if (direct) R.string.action_try_install else R.string.action_download))
             }
         } else if (row.status == AppStatus.OTHER_SIGNER) {
             Text(
@@ -1295,7 +1340,7 @@ private fun DetailsSheet(
                 modifier = Modifier.padding(top = 16.dp)
             )
             StoreOutlinedButton(onClick = onInstall, modifier = Modifier.padding(top = 8.dp)) {
-                Text(stringResource(R.string.action_update))
+                Text(stringResource(if (direct) R.string.action_update else R.string.action_download_update))
             }
         } else if (row.status == AppStatus.NEEDS_NEWER_ANDROID) {
             Text(
