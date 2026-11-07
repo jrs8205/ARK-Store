@@ -53,7 +53,7 @@ class AppRowTest {
 
     @Test
     fun downloadedShowsOnlyForUpdatesAndNewInstalls() {
-        val saved = mapOf("org.example.app" to record)
+        val saved = mapOf(record.repo to record)
         assertEquals(record, withStatus(AppStatus.UPDATE_AVAILABLE).downloaded(saved))
         assertEquals(record, withStatus(AppStatus.NOT_INSTALLED, installed = null).downloaded(saved))
         assertNull(withStatus(AppStatus.UP_TO_DATE, installed = 5).downloaded(saved))
@@ -63,7 +63,7 @@ class AppRowTest {
 
     @Test
     fun rowShowsDownloadAgainWhenOfferIsNewerThanSaved() {
-        assertNull(withStatus(AppStatus.UPDATE_AVAILABLE, offered = 6).downloaded(mapOf("org.example.app" to record)))
+        assertNull(withStatus(AppStatus.UPDATE_AVAILABLE, offered = 6).downloaded(mapOf(record.repo to record)))
     }
 
     @Test
@@ -77,7 +77,7 @@ class AppRowTest {
 
     @Test
     fun downloadAllTakesOnlyTheRowsNotSavedYet() {
-        val saved = mapOf("org.example.app" to record)
+        val saved = mapOf(record.repo to record)
         val savedRow = withStatus(AppStatus.UPDATE_AVAILABLE)
         val other = withStatus(AppStatus.UPDATE_AVAILABLE).let { it.copy(app = it.app.copy(packageName = "org.other.app")) }
         assertEquals(listOf(other), toDownload(listOf(savedRow, other), saved, direct = false))
@@ -87,9 +87,20 @@ class AppRowTest {
 
     @Test
     fun downloadedOnlyOnTheRowOfTheRepositoryItWasDownloadedFor() {
-        val saved = mapOf("org.example.app" to record)
+        val saved = mapOf(record.repo to record)
         val fork = withStatus(AppStatus.NOT_INSTALLED, installed = null).let { it.copy(app = it.app.copy(fullName = "fork/app")) }
         assertNull(fork.downloaded(saved))
+    }
+
+    @Test
+    fun eachProjectsRowShowsItsOwnFileOfThePackage() {
+        val mirrorRecord = record.copy(versionCode = 4, uri = "content://downloads/2", repo = "mirror/app")
+        val saved = mapOf(record.repo to record, mirrorRecord.repo to mirrorRecord)
+        val mirror = withStatus(AppStatus.UPDATE_AVAILABLE, installed = 3, offered = 4).let { it.copy(app = it.app.copy(fullName = "mirror/app")) }
+        assertEquals(mirrorRecord, mirror.downloaded(saved))
+        assertEquals(record, withStatus(AppStatus.UPDATE_AVAILABLE, installed = 3).downloaded(saved))
+        // Download all does not take the row whose file is saved, whichever finished first.
+        assertEquals(emptyList<AppRow>(), toDownload(listOf(mirror), saved, direct = false))
     }
 
     @Test

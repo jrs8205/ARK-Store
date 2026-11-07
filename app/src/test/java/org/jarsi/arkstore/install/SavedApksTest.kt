@@ -33,8 +33,11 @@ class SavedApksTest {
 
     @Test
     fun recordsRoundTripThroughJson() {
-        val records = mapOf("a" to saved("a", 3, "content://x/1"), "b" to saved("b", 9, "file:///y/b.apk"))
+        val records = mapOf("owner/a" to saved("a", 3, "content://x/1"), "owner/b" to saved("b", 9, "file:///y/b.apk"))
         assertEquals(records, SavedApks.parse(SavedApks.toJson(records)))
+        // Two projects' files of one package are two records.
+        val fork = saved("a", 4, "content://x/2").copy(repo = "fork/a")
+        assertEquals(records + ("fork/a" to fork), SavedApks.parse(SavedApks.toJson(records + ("fork/a" to fork))))
         assertEquals(emptyMap<String, SavedApk>(), SavedApks.parse(null))
         assertEquals(emptyMap<String, SavedApk>(), SavedApks.parse(""))
         assertEquals(emptyMap<String, SavedApk>(), SavedApks.parse("{not json"))
@@ -82,22 +85,41 @@ class SavedApksTest {
     }
 
     @Test
-    fun aSaveReplacesOnlyTheRecordedFileOfThatPackage() {
-        val records = mapOf("a" to saved("a", uri = "uri1"), "b" to saved("b", uri = "uri2"))
-        val newer = saved("a", versionCode = 6, uri = "uri3")
-        assertEquals(SavedApks.Update(records + ("a" to newer), listOf("uri1"), newer), SavedApks.withSaved(records, newer))
-        val same = saved("a", uri = "uri1")
-        assertEquals(SavedApks.Update(records, emptyList(), same), SavedApks.withSaved(records, same))
-        val other = saved("c", uri = "uri9")
-        assertEquals(SavedApks.Update(records + ("c" to other), emptyList(), other), SavedApks.withSaved(records, other))
+    fun recordsOfEarlierVersionsAreReadByTheirProject() {
+        // Up to 1.11.0 the records were kept by package.
+        val json = """{"org.example":{"versionCode":5,"versionName":"1.5","uri":"content://x/1","repo":"owner/example"}}"""
+        assertEquals(
+            mapOf("owner/example" to SavedApk("org.example", 5, "1.5", "content://x/1", "owner/example")),
+            SavedApks.parse(json)
+        )
     }
 
     @Test
-    fun anOlderVersionSavedLastDoesNotReplaceTheNewer() {
+    fun aSaveReplacesTheProjectsOwnRecordOnly() {
+        val records = mapOf("owner/a" to saved("a", uri = "uri1"), "owner/b" to saved("b", uri = "uri2"))
+        val newer = saved("a", versionCode = 6, uri = "uri3")
+        assertEquals(SavedApks.Update(records + ("owner/a" to newer), listOf("uri1")), SavedApks.withSaved(records, newer))
+        val same = saved("a", uri = "uri1")
+        assertEquals(SavedApks.Update(records, emptyList()), SavedApks.withSaved(records, same))
+        val other = saved("c", uri = "uri9")
+        assertEquals(SavedApks.Update(records + ("owner/c" to other), emptyList()), SavedApks.withSaved(records, other))
+    }
+
+    @Test
+    fun anotherProjectsOlderFileOfThePackageGoesWhenANewerComes() {
+        val older = saved("a", versionCode = 5, uri = "uri5").copy(repo = "mirror/a")
+        val records = mapOf("mirror/a" to older)
         val newer = saved("a", versionCode = 6, uri = "uri6")
-        val records = mapOf("a" to newer)
-        val older = saved("a", versionCode = 5, uri = "uri5")
-        assertEquals(SavedApks.Update(records, listOf("uri5"), newer), SavedApks.withSaved(records, older))
+        assertEquals(SavedApks.Update(mapOf("owner/a" to newer), listOf("uri5")), SavedApks.withSaved(records, newer))
+    }
+
+    @Test
+    fun anOlderFileSavedLastNeitherReplacesNorCostsTheNewer() {
+        // The newer one may be gone by now, removed by the user: the older one is kept all the same.
+        val newer = saved("a", versionCode = 6, uri = "uri6")
+        val records = mapOf("owner/a" to newer)
+        val older = saved("a", versionCode = 5, uri = "uri5").copy(repo = "mirror/a")
+        assertEquals(SavedApks.Update(records + ("mirror/a" to older), emptyList()), SavedApks.withSaved(records, older))
     }
 
     @Test

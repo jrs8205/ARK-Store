@@ -60,20 +60,24 @@ object SavedApks {
             .replace(Regex("-{2,}"), "-")
             .trim('-', '.')
 
+    /**
+     * The records written by [toJson], by repository. Up to 1.11.0 they were written by package,
+     * with no package inside: the key then is the package.
+     */
     fun parse(json: String?): Map<String, SavedApk> {
         if (json.isNullOrBlank()) return emptyMap()
         return try {
             val root = JSONObject(json)
-            root.keys().asSequence().associateWith { packageName ->
-                val record = root.getJSONObject(packageName)
+            root.keys().asSequence().map { key ->
+                val record = root.getJSONObject(key)
                 SavedApk(
-                    packageName = packageName,
+                    packageName = if (record.has("packageName")) record.getString("packageName") else key,
                     versionCode = record.getLong("versionCode"),
                     versionName = if (record.isNull("versionName")) null else record.getString("versionName"),
                     uri = record.getString("uri"),
                     repo = record.getString("repo")
                 )
-            }
+            }.associateBy { it.repo }
         } catch (e: JSONException) {
             emptyMap()
         }
@@ -81,10 +85,11 @@ object SavedApks {
 
     fun toJson(saved: Map<String, SavedApk>): String {
         val root = JSONObject()
-        for ((packageName, record) in saved) {
+        for (record in saved.values) {
             root.put(
-                packageName,
+                record.repo,
                 JSONObject()
+                    .put("packageName", record.packageName)
                     .put("versionCode", record.versionCode)
                     .put("versionName", record.versionName ?: JSONObject.NULL)
                     .put("uri", record.uri)
@@ -113,20 +118,22 @@ object SavedApks {
                 (offeredVersion <= 0 || it.versionCode >= offeredVersion)
         }
 
-    /** What the records become after a save: [records], the files to [delete], and the one [kept] of that app. */
-    data class Update(val records: Map<String, SavedApk>, val delete: List<String>, val kept: SavedApk)
+    /** What the records become after a save: [records], and the files to [delete]. */
+    data class Update(val records: Map<String, SavedApk>, val delete: List<String>)
 
     /**
-     * What [saved] becomes once [record] is saved: the file recorded for its app before is
-     * deleted, unless that one is of a newer version, when it is the file just saved that goes,
-     * so that the slower download of an older version never takes the newer one's place. Only
-     * what the store itself saved is ever deleted.
+     * What [saved], by repository, becomes once [record] is saved: it takes the place of its
+     * repository's record, and of the records of the same package from other repositories of an
+     * older version, whose files are deleted. A newer file of another repository stays, and so
+     * does the one just saved, so that whichever of two downloads ends last, neither costs the
+     * other its file. Only what the store itself saved is ever deleted.
      */
     fun withSaved(saved: Map<String, SavedApk>, record: SavedApk): Update {
-        val before = saved[record.packageName]
-        if (before != null && before.versionCode > record.versionCode) {
-            return Update(saved, listOf(record.uri).filter { it != before.uri }, before)
+        val replaced = saved.values.filter {
+            it.repo == record.repo ||
+                (it.packageName == record.packageName && it.versionCode < record.versionCode)
         }
-        return Update(saved + (record.packageName to record), listOfNotNull(before?.uri?.takeIf { it != record.uri }), record)
+        val records = saved - replaced.map { it.repo }.toSet() + (record.repo to record)
+        return Update(records, replaced.map { it.uri }.filter { it != record.uri }.distinct())
     }
 }

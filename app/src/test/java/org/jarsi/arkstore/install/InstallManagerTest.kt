@@ -47,8 +47,8 @@ class InstallManagerTest {
         InstallManager.deleter = { _, uri -> deleted += uri }
     }
 
-    private fun saveAs(versionCode: Long = 5) =
-        InstallManager.SaveAs("Example-1.$versionCode.apk", versionCode, "1.$versionCode", "owner/example")
+    private fun saveAs(versionCode: Long = 5, repo: String = "owner/example") =
+        InstallManager.SaveAs("Example-1.$versionCode.apk", versionCode, "1.$versionCode", repo)
 
     @After
     fun after() {
@@ -68,7 +68,7 @@ class InstallManagerTest {
         )
         assertEquals(InstallManager.HandOver.Failed(InstallState.Failed(FailReason.NO_ROOT)), result)
         assertEquals(emptyList<String>(), saves)
-        assertTrue("org.example.background" !in InstallManager.saved.value)
+        assertTrue(InstallManager.saved.value.values.none { it.packageName == "org.example.background" })
     }
 
     @Test
@@ -81,9 +81,9 @@ class InstallManagerTest {
         val record = SavedApk("org.example", 5, "1.5", "content://downloads/1", "owner/example")
         assertEquals(InstallManager.HandOver.Saved(record), result)
         assertEquals(listOf("Example-1.5.apk"), saves)
-        assertEquals(record, InstallManager.saved.value["org.example"])
+        assertEquals(record, InstallManager.saved.value["owner/example"])
         // Kept for the next start of the app.
-        assertEquals(record, SavedApks.parse(context.prefs.getValue("saved_apks").getString("records", null))["org.example"])
+        assertEquals(record, SavedApks.parse(context.prefs.getValue("saved_apks").getString("records", null))["owner/example"])
     }
 
     @Test
@@ -104,7 +104,7 @@ class InstallManagerTest {
         assertEquals(emptyList<String>(), deleted)
         InstallManager.handOver(context, "owner/newer", null, "org.example.newer", listOf("base.apk" to aFile()), false, saveAs(6))
         assertEquals(listOf("content://downloads/11"), deleted)
-        assertEquals("content://downloads/12", InstallManager.saved.value.getValue("org.example.newer").uri)
+        assertEquals("content://downloads/12", InstallManager.saved.value.getValue("owner/example").uri)
     }
 
     @Test
@@ -121,16 +121,27 @@ class InstallManagerTest {
     }
 
     @Test
-    fun anOlderDownloadThatFinishesLastKeepsTheNewerFile() = runBlocking {
-        // Two rows of the same app, from two projects: the newer one's download finished first.
+    fun anOlderDownloadThatFinishesLastKeepsBothFiles() = runBlocking {
+        // Two rows of the same app, from two projects: the newer one's download finished first,
+        // and its file may since have been removed in the Files app. Neither file is deleted, and
+        // the slower row has its own file to show.
         saving("content://downloads/21", "content://downloads/22")
-        InstallManager.handOver(context, "owner/fast", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(6))
-        val result = InstallManager.handOver(context, "owner/slow", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(5))
-        val newer = InstallManager.saved.value.getValue("org.example.race")
-        assertEquals(6L, newer.versionCode)
-        assertEquals("content://downloads/21", newer.uri)
-        assertEquals(listOf("content://downloads/22"), deleted)
-        assertEquals(InstallManager.HandOver.Saved(newer), result)
+        InstallManager.handOver(context, "owner/fast", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(6, "owner/fast"))
+        val result = InstallManager.handOver(context, "owner/slow", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(5, "owner/slow"))
+        val slower = SavedApk("org.example.race", 5, "1.5", "content://downloads/22", "owner/slow")
+        assertEquals(InstallManager.HandOver.Saved(slower), result)
+        assertEquals(emptyList<String>(), deleted)
+        assertEquals(slower, InstallManager.saved.value["owner/slow"])
+        assertEquals("content://downloads/21", InstallManager.saved.value.getValue("owner/fast").uri)
+    }
+
+    @Test
+    fun aNewerDownloadOfAnotherProjectReplacesTheOlderFile() = runBlocking {
+        saving("content://downloads/41", "content://downloads/42")
+        InstallManager.handOver(context, "owner/slow", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(5, "owner/slow"))
+        InstallManager.handOver(context, "owner/fast", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(6, "owner/fast"))
+        assertEquals(listOf("content://downloads/41"), deleted)
+        assertEquals(setOf("owner/fast"), InstallManager.saved.value.keys)
     }
 
     @Test
@@ -178,7 +189,7 @@ class InstallManagerTest {
         // Written down by an earlier run, or kept after the user installed it: not among those shown.
         val earlier = SavedApk("org.example.earlier", 5, "1.5", "content://downloads/21", "owner/earlier")
         context.getSharedPreferences("saved_apks", 0).edit()
-            .putString("records", SavedApks.toJson(mapOf(earlier.packageName to earlier))).apply()
+            .putString("records", SavedApks.toJson(mapOf(earlier.repo to earlier))).apply()
         saving("content://downloads/22")
         InstallManager.handOver(context, "owner/earlier", null, "org.example.earlier", listOf("base.apk" to aFile()), false, saveAs(6))
         assertEquals(listOf("content://downloads/21"), deleted)

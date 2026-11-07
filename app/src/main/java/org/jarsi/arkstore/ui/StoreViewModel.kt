@@ -86,7 +86,7 @@ fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
         null
     } else {
         SavedApks.shownFor(
-            app.packageName?.let(saved::get)?.takeIf { it.repo == app.fullName },
+            saved[app.fullName]?.takeIf { it.packageName == app.packageName },
             installed?.versionCode,
             app.versionCode
         )
@@ -476,7 +476,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelInstall(fullName: String) = InstallManager.cancel(fullName)
 
-    /** The files saved for the user to install, by package; see [InstallManager.saved]. */
+    /** The files saved for the user to install, by repository; see [InstallManager.saved]. */
     val saved: StateFlow<Map<String, SavedApk>> = InstallManager.saved
 
     /** Root is on but could not be had at the last install; see [InstallManager.rootLost]. */

@@ -147,7 +147,7 @@ object InstallManager {
 
     private val _saved = MutableStateFlow<Map<String, SavedApk>>(emptyMap())
     /**
-     * The files saved to the folder for the user to install, by package, whose version is not
+     * The files saved to the folder for the user to install, by repository, whose version is not
      * installed yet and whose file is still there; see [loadSaved].
      */
     val saved: StateFlow<Map<String, SavedApk>> = _saved.asStateFlow()
@@ -575,7 +575,7 @@ object InstallManager {
             SavedApks.withSaved(current, record).also { if (it.records != current) writeSaved(context, it.records) }
         }
         for (uri in update.delete) deleter?.invoke(context, uri) ?: ApkFolder.delete(context, uri)
-        return HandOver.Saved(update.kept)
+        return HandOver.Saved(record)
     }
 
     /**
