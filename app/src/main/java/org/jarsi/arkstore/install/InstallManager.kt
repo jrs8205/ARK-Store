@@ -61,6 +61,19 @@ enum class FailReason {
 /** How an install that was waited for came out: installed, or the file [SAVED] for the user to install. */
 enum class Outcome { INSTALLED, SAVED, FAILED, CANCELLED }
 
+/**
+ * Whether a checked file goes to root rather than to the folder: root is turned on, as
+ * [enabled] tells, both now and before the store's own file, the [self] one, waits by
+ * [waitForOthers] for every other install, as root installing it ends the process. Root turned
+ * off during that wait saves the file instead; root turned on during it does not count, as
+ * nothing was waited for.
+ */
+internal suspend fun rootFor(self: Boolean, enabled: () -> Boolean, waitForOthers: suspend () -> Unit): Boolean {
+    if (!enabled()) return false
+    if (self) waitForOthers()
+    return enabled()
+}
+
 /** Whether [state] is one of an install on its way, as opposed to none or a failed one. */
 internal fun InstallState?.isOnItsWay(): Boolean =
     this is InstallState.Queued || this is InstallState.Downloading || this is InstallState.Installing
@@ -506,11 +519,10 @@ object InstallManager {
         }
         InstalledApps.forgetConflict(appContext, app, archive.packageName)
 
-        val rootWanted = Root.enabled(appContext)
         // Installing the store itself through root ends this process, so it waits for every
         // other install to be done with, however long that takes: the wait shows as queued,
         // and can be cancelled like any download. A file saved for the user ends nothing.
-        if (rootWanted && archive.packageName == appContext.packageName) {
+        val rootWanted = rootFor(archive.packageName == appContext.packageName, { Root.enabled(appContext) }) {
             setState(app.fullName, InstallState.Queued)
             _states.first { othersSettled(it, app.fullName) }
         }

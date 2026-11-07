@@ -6,6 +6,7 @@ import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.data.testApp
+import org.jarsi.arkstore.install.FailReason
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -101,5 +102,20 @@ class UpdateCheckWorkerTest {
         assertFalse(asksRoot(enabled = false, toTry = listOf(app)))
         assertFalse(asksRoot(enabled = true, toTry = emptyList()))
         assertTrue(asksRoot(enabled = true, toTry = listOf(app)))
+    }
+
+    @Test
+    fun turningRootOffStopsTheUnaskedInstallsOfARun() {
+        val settings = AutoUpdate(enabled = true, unmeteredOnly = false, chargingOnly = false)
+        assertTrue(unaskedAllowed(settings, rootGiven = true, rootOn = true, unmetered = true, charging = false))
+        assertFalse(unaskedAllowed(settings, rootGiven = true, rootOn = false, unmetered = true, charging = false))
+        assertFalse(unaskedAllowed(settings, rootGiven = false, rootOn = true, unmetered = true, charging = false))
+    }
+
+    @Test
+    fun anInstallThatHadNoRootIsTriedAgain() {
+        assertFalse(failureLasts(FailReason.NO_ROOT))
+        assertTrue(failureLasts(FailReason.INVALID_APK))
+        assertTrue(failureLasts(null))
     }
 }

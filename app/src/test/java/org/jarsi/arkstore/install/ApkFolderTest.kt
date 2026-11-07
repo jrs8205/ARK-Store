@@ -6,6 +6,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,6 +47,17 @@ class ApkFolderTest {
         assertEquals("Download/ARK-Store", ApkFolder.pathOf(29, "org.jarsi.arkstore", null))
         assertEquals("Download/ARK-Store/restore-2026-11-07", ApkFolder.pathOf(35, "org.jarsi.arkstore", "restore-2026-11-07"))
         assertEquals("Android/data/org.jarsi.arkstore/files/Download/ARK-Store", ApkFolder.pathOf(28, "org.jarsi.arkstore", null))
+    }
+
+    @Test
+    fun aFileMovedOutOfTheFolderIsNoLongerTheStores() {
+        assertTrue(ApkFolder.stillSaved(false, { false }, { "Download/ARK-Store/" }))
+        assertTrue(ApkFolder.stillSaved(false, { false }, { "Download/ARK-Store/restore-2026-11-07/" }))
+        assertFalse(ApkFolder.stillSaved(false, { false }, { "Download/Shared/" }))
+        // Gone from MediaStore, or not to be asked.
+        assertFalse(ApkFolder.stillSaved(false, { true }, { null }))
+        assertTrue(ApkFolder.stillSaved(true, { true }, { null }))
+        assertFalse(ApkFolder.stillSaved(true, { false }, { "Download/ARK-Store/" }))
     }
 
     @Test

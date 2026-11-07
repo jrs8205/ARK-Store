@@ -32,7 +32,9 @@ import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
+import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
+import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.Outcome
 import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.RootCheck
@@ -78,6 +80,21 @@ internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<Sto
  * and there is an update [toTry]. Asking makes some root apps show a note every time.
  */
 internal fun asksRoot(enabled: Boolean, toTry: List<StoreApp>): Boolean = enabled && toTry.isNotEmpty()
+
+/**
+ * Whether a run's unasked installs may go on: as the [settings] say, with root given when the
+ * run asked for it ([rootGiven]) and turned on still ([rootOn]), so that turning root off stops
+ * the downloads as turning the switch off does.
+ */
+internal fun unaskedAllowed(settings: AutoUpdate, rootGiven: Boolean, rootOn: Boolean, unmetered: Boolean, charging: Boolean): Boolean =
+    settings.allows(rootGiven && rootOn, unmetered, charging)
+
+/**
+ * Whether an unasked install that failed for [reason] is left alone until a newer version: not
+ * when root was turned off or refused, which says nothing of the version and which the user
+ * may change.
+ */
+internal fun failureLasts(reason: FailReason?): Boolean = reason != FailReason.NO_ROOT
 
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
     updates.filter { announcement(it) !in failed }
@@ -173,12 +190,13 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
         if (!asksRoot(settings.enabled, toTry(owned, failed))) return emptySet()
         // Asked once a run: the root app may ask the user the first time, and the answer holds
-        // for the run. A refusal later on, in the middle of an install, fails that install alone.
+        // for the run. A refusal later on, in the middle of an install, ends the run, and the
+        // update is tried again on the next.
         val root = rootReady(context)
         if (!settings.allows(root, unmetered(context), charging(context))) return emptySet()
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
-        fun allowed() = AutoUpdate.read(context).allows(root, unmetered(context), charging(context))
+        fun allowed() = unaskedAllowed(AutoUpdate.read(context), root, Root.enabled(context), unmetered(context), charging(context))
         for (app in installOrder(toTry(owned, failed), context.packageName)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
@@ -206,8 +224,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             when (outcome) {
                 Outcome.INSTALLED, Outcome.SAVED -> settled += app.fullName
                 Outcome.FAILED -> {
-                    failed += announcement(app)
+                    val reason = (InstallManager.states.value[app.fullName] as? InstallState.Failed)?.reason
                     InstallManager.dismissFailure(app.fullName)
+                    if (!failureLasts(reason)) break
+                    failed += announcement(app)
                 }
                 Outcome.CANCELLED -> break
                 null -> giveUp()

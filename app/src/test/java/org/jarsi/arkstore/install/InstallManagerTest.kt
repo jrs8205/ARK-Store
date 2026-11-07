@@ -108,6 +108,23 @@ class InstallManagerTest {
     }
 
     @Test
+    fun theStoresOwnUpdateAsksRootAgainAfterItsWait() = runBlocking {
+        // Turned off while the others were being installed: the file is saved instead.
+        var on = true
+        assertFalse(rootFor(self = true, enabled = { on }) { on = false })
+        // Turned on while they were: nothing was waited for, so nothing goes to root.
+        var waited = false
+        on = false
+        assertFalse(rootFor(self = true, enabled = { on }) { waited = true; on = true })
+        assertFalse(waited)
+        on = true
+        assertTrue(rootFor(self = true, enabled = { on }) { waited = true })
+        assertTrue(waited)
+        // Another app does not wait.
+        assertTrue(rootFor(self = false, enabled = { true }) { throw AssertionError("waited") })
+    }
+
+    @Test
     fun rootGivenAgainTellsTheRowsAsWellAsTheSettings() = runBlocking {
         Root.setEnabled(context, true)
         Root.transport = { _, _, _, _ -> Root.Outcome.NoRoot }

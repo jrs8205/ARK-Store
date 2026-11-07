@@ -104,17 +104,22 @@ object ApkFolder {
 
     private fun relative(subfolder: String?): String = if (subfolder == null) FOLDER else "$FOLDER/$subfolder"
 
-    /** Whether the file the store saved at [uri] is still there. */
+    /**
+     * Whether the file the store saved at [uri] is still there, in the folder: one the user
+     * moved elsewhere keeps its entry in MediaStore, and is theirs now.
+     */
     fun exists(context: Context, uri: String): Boolean {
         val parsed = uri.toUri()
-        if (parsed.scheme == "file") return parsed.path?.let { File(it).exists() } == true
-        return try {
-            context.contentResolver.query(parsed, arrayOf(MediaStore.MediaColumns._ID), null, null, null)
-                ?.use { it.count > 0 } == true
-        } catch (e: Exception) {
-            false
-        }
+        return stillSaved(
+            isFile = parsed.scheme == "file",
+            fileExists = { parsed.path?.let { File(it).exists() } == true },
+            relativePath = { relativePath(context, parsed) }
+        )
     }
+
+    /** [exists] apart from Android: a file of its own on Android 8 and 9, an entry of MediaStore later. */
+    internal fun stillSaved(isFile: Boolean, fileExists: () -> Boolean, relativePath: () -> String?): Boolean =
+        if (isFile) fileExists() else SavedApks.inFolder(relativePath())
 
     /**
      * Deletes the file the store saved at [uri]; one already gone, not the store's to delete, or
