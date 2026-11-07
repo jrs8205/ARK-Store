@@ -30,7 +30,7 @@ Android Developer Console, so ARK-Store keeps installing as usual under Google's
 3. Create a release and attach the APK.
 4. Add the topic `arkstore` to the repository (the gear next to *About*).
 
-The app appears for every user at the next index run, usually within a few hours. To take it
+The app appears for every user at the next index run, usually within an hour. To take it
 out of the store, remove the topic. Private or unlicensed repositories are never listed.
 
 ### Codeberg and GitLab
@@ -51,15 +51,14 @@ with ARK-Store 1.4 and later.
 
 ### How quickly it shows up
 
-- A new app or a new release: at the next index run. The run is scheduled hourly, but GitHub
-  starts scheduled workflows when it has room, in practice every three to five hours. Users
-  who do not open the store are told about updates by a background check about every four
-  hours.
+- A new app or a new release: at the next index run. The index is rebuilt about every half
+  hour. Users who do not open the store are told about updates by a background check about
+  every four hours.
 - Stars and download counts: with the same run.
 - A repository added by hand under Sources: immediately.
 
 The store refreshes when opened, at most once every five minutes; pulling down or the
-refresh button checks right away. If an app is still missing after half a day, check that
+refresh button checks right away. If an app is still missing after a few hours, check that
 the repository is public, has a recognised license and that its latest full release has an
 `.apk` file attached.
 
@@ -125,7 +124,8 @@ following a developer who has not added it.
 - Refresh on open, a background check every four hours and a notification for new versions.
   With root on, the check can also install the updates of the apps the store itself
   installed, without asking, only on Wi-Fi or only while charging if you like.
-- A warning before installing over an app signed with a different key.
+- A note in the details when the installed app is signed with another key than the version
+  offered.
 - Beta versions on request.
 - More apps with switches in the settings: apps found by searching GitHub, Codeberg and
   GitLab, and the IzzyOnDroid and F-Droid catalogues. An app offered by several places is
@@ -142,8 +142,8 @@ following a developer who has not added it.
   without root their files are gathered in a folder for you to install, the newest version
   from the store where it has one.
 - ARK-Store sees the apps that have an icon in the launcher, and those it installed itself.
-  It asks Android neither to see every app nor to install apps: Play Protect blocks a new app
-  that does.
+  It asks Android neither to see every app nor to install apps: Play Protect has blocked
+  ARK-Store builds that did.
 - On a rooted device (Magisk, KernelSU or APatch), root can be turned on in the settings:
   installs, updates, removals and restores then go through without Android asking, and a
   backup can include the apps' own data, encrypted with a password if you give one.
@@ -240,7 +240,7 @@ What the store checks:
   and checked against the catalogue's SHA-256 checksum.
 - The file's package name must be the one offered.
 - The file's signing keys are compared with every key the installed app has had. A file whose
-  keys can be read and are all unknown to the app is refused before it reaches Android.
+  keys can be read and are all unknown to the app is refused before it is saved or installed.
   Android makes the final decision on whether the keys match.
 - When the index could read a file's signing key, the details say beforehand whether an
   installed app is signed the same way. An app with another key under the same package name,
@@ -317,6 +317,7 @@ If ARK-Store is useful to you, you can support its development:
 
 - [GitHub Sponsors](https://github.com/sponsors/jrs8205) — monthly or one-time
 - [Buy Me a Coffee](https://buymeacoffee.com/jrs8205) — no sign-up needed
+- [PayPal](https://www.paypal.me/JarsiS)
 
 ## License
 
