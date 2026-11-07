@@ -514,6 +514,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         val context = getApplication<Application>()
         if (!on) {
             Root.setEnabled(context, false)
+            InstallManager.setRootLost(context, false)
             _root.value = RootUiState.Off
             return
         }
@@ -522,7 +523,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             _root.value = when (val check = Root.check()) {
                 is RootCheck.Granted -> {
                     Root.setEnabled(context, true)
-                    Root.markLost(context, false)
+                    InstallManager.setRootLost(context, false)
                     RootUiState.On(check.provider)
                 }
                 RootCheck.Denied -> RootUiState.Denied
@@ -544,6 +545,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             if (Root.enabled(context)) {
                 val check = Root.check()
                 if (!Root.enabled(context)) return@launch
+                // Given again: the rows go back to installing through it.
+                if (check is RootCheck.Granted) InstallManager.setRootLost(context, false)
                 _root.value = when (check) {
                     is RootCheck.Granted -> RootUiState.On(check.provider)
                     RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused

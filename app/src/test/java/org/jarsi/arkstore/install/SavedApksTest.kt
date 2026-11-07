@@ -82,11 +82,22 @@ class SavedApksTest {
     }
 
     @Test
-    fun olderToDeleteTouchesOnlyRecordedFilesOfThatPackage() {
+    fun aSaveReplacesOnlyTheRecordedFileOfThatPackage() {
         val records = mapOf("a" to saved("a", uri = "uri1"), "b" to saved("b", uri = "uri2"))
-        assertEquals(listOf("uri1"), SavedApks.olderToDelete(records, "a", "uri3"))
-        assertEquals(emptyList<String>(), SavedApks.olderToDelete(records, "a", "uri1"))
-        assertEquals(emptyList<String>(), SavedApks.olderToDelete(records, "c", "uri9"))
+        val newer = saved("a", versionCode = 6, uri = "uri3")
+        assertEquals(SavedApks.Update(records + ("a" to newer), listOf("uri1"), newer), SavedApks.withSaved(records, newer))
+        val same = saved("a", uri = "uri1")
+        assertEquals(SavedApks.Update(records, emptyList(), same), SavedApks.withSaved(records, same))
+        val other = saved("c", uri = "uri9")
+        assertEquals(SavedApks.Update(records + ("c" to other), emptyList(), other), SavedApks.withSaved(records, other))
+    }
+
+    @Test
+    fun anOlderVersionSavedLastDoesNotReplaceTheNewer() {
+        val newer = saved("a", versionCode = 6, uri = "uri6")
+        val records = mapOf("a" to newer)
+        val older = saved("a", versionCode = 5, uri = "uri5")
+        assertEquals(SavedApks.Update(records, listOf("uri5"), newer), SavedApks.withSaved(records, older))
     }
 
     @Test

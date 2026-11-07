@@ -8,6 +8,7 @@ import kotlinx.coroutines.runBlocking
 import org.jarsi.arkstore.FakePreferences
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -51,6 +52,7 @@ class InstallManagerTest {
 
     @After
     fun after() {
+        InstallManager.setRootLost(context, false)
         Root.transport = null
         InstallManager.saver = null
         InstallManager.deleter = null
@@ -103,6 +105,32 @@ class InstallManagerTest {
         InstallManager.handOver(context, "owner/newer", null, "org.example.newer", listOf("base.apk" to aFile()), false, saveAs(6))
         assertEquals(listOf("content://downloads/11"), deleted)
         assertEquals("content://downloads/12", InstallManager.saved.value.getValue("org.example.newer").uri)
+    }
+
+    @Test
+    fun rootGivenAgainTellsTheRowsAsWellAsTheSettings() = runBlocking {
+        Root.setEnabled(context, true)
+        Root.transport = { _, _, _, _ -> Root.Outcome.NoRoot }
+        saving("content://downloads/31")
+        InstallManager.handOver(context, "owner/lost", null, "org.example.lost", listOf("base.apk" to aFile()), true, saveAs())
+        assertTrue(InstallManager.rootLost.value)
+        assertTrue(Root.lost(context))
+        InstallManager.setRootLost(context, false)
+        assertFalse(InstallManager.rootLost.value)
+        assertFalse(Root.lost(context))
+    }
+
+    @Test
+    fun anOlderDownloadThatFinishesLastKeepsTheNewerFile() = runBlocking {
+        // Two rows of the same app, from two projects: the newer one's download finished first.
+        saving("content://downloads/21", "content://downloads/22")
+        InstallManager.handOver(context, "owner/fast", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(6))
+        val result = InstallManager.handOver(context, "owner/slow", null, "org.example.race", listOf("base.apk" to aFile()), false, saveAs(5))
+        val newer = InstallManager.saved.value.getValue("org.example.race")
+        assertEquals(6L, newer.versionCode)
+        assertEquals("content://downloads/21", newer.uri)
+        assertEquals(listOf("content://downloads/22"), deleted)
+        assertEquals(InstallManager.HandOver.Saved(newer), result)
     }
 
     @Test

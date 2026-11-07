@@ -402,13 +402,17 @@ object BackupManager {
         val told = Told(BackupEvent.Kind.RESTORE, selected.size, bytes) { folder.name }
         return start(appContext, restoring = true, zip = folder.zip, told = told) {
             if (Root.enabled(appContext) && Root.check() is RootCheck.Granted) {
-                val (installed, rest) = alreadyInstalled(selected)
+                val guard = RootGuard.split(selected, RootInstaller::isInstalled)
                 val done = if (folder.zip) {
-                    installZip(appContext, folder.tree, rest, data)
+                    installZip(appContext, folder.tree, guard.rest, data)
                 } else {
-                    install(appContext, Documents(appContext.contentResolver, folder.tree), rest, data)
+                    install(appContext, Documents(appContext.contentResolver, folder.tree), guard.rest, data)
                 }
-                if (done is BackupState.Done) done.copy(alreadyInstalled = installed) else done
+                if (done is BackupState.Done) {
+                    done.copy(alreadyInstalled = guard.installed, failed = guard.unchecked + done.failed)
+                } else {
+                    done
+                }
             } else {
                 collect(appContext, folder, selected)
             }
@@ -1132,23 +1136,6 @@ object BackupManager {
             }
         }
         return BackupState.Done(true, saved, 0, failed, dataFailed = dataFailed, wrongPassword = wrongPassword)
-    }
-
-    /**
-     * [selected] apart: the names of those the store sees as not installed but root finds
-     * installed, and the rest. An app without a launcher icon is hidden from the store, and
-     * restoring it would put the backup's files and data over the app's own without a word.
-     */
-    private suspend fun alreadyInstalled(selected: List<RestoreEntry>): Pair<List<String>, List<RestoreEntry>> {
-        val installed = ArrayList<String>()
-        val rest = ArrayList<RestoreEntry>()
-        for (row in selected) {
-            val found = row.status == RestoreStatus.NOT_INSTALLED &&
-                AppBackup.isPackageName(row.entry.packageName) &&
-                RootInstaller.isInstalled(row.entry.packageName) == true
-            if (found) installed += row.entry.label else rest += row
-        }
-        return installed to rest
     }
 
     /**

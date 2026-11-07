@@ -152,12 +152,16 @@ internal object RootInstaller {
 
     /**
      * Whether [packageName] is installed for this user, as root sees it, which sees every app;
-     * the store itself sees only the apps with a launcher icon. Null when root could not be had.
+     * the store itself sees only the apps with a launcher icon. Null when that cannot be told:
+     * no root, or `pm` failed rather than said the app is not there, which it says by exiting
+     * with 1 and printing nothing.
      */
     suspend fun isInstalled(packageName: String): Boolean? {
         val ran = Root.run(RootCommands.isInstalled(packageName, Root.userId), CHECK_TIMEOUT_MS)
         if (ran !is Root.Outcome.Ran) return null
-        return ran.exit == 0 && ran.out.lineSequence().any { it.startsWith("package:") }
+        if (ran.exit == 0 && ran.out.lineSequence().any { it.startsWith("package:") }) return true
+        if (ran.exit == 1 && ran.out.isBlank() && ran.err.isBlank()) return false
+        return null
     }
 
     suspend fun uninstall(packageName: String): Result {

@@ -570,14 +570,12 @@ object InstallManager {
         val record = SavedApk(packageName, saveAs.versionCode, saveAs.versionName, uri, saveAs.repo)
         // From what is written down, not from what the rows show: a file whose version is
         // installed by now, or one from before this run, goes all the same.
-        val older = synchronized(savedLock) {
+        val update = synchronized(savedLock) {
             val current = readSaved(context)
-            val older = SavedApks.olderToDelete(current, packageName, uri)
-            writeSaved(context, current + (packageName to record))
-            older
+            SavedApks.withSaved(current, record).also { if (it.records != current) writeSaved(context, it.records) }
         }
-        for (uri in older) deleter?.invoke(context, uri) ?: ApkFolder.delete(context, uri)
-        return HandOver.Saved(record)
+        for (uri in update.delete) deleter?.invoke(context, uri) ?: ApkFolder.delete(context, uri)
+        return HandOver.Saved(update.kept)
     }
 
     /**
@@ -592,14 +590,14 @@ object InstallManager {
     ): HandOver? {
         if (Root.check() !is RootCheck.Granted) {
             Log.w(TAG, "Root was not given; $key is not installed through it")
-            markRootLost(context, true)
+            setRootLost(context, true)
             return null
         }
-        markRootLost(context, false)
+        setRootLost(context, false)
         return when (val result = RootInstaller.install(context.packageName, packageName, files) {}) {
             RootInstaller.Result.NoRoot -> {
                 Log.w(TAG, "Root was lost during the install of $key")
-                markRootLost(context, true)
+                setRootLost(context, true)
                 null
             }
             is RootInstaller.Result.Done -> when (result.status) {
@@ -643,8 +641,11 @@ object InstallManager {
         }
     }
 
-    /** Notes whether root could be had, for the settings and for the rows; see [rootLost]. */
-    private fun markRootLost(context: Context, lost: Boolean) {
+    /**
+     * Notes whether root could be had, for the settings and for the rows alike; see [rootLost].
+     * Whatever learns how root stands tells it here, so that the two never disagree.
+     */
+    internal fun setRootLost(context: Context, lost: Boolean) {
         Root.markLost(context, lost)
         _rootLost.value = lost
     }
@@ -740,11 +741,11 @@ object InstallManager {
             val result = if (Root.check() is RootCheck.Granted) RootInstaller.uninstall(packageName) else RootInstaller.Result.NoRoot
             when (result) {
                 RootInstaller.Result.NoRoot -> {
-                    markRootLost(appContext, true)
+                    setRootLost(appContext, true)
                     withContext(Dispatchers.Main) { onNoRoot() }
                 }
                 is RootInstaller.Result.Done -> {
-                    markRootLost(appContext, false)
+                    setRootLost(appContext, false)
                     if (result.status == PackageInstaller.STATUS_SUCCESS) {
                         notifyInstalledChanged()
                     } else {

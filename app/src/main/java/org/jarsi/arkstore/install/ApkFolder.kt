@@ -80,10 +80,7 @@ object ApkFolder {
             ?: throw IOException("No shared storage to save to")
         val dir = File(root, relative(subfolder))
         if (!dir.mkdirs() && !dir.isDirectory) throw IOException("Could not make $dir")
-        val base = displayName.removeSuffix(".apk")
-        var target = File(dir, displayName)
-        var n = 1
-        while (target.exists()) target = File(dir, "$base (${n++}).apk")
+        val target = reserve(dir, displayName)
         try {
             source.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 64 * 1024) } }
         } catch (e: IOException) {
@@ -91,6 +88,18 @@ object ApkFolder {
             throw e
         }
         return Uri.fromFile(target)
+    }
+
+    /**
+     * Makes an empty file in [dir] named [displayName], or with a number when that is taken,
+     * so that two saves at once never write to the same file.
+     */
+    internal fun reserve(dir: File, displayName: String): File {
+        val base = displayName.removeSuffix(".apk")
+        var target = File(dir, displayName)
+        var n = 1
+        while (!target.createNewFile()) target = File(dir, "$base (${n++}).apk")
+        return target
     }
 
     private fun relative(subfolder: String?): String = if (subfolder == null) FOLDER else "$FOLDER/$subfolder"

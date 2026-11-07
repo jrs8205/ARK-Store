@@ -113,10 +113,20 @@ object SavedApks {
                 (offeredVersion <= 0 || it.versionCode >= offeredVersion)
         }
 
+    /** What the records become after a save: [records], the files to [delete], and the one [kept] of that app. */
+    data class Update(val records: Map<String, SavedApk>, val delete: List<String>, val kept: SavedApk)
+
     /**
-     * The files to delete once a file of [packageName] is saved at [newUri]: the one recorded
-     * for it before, if any. Only what the store itself recorded is ever deleted.
+     * What [saved] becomes once [record] is saved: the file recorded for its app before is
+     * deleted, unless that one is of a newer version, when it is the file just saved that goes,
+     * so that the slower download of an older version never takes the newer one's place. Only
+     * what the store itself saved is ever deleted.
      */
-    fun olderToDelete(saved: Map<String, SavedApk>, packageName: String, newUri: String): List<String> =
-        listOfNotNull(saved[packageName]?.uri?.takeIf { it != newUri })
+    fun withSaved(saved: Map<String, SavedApk>, record: SavedApk): Update {
+        val before = saved[record.packageName]
+        if (before != null && before.versionCode > record.versionCode) {
+            return Update(saved, listOf(record.uri).filter { it != before.uri }, before)
+        }
+        return Update(saved + (record.packageName to record), listOfNotNull(before?.uri?.takeIf { it != record.uri }), record)
+    }
 }
