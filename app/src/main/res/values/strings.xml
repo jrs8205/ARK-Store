@@ -43,7 +43,7 @@
     <string name="fail_signature">The installed app is signed with a different key, so it cannot be updated in place. Uninstall it first and then install it again. This removes the app\'s data.</string>
     <string name="fail_install">The installation failed.</string>
     <string name="fail_save">The file could not be saved to the downloads folder.</string>
-    <string name="fail_no_root">Root could not be had, so nothing was installed.</string>
+    <string name="fail_no_root">Root access was unavailable, so nothing was installed.</string>
 
     <string name="detail_latest">Latest version</string>
     <string name="detail_installed">Installed</string>
@@ -246,7 +246,7 @@
     <string name="root_granted_unknown">Root granted.</string>
     <string name="root_denied">Root was refused. Allow ARK-Store in the root app and try again; until then the files are saved for you to install.</string>
     <string name="root_missing">Not available: this device is not rooted.</string>
-    <string name="root_lost">The last install did not get root, so its file was saved for you to install.</string>
+    <string name="root_lost">Root access was unavailable. You can still download files and install them yourself.</string>
     <string name="uninstall_confirm_title">Uninstall %1$s?</string>
     <string name="uninstall_confirm_message">The app and its data are removed right away, without a question from Android.</string>
     <string name="uninstall_failed">Could not uninstall: %1$s</string>

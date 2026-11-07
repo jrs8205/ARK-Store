@@ -239,7 +239,7 @@
     <string name="root_granted_unknown">Permessi di root concessi.</string>
     <string name="root_denied">Permessi di root negati. Autorizza ARK-Store nell\'app di root e riprova; fino ad allora i file vengono salvati perché tu possa installarli.</string>
     <string name="root_missing">Non disponibile: questo dispositivo non è rootato.</string>
-    <string name="root_lost">L\'ultima installazione non ha ottenuto i permessi di root, quindi il file è stato salvato perché tu possa installarlo.</string>
+    <string name="root_lost">Non è stato possibile ottenere i permessi di root. Puoi comunque scaricare i file e installarli manualmente.</string>
     <string name="uninstall_confirm_title">Disinstallare %1$s?</string>
     <string name="uninstall_confirm_message">L\'app e i suoi dati verranno rimossi subito, senza conferma da parte di Android.</string>
     <string name="uninstall_failed">Disinstallazione non riuscita: %1$s</string>

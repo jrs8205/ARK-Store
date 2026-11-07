@@ -247,7 +247,7 @@
     <string name="root_granted_unknown">Root-права надано.</string>
     <string name="root_denied">У root-правах відмовлено. Дозвольте доступ для ARK-Store у root-менеджері й повторіть спробу; до того часу файли зберігаються, щоб ви встановили їх самі.</string>
     <string name="root_missing">Недоступно: на цьому пристрої немає root-прав.</string>
-    <string name="root_lost">Останнє встановлення не отримало root-прав, тому файл збережено, щоб ви встановили його самі.</string>
+    <string name="root_lost">Не вдалося отримати root-права. Ви й далі можете завантажувати файли й установлювати їх самостійно.</string>
     <string name="uninstall_confirm_title">Видалити %1$s?</string>
     <string name="uninstall_confirm_message">Додаток і його дані буде видалено одразу, без запиту Android.</string>
     <string name="uninstall_failed">Не вдалося видалити: %1$s</string>

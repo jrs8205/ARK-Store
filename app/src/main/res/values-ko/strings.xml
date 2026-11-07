@@ -223,7 +223,7 @@
     <string name="root_granted_unknown">루트 권한 허용됨</string>
     <string name="root_denied">루트 권한이 거부되었습니다. 루트 관리 앱에서 ARK-Store를 허용한 후 다시 시도하세요. 그때까지는 직접 설치할 수 있도록 파일이 저장됩니다.</string>
     <string name="root_missing">사용할 수 없습니다. 이 기기는 루팅되어 있지 않습니다.</string>
-    <string name="root_lost">마지막 설치에서 루트 권한을 얻지 못해, 직접 설치할 수 있도록 파일을 저장했습니다.</string>
+    <string name="root_lost">루트 권한을 얻지 못했습니다. 파일을 다운로드해 직접 설치할 수는 있습니다.</string>
     <string name="uninstall_confirm_title">%1$s 앱을 제거할까요?</string>
     <string name="uninstall_confirm_message">앱과 앱 데이터가 Android의 확인 없이 바로 삭제됩니다.</string>
     <string name="uninstall_failed">제거하지 못했습니다: %1$s</string>

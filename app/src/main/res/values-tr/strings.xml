@@ -231,7 +231,7 @@
     <string name="root_granted_unknown">Root izni verildi.</string>
     <string name="root_denied">Root izni reddedildi. Root uygulamasında ARK-Store\'a izin verip tekrar deneyin; o zamana kadar dosyalar kendiniz yükleyebilmeniz için kaydedilir.</string>
     <string name="root_missing">Kullanılamıyor: Bu cihaz root edilmemiş.</string>
-    <string name="root_lost">Son yükleme root izni alamadı, bu yüzden dosya kendiniz yükleyebilmeniz için kaydedildi.</string>
+    <string name="root_lost">Root izni alınamadı. Dosyaları yine de indirip kendiniz yükleyebilirsiniz.</string>
     <string name="uninstall_confirm_title">%1$s kaldırılsın mı?</string>
     <string name="uninstall_confirm_message">Uygulama ve verileri, Android sormadan hemen kaldırılır.</string>
     <string name="uninstall_failed">Kaldırılamadı: %1$s</string>

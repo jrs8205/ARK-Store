@@ -2,8 +2,8 @@
 
 ## 1.11.0
 
-- Play Protect blocks every new app that may install other apps, and it blocked 1.10.0 and
-  1.10.1 for that. ARK-Store no longer asks Android for that permission, or to see every app
+- Play Protect has blocked recent ARK-Store builds that ask for permission to install apps,
+  1.10.0 and 1.10.1 among them. ARK-Store no longer asks Android for that permission, or to see every app
 - Without root, Install and Update are Download and Download update: the store downloads and
   checks the file and saves it in Download/ARK-Store, and you install it from the Files app.
   The newest file of each app stays there, and an older one goes when a newer one comes
