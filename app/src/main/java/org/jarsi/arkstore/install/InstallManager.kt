@@ -179,6 +179,17 @@ object InstallManager {
      */
     val rootLost: StateFlow<Boolean> = _rootLost.asStateFlow()
 
+    private val refusals = AtomicInteger()
+    /**
+     * How many times root has been refused since the app started: what a background run takes
+     * note of before it asks for root, to tell by [rootRefusedSince] a refusal since then from
+     * one before, which [rootLost] alone cannot.
+     */
+    internal val rootRefusals: Int get() = refusals.get()
+
+    /** Whether root has been refused since [rootRefusals] was [before]. */
+    internal fun rootRefusedSince(before: Int): Boolean = refusals.get() != before
+
     /** How many of the store's screens are showing; there can be one per window. */
     internal val screens = AtomicInteger(0)
 
@@ -662,6 +673,7 @@ object InstallManager {
      * Whatever learns how root stands tells it here, so that the two never disagree.
      */
     internal fun setRootLost(context: Context, lost: Boolean) {
+        if (lost) refusals.incrementAndGet()
         Root.markLost(context, lost)
         _rootLost.value = lost
     }

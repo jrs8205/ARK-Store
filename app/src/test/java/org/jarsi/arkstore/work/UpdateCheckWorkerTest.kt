@@ -137,17 +137,39 @@ class UpdateCheckWorkerTest {
     }
 
     @Test
-    fun rootGivenWhenARunAsksForgetsAnEarlierRefusal() = runBlocking {
+    fun aRefusalNotedWhileARunAsksForRootIsKeptAndStopsTheRun() = runBlocking {
         val context = PrefsContext()
         Root.setEnabled(context, true)
-        InstallManager.setRootLost(context, true)
-        Root.transport = { _, _, _, _ -> Root.Outcome.Ran(0, "uid=0(root) gid=0(root)", "") }
+        val before = InstallManager.rootRefusals
+        // The user's own install is refused root while the run's question is on its way.
+        Root.transport = { _, _, _, _ ->
+            InstallManager.setRootLost(context, true)
+            Root.Outcome.Ran(0, "uid=0(root) gid=0(root)", "")
+        }
         try {
             assertTrue(rootReady(context))
-            assertFalse(Root.lost(context))
-            assertFalse(InstallManager.rootLost.value)
+            assertTrue(Root.lost(context))
+            assertTrue(InstallManager.rootLost.value)
+            assertTrue(InstallManager.rootRefusedSince(before))
         } finally {
             Root.transport = null
+            InstallManager.setRootLost(context, false)
+        }
+    }
+
+    @Test
+    fun aRefusalFromBeforeTheRunDoesNotStopIt() {
+        val context = PrefsContext()
+        InstallManager.setRootLost(context, true)
+        try {
+            val before = InstallManager.rootRefusals
+            assertFalse(InstallManager.rootRefusedSince(before))
+            // Root given again says nothing new of a refusal.
+            InstallManager.setRootLost(context, false)
+            assertFalse(InstallManager.rootRefusedSince(before))
+            InstallManager.setRootLost(context, true)
+            assertTrue(InstallManager.rootRefusedSince(before))
+        } finally {
             InstallManager.setRootLost(context, false)
         }
     }
