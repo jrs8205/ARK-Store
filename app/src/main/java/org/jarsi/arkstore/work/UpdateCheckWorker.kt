@@ -82,11 +82,19 @@ internal fun asksRoot(enabled: Boolean, toTry: List<StoreApp>): Boolean = enable
 
 /**
  * Whether a run's unasked installs may go on: as the [settings] say, with root given when the
- * run asked for it ([rootGiven]) and turned on still ([rootOn]), so that turning root off stops
- * the downloads as turning the switch off does.
+ * run asked for it ([rootGiven]), turned on still ([rootOn]) and not refused since
+ * ([rootRefused]), so that turning root off stops the downloads as turning the switch off does.
+ * A refusal is written down before the outcome of the install it came at is told, so a run
+ * whose wait for that outcome ran out just then stops all the same.
  */
-internal fun unaskedAllowed(settings: AutoUpdate, rootGiven: Boolean, rootOn: Boolean, unmetered: Boolean, charging: Boolean): Boolean =
-    settings.allows(rootGiven && rootOn, unmetered, charging)
+internal fun unaskedAllowed(
+    settings: AutoUpdate,
+    rootGiven: Boolean,
+    rootOn: Boolean,
+    rootRefused: Boolean,
+    unmetered: Boolean,
+    charging: Boolean
+): Boolean = settings.allows(rootGiven && rootOn && !rootRefused, unmetered, charging)
 
 /**
  * Whether an unasked install that failed for [reason] is left alone until a newer version: not
@@ -195,7 +203,9 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         if (!settings.allows(root, unmetered(context), charging(context))) return emptySet()
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
-        fun allowed() = unaskedAllowed(AutoUpdate.read(context), root, Root.enabled(context), unmetered(context), charging(context))
+        fun allowed() = unaskedAllowed(
+            AutoUpdate.read(context), root, Root.enabled(context), Root.lost(context), unmetered(context), charging(context)
+        )
         for (app in installOrder(toTry(owned, failed), context.packageName)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
@@ -331,6 +341,13 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     }
 }
 
-/** Whether root is turned on and the root app gives it now; asks the root app, which may ask the user. */
-internal suspend fun rootReady(context: Context): Boolean =
-    Root.enabled(context) && Root.check() is RootCheck.Granted
+/**
+ * Whether root is turned on and the root app gives it now; asks the root app, which may ask the
+ * user. Given, it makes a refusal noted before, at the user's install or an earlier run, a thing
+ * of the past, as the run goes by refusals noted since.
+ */
+internal suspend fun rootReady(context: Context): Boolean {
+    if (!Root.enabled(context) || Root.check() !is RootCheck.Granted) return false
+    InstallManager.setRootLost(context, false)
+    return true
+}
