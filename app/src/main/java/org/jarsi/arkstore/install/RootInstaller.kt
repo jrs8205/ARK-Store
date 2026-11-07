@@ -82,6 +82,12 @@ internal object RootCommands {
         require(userId >= 0) { "Not a user" }
         return "pm uninstall --user $userId $packageName"
     }
+
+    fun isInstalled(packageName: String, userId: Int): String {
+        require(AppBackup.isPackageName(packageName)) { "Not a package name" }
+        require(userId >= 0) { "Not a user" }
+        return "pm path --user $userId $packageName"
+    }
 }
 
 /**
@@ -94,6 +100,8 @@ internal object RootInstaller {
 
     /** A session's commands have a limit each; a commit of a large app can take a while. */
     private const val PM_TIMEOUT_MS = 10 * 60 * 1000L
+    /** A question that only reads, answered at once on any device. */
+    private const val CHECK_TIMEOUT_MS = 60 * 1000L
 
     /** How the install came out: a verdict, in the system's own statuses, or no root to try with. */
     sealed interface Result {
@@ -140,6 +148,20 @@ internal object RootInstaller {
             return Result.NoRoot
         }
         return verdict(committed, "install-commit")
+    }
+
+    /**
+     * Whether [packageName] is installed for this user, as root sees it, which sees every app;
+     * the store itself sees only the apps with a launcher icon. Null when that cannot be told:
+     * no root, or `pm` failed rather than said the app is not there, which it says by exiting
+     * with 1 and printing nothing.
+     */
+    suspend fun isInstalled(packageName: String): Boolean? {
+        val ran = Root.run(RootCommands.isInstalled(packageName, Root.userId), CHECK_TIMEOUT_MS)
+        if (ran !is Root.Outcome.Ran) return null
+        if (ran.exit == 0 && ran.out.lineSequence().any { it.startsWith("package:") }) return true
+        if (ran.exit == 1 && ran.out.isBlank() && ran.err.isBlank()) return false
+        return null
     }
 
     suspend fun uninstall(packageName: String): Result {

@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.data
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
@@ -86,9 +87,12 @@ object InstalledApps {
     private const val PREFS_BETAS = "installed_betas"
 
     /**
-     * Every installed package, read in one go. Asking the system about each app of a
-     * catalogue of thousands, one by one, takes seconds.
+     * Every installed package the store can see, read in one go. Asking the system about each
+     * app of a catalogue of thousands, one by one, takes seconds. The store asks to see only the
+     * apps with a launcher icon, and those it installed itself: asking to see every app is one
+     * of the permissions Play Protect blocks a new app for.
      */
+    @SuppressLint("QueryPermissionsNeeded")
     fun snapshot(context: Context): Map<String, PackageInfo> = try {
         context.packageManager.getInstalledPackages(0).associateBy { it.packageName }
     } catch (_: RuntimeException) {

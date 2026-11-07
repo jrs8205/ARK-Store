@@ -60,49 +60,6 @@ class InstallStatesTest {
     }
 
     @Test
-    fun aResultIsTakenForTheAttemptItBelongsTo() {
-        // The system names the session; one of an earlier attempt is not this attempt's.
-        assertTrue(belongsToCurrent(committed = 12, reported = 12, downloading = false))
-        assertFalse(belongsToCurrent(committed = 13, reported = 12, downloading = false))
-        // Without a name, the result is taken.
-        assertTrue(belongsToCurrent(committed = 13, reported = null, downloading = false))
-        // An attempt still downloading has no session yet: a named one is an earlier attempt's.
-        assertFalse(belongsToCurrent(committed = null, reported = 12, downloading = true))
-        // Nothing on its way, as after the process was restarted: the result is taken.
-        assertTrue(belongsToCurrent(committed = null, reported = 12, downloading = false))
-    }
-
-    @Test
-    fun anAttemptIsOnItsWayWithoutASessionFromItsReservationOn() {
-        // The reservation comes before the job is stored; a result the system names while an
-        // attempt is anywhere on its way without a session is an earlier attempt's.
-        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Queued))
-        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Downloading(0.1f)))
-        assertTrue(attemptWithoutSession(committed = null, state = InstallState.Installing))
-        assertFalse(attemptWithoutSession(committed = null, state = null))
-        assertFalse(attemptWithoutSession(committed = null, state = InstallState.Failed(FailReason.INSTALL)))
-        assertFalse(attemptWithoutSession(committed = 12, state = InstallState.Installing))
-    }
-
-    @Test
-    fun aResultSettlesTheStateOfItsOwnAttemptAlone() {
-        val installing = mapOf(repo to InstallState.Installing)
-        val queued = mapOf(repo to InstallState.Queued)
-        // The result of the attempt committed takes down the state that attempt left installing.
-        assertEquals(emptyMap<String, InstallState>(), afterResult(installing, repo, null, owned = true))
-        assertEquals(failed, afterResult(installing, repo, InstallState.Failed(FailReason.DOWNLOAD), owned = true))
-        // A new attempt has begun since the result passed its check: it is left alone.
-        assertSame(queued, afterResult(queued, repo, InstallState.Failed(FailReason.INSTALL), owned = true))
-        assertSame(downloading, afterResult(downloading, repo, null, owned = true))
-        // A result with nothing committed, as after the process was restarted, settles when
-        // nothing is on its way, and leaves an attempt begun since alone.
-        assertEquals(failed, afterResult(emptyMap(), repo, InstallState.Failed(FailReason.DOWNLOAD), owned = false))
-        assertEquals(emptyMap<String, InstallState>(), afterResult(failed, repo, null, owned = false))
-        assertSame(queued, afterResult(queued, repo, null, owned = false))
-        assertSame(installing, afterResult(installing, repo, null, owned = false))
-    }
-
-    @Test
     fun anOutcomeIsTakenByTheAttemptItSettles() {
         val mine = Settled(repo, attempt = 6, Outcome.CANCELLED)
         assertTrue(mine.isOf(repo, 6))
@@ -130,21 +87,6 @@ class InstallStatesTest {
         // The step before any is one that no download reports, so the first is a change.
         assertNotEquals(UNKNOWN_STEP, NO_STEP_YET)
         assertNotEquals(0, NO_STEP_YET)
-    }
-
-    @Test
-    fun anInstallWhoseSessionIsGoneWithoutAWordIsStale() {
-        val states = mapOf(
-            "alice/app" to InstallState.Installing,
-            "bob/app" to InstallState.Installing,
-            "carol/app" to InstallState.Installing,
-            "dave/app" to InstallState.Downloading(0.2f)
-        )
-        val sessions = mapOf("alice/app" to 11, "bob/app" to 12, "dave/app" to 14)
-
-        // Carol's is being committed and has no session yet; Dave's is not installing.
-        assertEquals(listOf("bob/app"), stale(states, sessions, alive = setOf(11)))
-        assertEquals(emptyList<String>(), stale(states, sessions, alive = setOf(11, 12)))
     }
 
     @Test

@@ -104,9 +104,11 @@ following a developer who has not added it.
 
 ## For users
 
-- One list: updates, installed apps and apps to install. One tap to install or update,
-  **Update all** when several updates wait; they go in order, the store's own last, and a
-  download is cancelled by tapping its ring. Downloads continue in the background.
+- One list: updates, installed apps and apps to install. One tap to download an app or its
+  update, **Download all** when several updates wait; a download is cancelled by tapping its
+  ring, and continues in the background. The store checks the file and saves it in
+  Download/ARK-Store, and you install it from the Files app; the newest file of each app stays
+  there. With root on, the same taps install and update, in order, the store's own last.
 - An update can be skipped, or an app held back from updates altogether, from its details.
 - Search, categories, places (GitHub, Codeberg, GitLab, IzzyOnDroid, F-Droid) and sorting by
   name, downloads, stars or release date.
@@ -121,8 +123,8 @@ following a developer who has not added it.
 - Screenshots and a longer description in the details, when the developer publishes them,
   whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.
 - Refresh on open, a background check every four hours and a notification for new versions.
-  On Android 12 and later the check can also install the updates of the apps the store
-  itself installed, without asking, only on Wi-Fi or only while charging if you like.
+  With root on, the check can also install the updates of the apps the store itself
+  installed, without asking, only on Wi-Fi or only while charging if you like.
 - A warning before installing over an app signed with a different key.
 - Beta versions on request.
 - More apps with switches in the settings: apps found by searching GitHub, Codeberg and
@@ -136,7 +138,12 @@ following a developer who has not added it.
   that limit; it stays on the device, outside backups, and goes to GitHub alone.
 - The sources, bookmarks and settings can be exported to a file and imported on another
   device. The apps installed from outside Google Play can be backed up as their APK files to
-  a folder or a zip file, and installed back from either.
+  a folder or a zip file, and restored from either: with root they are installed back, and
+  without root their files are gathered in a folder for you to install, the newest version
+  from the store where it has one.
+- ARK-Store sees the apps that have an icon in the launcher, and those it installed itself.
+  It asks Android neither to see every app nor to install apps: Play Protect blocks a new app
+  that does.
 - On a rooted device (Magisk, KernelSU or APatch), root can be turned on in the settings:
   installs, updates, removals and restores then go through without Android asking, and a
   backup can include the apps' own data, encrypted with a password if you give one.
@@ -238,9 +245,9 @@ What the store checks:
 - When the index could read a file's signing key, the details say beforehand whether an
   installed app is signed the same way. An app with another key under the same package name,
   or another app altogether, is not offered an update.
-- Installs go through Android's package installer, which asks before installing. On Android
-  12 and later it may update an app the store itself installed without asking again, under
-  Android's own conditions.
+- Without root, ARK-Store installs nothing: you install the checked file yourself with
+  Android's package installer, which asks before installing and has Play Protect look at it.
+  With root on, ARK-Store installs through `pm` as root, without Android asking.
 
 What the store does not check:
 

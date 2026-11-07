@@ -176,8 +176,8 @@ class InstallService : Service() {
             ).apply {
                 description = context.getString(R.string.channel_downloads_description)
             }
-            // An install that waits for the user is something they have to be told about, so
-            // it has a channel of its own that can alert, apart from the quiet progress.
+            // A file waiting for the user to install it is something they have to be told
+            // about, so it has a channel of its own that can alert, apart from the quiet progress.
             val ready = NotificationChannel(
                 READY_CHANNEL_ID,
                 context.getString(R.string.channel_installs),
@@ -202,44 +202,32 @@ class InstallService : Service() {
         }
 
         /**
-         * Tells the user that [repo] has been downloaded and waits for their go-ahead, which
-         * the system asks for with [confirm]. Shown when the app is not on screen to ask
-         * itself. Tapping it opens the prompt through [InstallPromptActivity].
-         *
-         * [sessionId] keeps the prompts of different installs apart: to the system, two
-         * pending intents that differ only in their extras are one and the same.
+         * Tells the user that [title] has been downloaded and saved for them to install, when
+         * the store is not on screen to say so on its row. Tapping it opens the folder, through
+         * the store, as nothing else may be asked beforehand whether it can open a folder.
          */
-        fun showReady(context: Context, repo: String, sessionId: Int, confirm: Intent) {
+        fun showSaved(context: Context, title: String) {
             val manager = NotificationManagerCompat.from(context)
             if (!manager.areNotificationsEnabled()) return
-            val prompt = PendingIntent.getActivity(
+            val open = PendingIntent.getActivity(
                 context,
-                sessionId,
-                InstallPromptActivity.intent(context, repo, confirm),
+                title.hashCode(),
+                MainActivity.openFolderIntent(context),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             val notification = NotificationCompat.Builder(context, READY_CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_ark)
-                .setContentTitle(
-                    context.getString(
-                        R.string.install_ready_title,
-                        InstallManager.titleOf(context, repo)
-                    )
-                )
-                .setContentText(context.getString(R.string.install_ready_text))
+                .setContentTitle(context.getString(R.string.notification_saved_title, title))
+                .setContentText(context.getString(R.string.notification_saved_text, ApkFolder.displayPath(context)))
                 .setCategory(NotificationCompat.CATEGORY_STATUS)
-                .setContentIntent(prompt)
+                .setContentIntent(open)
                 .setAutoCancel(true)
                 .build()
             try {
-                manager.notify(repo, READY_NOTIFICATION_ID, notification)
+                manager.notify(title, READY_NOTIFICATION_ID, notification)
             } catch (_: SecurityException) {
                 // The permission was withdrawn between the check and the call.
             }
-        }
-
-        fun cancelReady(context: Context, repo: String) {
-            NotificationManagerCompat.from(context).cancel(repo, READY_NOTIFICATION_ID)
         }
     }
 }

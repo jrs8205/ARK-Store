@@ -1,1 +1,1 @@
-Instala y actualiza apps Android desde sus versiones publicadas en GitHub
+Apps Android y sus actualizaciones desde sus versiones publicadas en GitHub

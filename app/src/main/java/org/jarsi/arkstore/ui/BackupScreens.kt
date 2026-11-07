@@ -55,8 +55,14 @@ import org.jarsi.arkstore.backup.BackupEntry
 import org.jarsi.arkstore.backup.BackupError
 import org.jarsi.arkstore.backup.BackupState
 import org.jarsi.arkstore.backup.Installers
+import org.jarsi.arkstore.backup.LeftOut
+import org.jarsi.arkstore.backup.RestoreEntry
+import org.jarsi.arkstore.backup.RestorePlan
+import org.jarsi.arkstore.backup.RestoreSource
 import org.jarsi.arkstore.backup.RestoreStatus
 import org.jarsi.arkstore.backup.ZipBackup
+import org.jarsi.arkstore.backup.choosable
+import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
@@ -249,6 +255,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val installedChanged by InstallManager.installedChanged.collectAsStateWithLifecycle()
+    val rootOn by viewModel.rootOn.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val running = state is BackupState.Running
@@ -316,7 +323,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                 Spacer(Modifier.weight(1f))
             }
             else -> {
-                val chosen = read.entries.filter { it.status.selectable && it.entry.packageName in selected }
+                val chosen = read.entries.filter { it.choosable(rootOn) && it.entry.packageName in selected }
                 val shown = read.entries.filter { row -> (!missingOnly || row.status.preselected) && matches(row.entry, query) }
                 SearchField(query = query, onQueryChange = { query = it }, modifier = Modifier.padding(top = 4.dp))
                 SelectionTools(
@@ -352,7 +359,8 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                         val note = when {
                             install is InstallState.Failed -> failureText(install)
                             install != null -> stringResource(R.string.restore_installing)
-                            else -> statusText(row.status)
+                            rootOn -> statusText(row.status)
+                            else -> listOfNotNull(statusText(row.status), sourceText(row)).joinToString(" · ")
                         }
                         val data = when {
                             entry.data.isEmpty() -> null
@@ -360,8 +368,8 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                             else -> stringResource(R.string.restore_data)
                         }
                         CheckRow(
-                            checked = row.status.selectable && entry.packageName in selected,
-                            enabled = row.status.selectable && !running && install == null,
+                            checked = row.choosable(rootOn) && entry.packageName in selected,
+                            enabled = row.choosable(rootOn) && !running && install == null,
                             onCheckedChange = { viewModel.toggleRestore(entry.packageName) },
                             title = entry.label,
                             detail = listOfNotNull(version(entry), Formatter.formatShortFileSize(context, entry.size), data)
@@ -374,7 +382,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
             }
         }
         val canStart = read != null && (
-            read.entries.any { it.status.selectable && it.entry.packageName in selected } ||
+            read.entries.any { it.choosable(rootOn) && it.entry.packageName in selected } ||
                 (importSettings && read.settings != null)
             )
         HorizontalDivider(modifier = Modifier.padding(top = 8.dp))
@@ -389,7 +397,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                     note = null,
                     noteIsError = false
                 )
-                val chosen = read?.entries.orEmpty().filter { it.status.selectable && it.entry.packageName in selected }
+                val chosen = read?.entries.orEmpty().filter { it.choosable(rootOn) && it.entry.packageName in selected }
                 if (restoreData && chosen.any { row -> row.entry.data.any { it.encrypted } }) {
                     PasswordField(
                         value = restorePassword,
@@ -417,7 +425,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
                     enabled = canStart,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(stringResource(R.string.action_restore))
+                    Text(stringResource(if (rootOn) R.string.action_restore else R.string.action_collect))
                 }
             }
         }
@@ -629,6 +637,7 @@ private fun JobFooter(
                     Text(stringResource(R.string.action_cancel))
                 }
             }
+            is BackupState.Done if state.restoring && state.folder != null -> CollectedSummary(state, onDismiss)
             is BackupState.Done -> {
                 Text(
                     text = when {
@@ -657,6 +666,13 @@ private fun JobFooter(
                         ),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                if (state.alreadyInstalled.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.restore_already_installed, state.alreadyInstalled.joinToString(", ")),
+                        style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
@@ -706,6 +722,84 @@ private fun JobFooter(
                 }
             }
         }
+    }
+}
+
+/**
+ * What a restore without root came to: where the files are, which were downloaded and which
+ * copied from the backup, which were left out and why, and the folder to open.
+ */
+@Composable
+private fun CollectedSummary(state: BackupState.Done, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+    Text(
+        text = stringResource(R.string.restore_folder_note, ApkFolder.displayPath(context, state.folder)),
+        style = MaterialTheme.typography.bodyLarge
+    )
+    if (state.downloaded.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.restore_downloaded, state.downloaded.joinToString(", ")),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    if (state.copied.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.restore_copied, state.copied.joinToString(", ")),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    for ((reason, rows) in state.leftOut.groupBy({ it.second }, { it.first })) {
+        Text(
+            text = stringResource(
+                when (reason) {
+                    LeftOut.SPLIT -> R.string.left_out_split
+                    LeftOut.FILES_MISSING -> R.string.left_out_files_missing
+                    LeftOut.NEEDS_NEWER_ANDROID -> R.string.left_out_needs_newer_android
+                    LeftOut.OTHER_SIGNER -> R.string.left_out_other_signer
+                    LeftOut.FAILED -> R.string.left_out_failed
+                },
+                rows.joinToString(", ")
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        if (state.saved > 0) {
+            StoreButton(
+                onClick = {
+                    haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                    ApkFolder.open(context, state.folder)
+                }
+            ) {
+                Text(stringResource(R.string.action_open_folder))
+            }
+        }
+        StoreOutlinedButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
+                onDismiss()
+            }
+        ) {
+            Text(stringResource(R.string.action_done))
+        }
+    }
+}
+
+/** Where a restore without root takes [row]'s file from, or why it cannot; null when there is nothing to say. */
+@Composable
+private fun sourceText(row: RestoreEntry): String? {
+    val sources = RestorePlan.sources(row.entry, row.status, row.offer)
+    val offer = row.offer
+    return when {
+        !row.choosable(false) -> if (row.entry.files.size > 1 && row.status.selectable) stringResource(R.string.restore_split_needs_root) else null
+        sources.firstOrNull() == RestoreSource.CATALOGUE && offer != null ->
+            stringResource(R.string.restore_from_catalogue, offer.versionName ?: offer.versionCode.toString())
+        else -> stringResource(R.string.restore_from_backup)
     }
 }
 
@@ -786,8 +880,8 @@ private fun failureText(failure: InstallState.Failed): String {
         when (failure.reason) {
             FailReason.INVALID_APK -> R.string.restore_fail_invalid
             FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
-            FailReason.DOWNLOAD, FailReason.INSTALL -> R.string.fail_install
-            FailReason.ABORTED -> R.string.fail_aborted
+            FailReason.DOWNLOAD, FailReason.INSTALL, FailReason.SAVE -> R.string.fail_install
+            FailReason.NO_ROOT -> R.string.fail_no_root
         }
     )
     val detail = failure.detail?.takeIf { failure.reason == FailReason.INSTALL && it.isNotBlank() }

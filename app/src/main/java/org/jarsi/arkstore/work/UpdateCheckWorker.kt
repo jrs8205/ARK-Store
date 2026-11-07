@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.os.BatteryManager
-import android.os.Build
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -33,8 +32,11 @@ import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
+import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
+import org.jarsi.arkstore.install.Root
+import org.jarsi.arkstore.install.RootCheck
 import org.jarsi.arkstore.install.installOrder
 import org.jarsi.arkstore.ui.MainActivity
 
@@ -72,6 +74,35 @@ internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<Sto
     updates.filter { it.fullName !in settled }
 
 /** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
+/**
+ * Whether the background check asks the root app at all: only when unasked updates are turned on
+ * and there is an update [toTry]. Asking makes some root apps show a note every time.
+ */
+internal fun asksRoot(enabled: Boolean, toTry: List<StoreApp>): Boolean = enabled && toTry.isNotEmpty()
+
+/**
+ * Whether a run's unasked installs may go on: as the [settings] say, with root given when the
+ * run asked for it ([rootGiven]), turned on still ([rootOn]) and not refused since
+ * ([rootRefused]), so that turning root off stops the downloads as turning the switch off does.
+ * A refusal is counted before the outcome of the install it came at is told, so a run whose
+ * wait for that outcome ran out just then stops all the same.
+ */
+internal fun unaskedAllowed(
+    settings: AutoUpdate,
+    rootGiven: Boolean,
+    rootOn: Boolean,
+    rootRefused: Boolean,
+    unmetered: Boolean,
+    charging: Boolean
+): Boolean = settings.allows(rootGiven && rootOn && !rootRefused, unmetered, charging)
+
+/**
+ * Whether an unasked install that failed for [reason] is left alone until a newer version: not
+ * when root was turned off or refused, which says nothing of the version and which the user
+ * may change.
+ */
+internal fun failureLasts(reason: FailReason?): Boolean = reason != FailReason.NO_ROOT
+
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
     updates.filter { announcement(it) !in failed }
 
@@ -148,9 +179,9 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
 
     /**
      * Installs, without asking, the updates among [found] that the settings allow now and
-     * that the store itself installed, one after the other, as long as the time a run
-     * [started] at is given lasts. Returns the full names of those settled: installed, or
-     * handed to the user to confirm. One that failed is announced like any other update,
+     * that the store itself installed, through root, one after the other, as long as the time
+     * a run [started] at is given lasts. Returns the full names of those installed. One that
+     * failed is announced like any other update,
      * and not tried unasked again until a newer version is offered; its failure is not
      * left for the user to find on a screen, as they did not ask for the install.
      */
@@ -161,13 +192,23 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
     ): Set<String> {
         val context = applicationContext
         val settings = AutoUpdate.read(context)
-        if (!settings.allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))) return emptySet()
         val updates = found.map { it.first }
         val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
         val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
+        if (!asksRoot(settings.enabled, toTry(owned, failed))) return emptySet()
+        // Asked once a run: the root app may ask the user the first time, and the answer holds
+        // for the run. A refusal later on, in the middle of an install, ends the run, and the
+        // update is tried again on the next. Refusals are counted from before the question, so
+        // that one while it is on its way counts, and one from before the run does not.
+        val refusals = InstallManager.rootRefusals
+        val root = rootReady(context)
+        if (!settings.allows(root, unmetered(context), charging(context))) return emptySet()
         val settled = HashSet<String>()
         val deadline = started + INSTALL_BUDGET_MS
-        fun allowed() = AutoUpdate.read(context).allows(Build.VERSION.SDK_INT, unmetered(context), charging(context))
+        fun allowed() = unaskedAllowed(
+            AutoUpdate.read(context), root, Root.enabled(context), InstallManager.rootRefusedSince(refusals),
+            unmetered(context), charging(context)
+        )
         for (app in installOrder(toTry(owned, failed), context.packageName)) {
             val left = deadline - SystemClock.elapsedRealtime()
             if (left <= 0) break
@@ -184,7 +225,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             // installAndAwait finds on its way and leaves alone, is not.
             var attempt: Int? = null
             fun giveUp() = attempt?.let { InstallManager.cancel(app.fullName, it) }
-            val outcome = try {
+            val done = try {
                 watching(::stillWanted, CONDITIONS_INTERVAL_MS, { giveUp() }) {
                     InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS)) { attempt = it }
                 }
@@ -192,11 +233,14 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                 giveUp()
                 throw e
             }
-            when (outcome) {
-                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> settled += app.fullName
+            when (done?.outcome) {
+                Outcome.INSTALLED, Outcome.SAVED -> settled += app.fullName
                 Outcome.FAILED -> {
-                    failed += announcement(app)
                     InstallManager.dismissFailure(app.fullName)
+                    // Why it failed comes with the attempt's outcome: the state shown may have
+                    // been dismissed, or taken by a new attempt, by now.
+                    if (!failureLasts(done.reason)) break
+                    failed += announcement(app)
                 }
                 Outcome.CANCELLED -> break
                 null -> giveUp()
@@ -299,3 +343,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         }
     }
 }
+
+/** Whether root is turned on and the root app gives it now; asks the root app, which may ask the user. */
+internal suspend fun rootReady(context: Context): Boolean =
+    Root.enabled(context) && Root.check() is RootCheck.Granted

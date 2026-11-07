@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.11.0
+
+- Play Protect has blocked recent ARK-Store builds that ask for permission to install apps,
+  1.10.0 and 1.10.1 among them. ARK-Store no longer asks Android for that permission, or to see every app
+- Without root, Install and Update are Download and Download update: the store downloads and
+  checks the file and saves it in Download/ARK-Store, and you install it from the Files app.
+  The newest file of each app stays there, and an older one goes when a newer one comes
+- With root on, installs, updates, removals and restores go on as before, and so do the
+  automatic updates, which now need root
+- A restore without root gathers the files in a folder of its own under Download/ARK-Store:
+  the newest version from the store where it has one, the backup's own file otherwise. Apps
+  in several parts need root
+- Apps without an icon in the launcher are no longer seen as installed
+- Everything from 1.10.0 and 1.10.1 below
+
+## 1.10.1
+
+- Everything from 1.10.0 below, which was withdrawn after Play Protect warnings were
+  reported. Their cause is not known
+- An install the system cancels before anyone can answer, as has been seen on Xiaomi phones,
+  no longer ends in silence. A session the system merely abandoned is handed over once more
+  by itself, with no new download; otherwise the app says so and leaves trying again to you
+- An install refused by the system's check, such as Play Protect, is not tried again by
+  itself, and the app shows the reason
+
 ## 1.10.0
 
 - The search for apps on GitHub reaches much further, and takes in forks with stars of their

@@ -18,6 +18,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.time.Instant
+import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -36,10 +37,19 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.coroutineContext
+import org.jarsi.arkstore.data.CatalogRepository
+import org.jarsi.arkstore.data.CatalogRules
+import org.jarsi.arkstore.data.Http
 import org.jarsi.arkstore.data.InstalledApps
+import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.install.ApkCheck
+import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Outcome
 import org.jarsi.arkstore.install.Root
+import org.jarsi.arkstore.install.RootCheck
+import org.jarsi.arkstore.install.RootInstaller
+import org.jarsi.arkstore.install.SavedApks
 import org.jarsi.arkstore.install.localKey
 
 /** An installed app a backup may take: its entry as the device tells it, and its files there. */
@@ -95,7 +105,17 @@ sealed interface BackupState {
         /** The apps whose files went through but whose own data did not, by name. */
         val dataFailed: List<String> = emptyList(),
         /** Some data could not be put back because the password was not the one it was encrypted with. */
-        val wrongPassword: Boolean = false
+        val wrongPassword: Boolean = false,
+        /** A restore without root: the apps whose newest version was downloaded to [folder], by name. */
+        val downloaded: List<String> = emptyList(),
+        /** A restore without root: the apps whose file was copied from the backup to [folder], by name. */
+        val copied: List<String> = emptyList(),
+        /** A restore without root: the apps left out, by name, each with why. */
+        val leftOut: List<Pair<String, LeftOut>> = emptyList(),
+        /** A restore with root: the apps root found installed though the store does not see them, left alone. */
+        val alreadyInstalled: List<String> = emptyList(),
+        /** A restore without root: the folder under [ApkFolder] the files were gathered in. */
+        val folder: String? = null
     ) : BackupState
 
     data class Failed(
@@ -112,9 +132,18 @@ enum class BackupError { FOLDER_UNAVAILABLE, CANCELLED }
 data class RestoreEntry(
     val entry: BackupEntry,
     val status: RestoreStatus,
+    /** The catalogue's newest version of the app for this device, for a restore without root; see [RestorePlan.offer]. */
+    val offer: StoreApp? = null,
     /** The documents in the app's folder, by name; null when the folder is not there. */
     val files: Map<String, Doc>?
 )
+
+/**
+ * Whether a restore may take this entry: through [root], as the backup stands against the
+ * device; without it, as [RestorePlan.selectableWithoutRoot] says.
+ */
+internal fun RestoreEntry.choosable(root: Boolean): Boolean =
+    if (root) status.selectable else RestorePlan.selectableWithoutRoot(entry, status, offer)
 
 /**
  * A backup as read: its apps, and the store's settings file when it has one. [tree] is the
@@ -224,7 +253,7 @@ object BackupManager {
                 ?.let(AppBackup::entryFromText)
                 ?.takeIf { it.packageName == folder.name }
                 ?: return@mapNotNull null
-            RestoreEntry(entry, status(context, entry, files, installed), files)
+            RestoreEntry(entry, status(context, entry, files, installed), offerFor(context, entry), files)
         }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
         BackupFolder(
             tree,
@@ -262,7 +291,7 @@ object BackupManager {
         val installed = InstalledApps.snapshot(context)
         val rows = head.entries.map { entry ->
             val files = zipFiles(entry)
-            RestoreEntry(entry, status(context, entry, files, installed), files)
+            RestoreEntry(entry, status(context, entry, files, installed), offerFor(context, entry), files)
         }.sortedWith(compareBy({ it.entry.label.lowercase() }, { it.entry.packageName }))
         BackupFolder(uri, displayName(context, uri) ?: uri.lastPathSegment.orEmpty(), rows, settings, zip = true)
     }
@@ -287,8 +316,16 @@ object BackupManager {
     /** [folder] seen against what is installed now; the folder itself is not read again. */
     suspend fun refresh(context: Context, folder: BackupFolder): BackupFolder = withContext(Dispatchers.IO) {
         val installed = InstalledApps.snapshot(context)
-        folder.copy(entries = folder.entries.map { it.copy(status = status(context, it.entry, it.files, installed)) })
+        folder.copy(
+            entries = folder.entries.map {
+                it.copy(status = status(context, it.entry, it.files, installed), offer = offerFor(context, it.entry))
+            }
+        )
     }
+
+    /** The catalogue's newest version of [entry]'s app for this device, as the catalogue last stood. */
+    private fun offerFor(context: Context, entry: BackupEntry): StoreApp? =
+        RestorePlan.offer(entry, CatalogRepository.get(context).catalog.value.apps, CatalogRules.Android.THIS)
 
     private fun status(
         context: Context,
@@ -349,8 +386,10 @@ object BackupManager {
     }
 
     /**
-     * Installs [selected] from [folder], one after the other, and puts their data back when
-     * [data] says so and the backup has it; returns whether the job was begun.
+     * Installs [selected] from [folder] through root, one after the other, and puts their data
+     * back when [data] says so and the backup has it; returns whether the job was begun.
+     * Without root nothing can be installed: the files are gathered in a folder for the user
+     * to install instead, see [collect].
      */
     fun restore(
         context: Context,
@@ -362,10 +401,20 @@ object BackupManager {
         val bytes = selected.sumOf { it.entry.size + if (data.include) it.entry.dataSize else 0 }
         val told = Told(BackupEvent.Kind.RESTORE, selected.size, bytes) { folder.name }
         return start(appContext, restoring = true, zip = folder.zip, told = told) {
-            if (folder.zip) {
-                installZip(appContext, folder.tree, selected, data)
+            if (Root.enabled(appContext) && Root.check() is RootCheck.Granted) {
+                val guard = RootGuard.split(selected, RootInstaller::isInstalled)
+                val done = if (folder.zip) {
+                    installZip(appContext, folder.tree, guard.rest, data)
+                } else {
+                    install(appContext, Documents(appContext.contentResolver, folder.tree), guard.rest, data)
+                }
+                if (done is BackupState.Done) {
+                    done.copy(alreadyInstalled = guard.installed, failed = guard.unchecked + done.failed)
+                } else {
+                    done
+                }
             } else {
-                install(appContext, Documents(appContext.contentResolver, folder.tree), selected, data)
+                collect(appContext, folder, selected)
             }
         }
     }
@@ -749,7 +798,7 @@ object BackupManager {
                             val outcome = try {
                                 InstallManager.installLocalAndAwait(
                                     context, key, entry.label, entry.packageName, dir, files, INSTALL_TIMEOUT_MS
-                                ) { attempt = it }
+                                ) { attempt = it }?.outcome
                             } catch (e: CancellationException) {
                                 attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
                                 throw e
@@ -760,8 +809,8 @@ object BackupManager {
                                 return@extract
                             }
                             when (outcome) {
-                                Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
-                                Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
+                                Outcome.INSTALLED -> saved++
+                                Outcome.SAVED, Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                                 null -> if (attempt == null) failed += entry.label
                             }
                             if (run != null && entry.data.isNotEmpty()) {
@@ -1043,10 +1092,10 @@ object BackupManager {
                 }
                 val outcome = InstallManager.installLocalAndAwait(
                     context, key, entry.label, entry.packageName, dir, copied, INSTALL_TIMEOUT_MS
-                ) { attempt = it }
+                ) { attempt = it }?.outcome
                 when (outcome) {
-                    Outcome.INSTALLED, Outcome.CONFIRMATION_NEEDED -> saved++
-                    Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
+                    Outcome.INSTALLED -> saved++
+                    Outcome.SAVED, Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
                     // Nothing settled: an install of the package was already on its way, which
                     // never took these files, or the system has not answered in all this time.
                     // Either way the files are no longer ours.
@@ -1087,6 +1136,165 @@ object BackupManager {
             }
         }
         return BackupState.Done(true, saved, 0, failed, dataFailed = dataFailed, wrongPassword = wrongPassword)
+    }
+
+    /**
+     * Gathers the files of [selected] in a folder of [ApkFolder] for the user to install, as
+     * a restore without root can install nothing: the catalogue's newest version when it has one
+     * for this device, checked as an install would check it, and otherwise, or when that fails,
+     * the backup's own file when the app is in one. The data stays in the backup.
+     */
+    private suspend fun collect(context: Context, folder: BackupFolder, selected: List<RestoreEntry>): BackupState {
+        val subfolder = ApkFolder.restoreSubfolder(LocalDate.now())
+        val total = selected.sumOf { it.entry.size }
+        var done = 0L
+        val downloaded = ArrayList<String>()
+        val copied = ArrayList<String>()
+        val leftOut = ArrayList<Pair<String, LeftOut>>()
+        // Those waiting for the backup's own file, each with why it is left out should that fail too.
+        val fromBackup = LinkedHashMap<RestoreEntry, LeftOut>()
+        selected.forEachIndexed { i, row ->
+            coroutineContext.ensureActive()
+            val entry = row.entry
+            _state.value = BackupState.Running(true, i + 1, selected.size, entry.label, done, total)
+            val sources = RestorePlan.sources(entry, row.status, row.offer)
+            var reason: LeftOut? = null
+            if (RestoreSource.CATALOGUE in sources && row.offer != null) {
+                reason = fromCatalogue(context, entry, row.offer, subfolder)
+                if (reason == null) downloaded += entry.label
+            }
+            if (reason != null || RestoreSource.CATALOGUE !in sources) {
+                if (RestoreSource.BACKUP in sources) {
+                    fromBackup[row] = reason ?: LeftOut.FAILED
+                } else {
+                    leftOut += entry.label to (reason ?: RestorePlan.leftOutReason(entry, row.status, triedCatalogue = false))
+                }
+            }
+            done += entry.size
+        }
+        if (fromBackup.isNotEmpty()) {
+            val got = if (folder.zip) {
+                copyFromZip(context, folder.tree, fromBackup.keys.toList(), subfolder)
+            } else {
+                copyFromFolder(context, Documents(context.contentResolver, folder.tree), fromBackup.keys.toList(), subfolder)
+            }
+            for ((row, reason) in fromBackup) {
+                if (row.entry.packageName in got) copied += row.entry.label else leftOut += row.entry.label to reason
+            }
+        }
+        return BackupState.Done(
+            restoring = true,
+            saved = downloaded.size + copied.size,
+            skipped = 0,
+            failed = leftOut.map { it.first },
+            zip = folder.zip,
+            downloaded = downloaded,
+            copied = copied,
+            leftOut = leftOut,
+            folder = subfolder
+        )
+    }
+
+    /**
+     * Downloads [offer], the catalogue's version of [entry]'s app, checks it as an install would
+     * and against the keys of the backup and of the installed app, and saves it to [subfolder].
+     * Null when it was saved; otherwise why it was not.
+     */
+    private suspend fun fromCatalogue(context: Context, entry: BackupEntry, offer: StoreApp, subfolder: String): LeftOut? {
+        val file = File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}.apk")
+        val job = coroutineContext[Job]
+        try {
+            file.parentFile?.mkdirs()
+            try {
+                Http.download(offer.apkUrl, file) { _, _ ->
+                    // The stream is not interrupted by a cancel; this is where one is noticed.
+                    if (job?.isActive == false) throw CancellationException("cancelled")
+                }
+            } catch (e: IOException) {
+                coroutineContext.ensureActive()
+                Log.w(TAG, "Could not download ${offer.fullName} for the restore", e)
+                return LeftOut.FAILED
+            }
+            coroutineContext.ensureActive()
+            val archive = ApkCheck.checkDownload(context, offer, file)
+            if (archive == null || archive.packageName != entry.packageName) return LeftOut.FAILED
+            val backupKeys = entry.signers.toSet().ifEmpty { null }
+            if (!CatalogRules.mayUpdate(ApkCheck.signers(archive), backupKeys) || !ApkCheck.signaturesMatch(context, archive)) {
+                return LeftOut.OTHER_SIGNER
+            }
+            val versionCode = PackageInfoCompat.getLongVersionCode(archive)
+            ApkFolder.save(context, file, SavedApks.fileName(entry.label, archive.versionName, versionCode, entry.packageName), subfolder)
+            return null
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not save ${offer.fullName} for the restore", e)
+            return LeftOut.FAILED
+        } finally {
+            file.delete()
+        }
+    }
+
+    /**
+     * Saves the one file of each of [rows] from the backup's folder to [subfolder], checked to
+     * be of its size and of its package; returns the packages saved.
+     */
+    private suspend fun copyFromFolder(context: Context, docs: Documents, rows: List<RestoreEntry>, subfolder: String): Set<String> {
+        val got = HashSet<String>()
+        for (row in rows) {
+            coroutineContext.ensureActive()
+            val entry = row.entry
+            val base = entry.files.first()
+            val file = File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}.apk")
+            try {
+                file.parentFile?.mkdirs()
+                val doc = row.files?.get(base.name) ?: throw IOException("${base.name} is gone")
+                val bytes = docs.openRead(doc.id).use { input -> file.outputStream().use { output -> copy(input, output) {} } }
+                // The entry says what the file is; one of another size is another file.
+                if (bytes != base.size) throw IOException("${base.name} is $bytes bytes, not ${base.size}")
+                if (saveFromBackup(context, entry, file, subfolder)) got += entry.packageName
+            } catch (e: IOException) {
+                Log.w(TAG, "Could not copy ${entry.packageName} from the backup", e)
+            } finally {
+                file.delete()
+            }
+        }
+        return got
+    }
+
+    /** As [copyFromFolder], from the zip file [uri], taking the files out as the zip comes to them. */
+    private suspend fun copyFromZip(context: Context, uri: Uri, rows: List<RestoreEntry>, subfolder: String): Set<String> {
+        val got = HashSet<String>()
+        val dirs = ArrayList<File>()
+        val input = context.contentResolver.openInputStream(uri) ?: throw IOException("The zip file cannot be read")
+        try {
+            input.use { stream ->
+                ZipBackup.extract(
+                    BufferedInputStream(stream, BUFFER_BYTES),
+                    rows.map { it.entry.copy(data = emptyList()) },
+                    dirFor = { File(File(context.cacheDir, "apk"), "restore-${restores.incrementAndGet()}").also { dirs += it } },
+                    onApp = { entry, files, _ ->
+                        val file = files?.singleOrNull()
+                        try {
+                            if (file != null && saveFromBackup(context, entry, file, subfolder)) got += entry.packageName
+                        } catch (e: IOException) {
+                            Log.w(TAG, "Could not copy ${entry.packageName} from the zip", e)
+                        }
+                    }
+                )
+            }
+        } finally {
+            dirs.forEach { it.deleteRecursively() }
+        }
+        return got
+    }
+
+    /** Saves [file], the backup's own of [entry], to [subfolder] when it is an app of the entry's package; returns whether it was. */
+    private suspend fun saveFromBackup(context: Context, entry: BackupEntry, file: File, subfolder: String): Boolean {
+        if (ApkCheck.readArchive(context, file)?.packageName != entry.packageName) {
+            Log.w(TAG, "The backup's file of ${entry.packageName} is not that app")
+            return false
+        }
+        ApkFolder.save(context, file, SavedApks.fileName(entry.label, entry.versionName, entry.versionCode, entry.packageName), subfolder)
+        return true
     }
 
     /**

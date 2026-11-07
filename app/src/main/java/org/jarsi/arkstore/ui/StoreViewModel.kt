@@ -33,9 +33,12 @@ import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
+import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.RootCheck
+import org.jarsi.arkstore.install.SavedApk
+import org.jarsi.arkstore.install.SavedApks
 import org.jarsi.arkstore.work.AutoUpdate
 
 data class AppRow(
@@ -73,7 +76,37 @@ enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 
 enum class TransferError { NOT_A_BACKUP, FAILED }
 
+/**
+ * The file saved for this row's app for the user to install, when the row shows it: an update or
+ * a new install, downloaded for this very row's repository, whose file is newer than what is
+ * installed, see [SavedApks.shownFor]. Another build of the package has a row of its own.
+ */
+fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
+    if (status != AppStatus.UPDATE_AVAILABLE && status != AppStatus.NOT_INSTALLED) {
+        null
+    } else {
+        SavedApks.shownFor(
+            saved[app.fullName]?.takeIf { it.packageName == app.packageName },
+            installed?.versionCode,
+            app.versionCode
+        )
+    }
+
+/**
+ * The [updates] that Update all or Download all takes: through root, every one; otherwise those
+ * whose file is not saved for the user already, see [AppRow.downloaded].
+ */
+fun toDownload(updates: List<AppRow>, saved: Map<String, SavedApk>, direct: Boolean): List<AppRow> =
+    if (direct) updates else updates.filter { it.downloaded(saved) == null }
+
+/**
+ * Whether the store installs apps itself, through root, rather than saving their files for the
+ * user: root is on and given, and was not [lost] at the last install.
+ */
+internal fun installsDirectly(root: RootUiState, lost: Boolean = false): Boolean = root is RootUiState.On && !lost
+
 /** How root stands in the settings: off, being asked for, on, or refused one way or another. */
+
 sealed interface RootUiState {
     data object Off : RootUiState
     data object Checking : RootUiState
@@ -443,8 +476,14 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun cancelInstall(fullName: String) = InstallManager.cancel(fullName)
 
-    /** Asks again for the install of [fullName] that waits for the user's go-ahead. */
-    fun resumeInstall(fullName: String) = InstallManager.resumeConfirmation(fullName)
+    /** The files saved for the user to install, by repository; see [InstallManager.saved]. */
+    val saved: StateFlow<Map<String, SavedApk>> = InstallManager.saved
+
+    /** Root is on but could not be had at the last install; see [InstallManager.rootLost]. */
+    val rootLost: StateFlow<Boolean> = InstallManager.rootLost
+
+    /** Opens the folder the files are saved to, in the Files app. */
+    fun openFolder() = ApkFolder.open(getApplication())
 
     /** Does not offer [app]'s version again; the next one is offered. */
     fun skipVersion(app: StoreApp) = setPolicy(policy.value.skip(app))
@@ -475,6 +514,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         val context = getApplication<Application>()
         if (!on) {
             Root.setEnabled(context, false)
+            InstallManager.setRootLost(context, false)
             _root.value = RootUiState.Off
             return
         }
@@ -483,7 +523,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             _root.value = when (val check = Root.check()) {
                 is RootCheck.Granted -> {
                     Root.setEnabled(context, true)
-                    Root.markLost(context, false)
+                    InstallManager.setRootLost(context, false)
                     RootUiState.On(check.provider)
                 }
                 RootCheck.Denied -> RootUiState.Denied
@@ -505,6 +545,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             if (Root.enabled(context)) {
                 val check = Root.check()
                 if (!Root.enabled(context)) return@launch
+                // Given again: the rows go back to installing through it.
+                if (check is RootCheck.Granted) InstallManager.setRootLost(context, false)
                 _root.value = when (check) {
                     is RootCheck.Granted -> RootUiState.On(check.provider)
                     RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused
@@ -524,6 +566,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onResume() {
         InstallManager.notifyInstalledChanged()
+        // A saved file may have been installed, or removed, in the Files app meanwhile.
+        viewModelScope.launch(Dispatchers.IO) { InstallManager.loadSaved(getApplication()) }
         val now = System.currentTimeMillis()
         if (now - lastResumeRefresh > RESUME_REFRESH_MS) {
             lastResumeRefresh = now

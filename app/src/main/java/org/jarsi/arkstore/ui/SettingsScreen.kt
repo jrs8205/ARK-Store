@@ -1,7 +1,6 @@
 package org.jarsi.arkstore.ui
 
 import android.content.Intent
-import android.os.Build
 import android.provider.Settings
 import android.text.format.DateUtils
 import android.text.format.Formatter
@@ -380,15 +379,16 @@ private fun GitHubSettings(viewModel: StoreViewModel) {
 }
 
 /**
- * Whether the background check installs updates unasked, and when; see [AutoUpdate]. Before
- * Android 12 the switch stays off and says why.
+ * Whether the background check installs updates unasked, and when; see [AutoUpdate]. Without
+ * root the switch stays off and says why: the store installs nothing itself without it.
  */
 @Composable
 private fun AutoUpdateSettings(viewModel: StoreViewModel) {
     val context = LocalContext.current
     val imports by viewModel.imports.collectAsStateWithLifecycle()
     var settings by remember(imports) { mutableStateOf(AutoUpdate.read(context)) }
-    val supported = Build.VERSION.SDK_INT >= AutoUpdate.SUPPORTED_SDK
+    val root by viewModel.root.collectAsStateWithLifecycle()
+    val supported = installsDirectly(root)
     fun change(changed: AutoUpdate) {
         settings = changed
         AutoUpdate.write(context, changed)
@@ -397,7 +397,7 @@ private fun AutoUpdateSettings(viewModel: StoreViewModel) {
         heading = stringResource(R.string.auto_update_title),
         label = stringResource(R.string.auto_update_switch),
         description = stringResource(
-            if (supported) R.string.auto_update_description else R.string.auto_update_unsupported
+            if (supported) R.string.auto_update_description else R.string.auto_update_needs_root
         ),
         checked = settings.enabled && supported,
         enabled = supported,

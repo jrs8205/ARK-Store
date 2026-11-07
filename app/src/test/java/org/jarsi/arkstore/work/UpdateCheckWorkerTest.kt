@@ -1,11 +1,19 @@
 package org.jarsi.arkstore.work
 
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.SharedPreferences
 import java.io.IOException
+import kotlinx.coroutines.runBlocking
+import org.jarsi.arkstore.FakePreferences
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.data.testApp
+import org.jarsi.arkstore.install.FailReason
+import org.jarsi.arkstore.install.InstallManager
+import org.jarsi.arkstore.install.Root
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -93,5 +101,98 @@ class UpdateCheckWorkerTest {
         assertEquals(listOf(fixed, other), toTry(listOf(fixed, other), failed))
         // What is no longer offered is forgotten, so that the set does not grow for ever.
         assertEquals(setOf(announcement(broken)), stillFailed(failed, listOf(broken, other)))
+    }
+
+    @Test
+    fun rootIsAskedOnlyWhenAnUpdateMayBeInstalledUnasked() {
+        val app = testApp(fullName = "alice/app", versionCode = 2)
+        assertFalse(asksRoot(enabled = false, toTry = listOf(app)))
+        assertFalse(asksRoot(enabled = true, toTry = emptyList()))
+        assertTrue(asksRoot(enabled = true, toTry = listOf(app)))
+    }
+
+    @Test
+    fun turningRootOffStopsTheUnaskedInstallsOfARun() {
+        val settings = AutoUpdate(enabled = true, unmeteredOnly = false, chargingOnly = false)
+        assertTrue(unaskedAllowed(settings, rootGiven = true, rootOn = true, rootRefused = false, unmetered = true, charging = false))
+        assertFalse(unaskedAllowed(settings, rootGiven = true, rootOn = false, rootRefused = false, unmetered = true, charging = false))
+        assertFalse(unaskedAllowed(settings, rootGiven = false, rootOn = true, rootRefused = false, unmetered = true, charging = false))
+    }
+
+    @Test
+    fun aRefusalOfRootStopsTheRunEvenWhenItsOutcomeWasNotWaitedFor() {
+        // The refusal is written down before the attempt's outcome is told, so a run whose wait
+        // ran out at that very moment, and so never had the outcome, stops all the same.
+        val settings = AutoUpdate(enabled = true, unmeteredOnly = false, chargingOnly = false)
+        assertFalse(unaskedAllowed(settings, rootGiven = true, rootOn = true, rootRefused = true, unmetered = true, charging = false))
+    }
+
+    /** A context of preferences alone, which is all that root's setting asks of it. */
+    private class PrefsContext : ContextWrapper(null) {
+        val prefs = HashMap<String, FakePreferences>()
+        override fun getApplicationContext(): Context = this
+        override fun getPackageName(): String = "org.jarsi.arkstore"
+        override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
+            prefs.getOrPut(name!!) { FakePreferences() }
+    }
+
+    @Test
+    fun aRefusalNotedWhileARunAsksForRootIsKeptAndStopsTheRun() = runBlocking {
+        val context = PrefsContext()
+        Root.setEnabled(context, true)
+        val before = InstallManager.rootRefusals
+        // The user's own install is refused root while the run's question is on its way.
+        Root.transport = { _, _, _, _ ->
+            InstallManager.setRootLost(context, true)
+            Root.Outcome.Ran(0, "uid=0(root) gid=0(root)", "")
+        }
+        try {
+            assertTrue(rootReady(context))
+            assertTrue(Root.lost(context))
+            assertTrue(InstallManager.rootLost.value)
+            assertTrue(InstallManager.rootRefusedSince(before))
+        } finally {
+            Root.transport = null
+            InstallManager.setRootLost(context, false)
+        }
+    }
+
+    @Test
+    fun aRefusalFromBeforeTheRunDoesNotStopIt() {
+        val context = PrefsContext()
+        InstallManager.setRootLost(context, true)
+        try {
+            val before = InstallManager.rootRefusals
+            assertFalse(InstallManager.rootRefusedSince(before))
+            // Root given again says nothing new of a refusal.
+            InstallManager.setRootLost(context, false)
+            assertFalse(InstallManager.rootRefusedSince(before))
+            InstallManager.setRootLost(context, true)
+            assertTrue(InstallManager.rootRefusedSince(before))
+        } finally {
+            InstallManager.setRootLost(context, false)
+        }
+    }
+
+    @Test
+    fun rootRefusedWhenARunAsksKeepsTheRefusal() = runBlocking {
+        val context = PrefsContext()
+        Root.setEnabled(context, true)
+        InstallManager.setRootLost(context, true)
+        Root.transport = { _, _, _, _ -> Root.Outcome.Ran(1, "", "Permission denied") }
+        try {
+            assertFalse(rootReady(context))
+            assertTrue(Root.lost(context))
+        } finally {
+            Root.transport = null
+            InstallManager.setRootLost(context, false)
+        }
+    }
+
+    @Test
+    fun anInstallThatHadNoRootIsTriedAgain() {
+        assertFalse(failureLasts(FailReason.NO_ROOT))
+        assertTrue(failureLasts(FailReason.INVALID_APK))
+        assertTrue(failureLasts(null))
     }
 }
