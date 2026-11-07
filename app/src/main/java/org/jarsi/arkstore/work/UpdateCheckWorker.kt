@@ -34,7 +34,6 @@ import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
-import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.Outcome
 import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.RootCheck
@@ -213,7 +212,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             // installAndAwait finds on its way and leaves alone, is not.
             var attempt: Int? = null
             fun giveUp() = attempt?.let { InstallManager.cancel(app.fullName, it) }
-            val outcome = try {
+            val done = try {
                 watching(::stillWanted, CONDITIONS_INTERVAL_MS, { giveUp() }) {
                     InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS)) { attempt = it }
                 }
@@ -221,12 +220,13 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                 giveUp()
                 throw e
             }
-            when (outcome) {
+            when (done?.outcome) {
                 Outcome.INSTALLED, Outcome.SAVED -> settled += app.fullName
                 Outcome.FAILED -> {
-                    val reason = (InstallManager.states.value[app.fullName] as? InstallState.Failed)?.reason
                     InstallManager.dismissFailure(app.fullName)
-                    if (!failureLasts(reason)) break
+                    // Why it failed comes with the attempt's outcome: the state shown may have
+                    // been dismissed, or taken by a new attempt, by now.
+                    if (!failureLasts(done.reason)) break
                     failed += announcement(app)
                 }
                 Outcome.CANCELLED -> break

@@ -100,8 +100,12 @@ internal fun installOrder(apps: List<StoreApp>, self: String): List<StoreApp> =
 internal fun othersSettled(states: Map<String, InstallState>, repo: String): Boolean =
     states.none { (name, state) -> name != repo && state.isOnItsWay() }
 
-/** The outcome of one [attempt] of [repo], as it is settled, for whoever waits for that attempt. */
-internal data class Settled(val repo: String, val attempt: Int, val outcome: Outcome) {
+/**
+ * The outcome of one [attempt] of [repo], as it is settled, for whoever waits for that attempt;
+ * a failed one with its [reason], which the state shown for the repository may no longer hold
+ * by the time the waiter reads it.
+ */
+internal data class Settled(val repo: String, val attempt: Int, val outcome: Outcome, val reason: FailReason? = null) {
     fun isOf(repo: String, attempt: Int): Boolean = this.repo == repo && this.attempt == attempt
 }
 
@@ -338,12 +342,12 @@ object InstallManager {
      * may then cancel that attempt and no other, as one already on its way, which this call
      * does not begin, is somebody else's.
      */
-    suspend fun installAndAwait(
+    internal suspend fun installAndAwait(
         context: Context,
         app: StoreApp,
         timeoutMillis: Long,
         onBegun: (attempt: Int) -> Unit = {}
-    ): Outcome? = await(app.fullName, timeoutMillis, onBegun) { begun ->
+    ): Settled? = await(app.fullName, timeoutMillis, onBegun) { begun ->
         begin(context, app, foreground = false, saveWithoutRoot = false, onBegun = begun)
     }
 
@@ -355,7 +359,7 @@ object InstallManager {
      * [key] is already on its way, they are deleted before this returns. The store itself is
      * not installed this way, so nothing waits for other installs here.
      */
-    suspend fun installLocalAndAwait(
+    internal suspend fun installLocalAndAwait(
         context: Context,
         key: String,
         label: String,
@@ -364,7 +368,7 @@ object InstallManager {
         files: List<File>,
         timeoutMillis: Long,
         onBegun: (attempt: Int) -> Unit = {}
-    ): Outcome? {
+    ): Settled? {
         labels[key] = label
         var begun = false
         val outcome = await(key, timeoutMillis, { attempt ->
@@ -390,14 +394,14 @@ object InstallManager {
         timeoutMillis: Long,
         onBegun: (attempt: Int) -> Unit,
         begin: (onBegun: (attempt: Int) -> Unit) -> InstallJob?
-    ): Outcome? = coroutineScope {
+    ): Settled? = coroutineScope {
         if (isBusy(key)) return@coroutineScope null
         // Listening before starting, so that an outcome settled at once is not missed; the
         // attempt's number, known before anything of it can be settled, tells its outcome
         // from a late one of an earlier attempt.
         val attempt = AtomicInteger(0)
         val outcome = async(start = CoroutineStart.UNDISPATCHED) {
-            outcomes.first { it.isOf(key, attempt.get()) }.outcome
+            outcomes.first { it.isOf(key, attempt.get()) }
         }
         val begun = begin {
             attempt.set(it)
@@ -739,7 +743,7 @@ object InstallManager {
     private fun fail(install: InstallJob, repo: String, state: InstallState.Failed) {
         if (!install.end()) return
         setState(repo, state)
-        outcomes.tryEmit(Settled(repo, install.id, Outcome.FAILED))
+        outcomes.tryEmit(Settled(repo, install.id, Outcome.FAILED, state.reason))
     }
 
     /**

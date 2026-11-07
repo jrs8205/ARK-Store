@@ -108,6 +108,18 @@ class InstallManagerTest {
     }
 
     @Test
+    fun aFailedAttemptsOutcomeTellsWhyWhateverTheScreenShowsBy() = runBlocking {
+        val key = localKey("org.example.nofile")
+        val dir = java.nio.file.Files.createTempDirectory("local").toFile()
+        val settled = InstallManager.installLocalAndAwait(context, key, "No file", "org.example.nofile", dir, emptyList(), 10_000)
+        // The failure shown is dismissed, as the user may do before the waiter reads it.
+        InstallManager.dismissFailure(key)
+        assertEquals(Outcome.FAILED, settled?.outcome)
+        assertEquals(FailReason.INVALID_APK, settled?.reason)
+        assertTrue(key !in InstallManager.states.value)
+    }
+
+    @Test
     fun theStoresOwnUpdateAsksRootAgainAfterItsWait() = runBlocking {
         // Turned off while the others were being installed: the file is saved instead.
         var on = true

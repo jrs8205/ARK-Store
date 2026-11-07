@@ -798,7 +798,7 @@ object BackupManager {
                             val outcome = try {
                                 InstallManager.installLocalAndAwait(
                                     context, key, entry.label, entry.packageName, dir, files, INSTALL_TIMEOUT_MS
-                                ) { attempt = it }
+                                ) { attempt = it }?.outcome
                             } catch (e: CancellationException) {
                                 attempt?.let { InstallManager.cancel(key, it) } ?: dir.deleteRecursively()
                                 throw e
@@ -1092,7 +1092,7 @@ object BackupManager {
                 }
                 val outcome = InstallManager.installLocalAndAwait(
                     context, key, entry.label, entry.packageName, dir, copied, INSTALL_TIMEOUT_MS
-                ) { attempt = it }
+                ) { attempt = it }?.outcome
                 when (outcome) {
                     Outcome.INSTALLED -> saved++
                     Outcome.SAVED, Outcome.FAILED, Outcome.CANCELLED -> failed += entry.label
