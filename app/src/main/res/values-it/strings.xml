@@ -322,7 +322,6 @@
     <string name="restore_fail_invalid">Il file nella cartella non è un pacchetto app valido.</string>
     <string name="backup_index_not_written">Non è stato possibile scrivere l\'indice della cartella e il file delle impostazioni dello store. Le app copiate possono comunque essere ripristinate dalle rispettive cartelle.</string>
     <string name="backup_ways">Una cartella resta aggiornata: il backup successivo copia solo ciò che è cambiato e un\'app rimossa dal dispositivo vi resta finché non la elimini da lì. Un file ZIP è un unico file per passare a un altro telefono o a un servizio cloud come Google Drive, e viene riscritto per intero ogni volta.</string>
-    <string name="action_save_zip">Salva in un file ZIP</string>
     <string name="action_to_zip">In un file ZIP</string>
     <string name="backup_ways_question">Cartella o ZIP?</string>
     <string name="action_choose_zip">Scegli file ZIP</string>

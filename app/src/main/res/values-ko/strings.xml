@@ -304,7 +304,6 @@
     <string name="restore_fail_invalid">폴더의 파일이 올바른 앱 패키지가 아닙니다.</string>
     <string name="backup_index_not_written">폴더의 색인과 스토어 설정 파일을 쓸 수 없었습니다. 복사된 앱은 여전히 각 앱의 폴더에서 복원할 수 있습니다.</string>
     <string name="backup_ways">폴더는 최신 상태로 유지됩니다. 다음 백업 때는 변경된 항목만 복사되며, 기기에서 제거한 앱은 폴더에서 직접 삭제할 때까지 폴더에 남아 있습니다. ZIP 파일은 다른 휴대전화나 Google Drive 같은 클라우드 서비스로 옮기기 위한 하나의 파일이며, 매번 전체가 새로 기록됩니다.</string>
-    <string name="action_save_zip">ZIP 파일에 저장</string>
     <string name="action_to_zip">ZIP 파일로</string>
     <string name="backup_ways_question">폴더 또는 ZIP?</string>
     <string name="action_choose_zip">ZIP 파일 선택</string>

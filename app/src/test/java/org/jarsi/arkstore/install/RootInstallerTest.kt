@@ -38,9 +38,7 @@ class RootInstallerTest {
         answering { command ->
             Root.Outcome.Ran(0, if (command.startsWith("pm install-create")) "Success: created install session [1500000000]\n" else "Success\n", "")
         }
-        var session: Int? = null
-        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk())) { session = it }
-        assertEquals(1500000000, session)
+        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk()))
         assertEquals(RootInstaller.Result.Done(PackageInstaller.STATUS_SUCCESS, null), result)
         assertEquals(
             listOf(
@@ -56,9 +54,7 @@ class RootInstallerTest {
     fun aSuccessWithoutASessionIsNoInstall() = runBlocking {
         // Whatever pm says, nothing can be written to a session that is not known.
         answering { Root.Outcome.Ran(0, "Success\n", "") }
-        var session: Int? = null
-        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk())) { session = it }
-        assertNull(session)
+        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk()))
         assertEquals(1, commands.size)
         assertTrue(commands.single().startsWith("pm install-create"))
         assertEquals(PackageInstaller.STATUS_FAILURE, (result as RootInstaller.Result.Done).status)
@@ -67,7 +63,7 @@ class RootInstallerTest {
     @Test
     fun aSessionRefusedIsToldAsTheSystemWould() = runBlocking {
         answering { Root.Outcome.Ran(1, "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE: not enough]\n", "") }
-        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk())) { }
+        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk()))
         assertEquals(RootInstaller.Result.Done(PackageInstaller.STATUS_FAILURE_STORAGE, "INSTALL_FAILED_INSUFFICIENT_STORAGE: not enough"), result)
         assertEquals(1, commands.size)
     }
@@ -81,7 +77,7 @@ class RootInstallerTest {
                 else -> Root.Outcome.Ran(0, "Success\n", "")
             }
         }
-        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk())) { }
+        val result = RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk()))
         assertEquals(RootInstaller.Result.Done(PackageInstaller.STATUS_FAILURE_INVALID, "INSTALL_FAILED_INVALID_APK"), result)
         assertEquals("pm install-abandon 42", commands.last())
     }

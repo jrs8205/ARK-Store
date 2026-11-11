@@ -10,7 +10,6 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
-import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -134,17 +133,9 @@ class BackupService : Service() {
         return Progress(title, percent)
     }
 
+    /** Shown the way a download's progress is, on the same channel. */
     private fun notification(progress: Progress): Notification =
-        NotificationCompat.Builder(this, InstallService.CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_ark)
-            .setContentTitle(progress.title)
-            .setProgress(100, progress.percent ?: 0, progress.percent == null)
-            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setContentIntent(open)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+        InstallService.progressNotification(this, InstallService.Progress(progress.title, progress.percent), open)
 
     companion object {
         private const val TAG = "BackupService"

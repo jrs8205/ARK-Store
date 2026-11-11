@@ -858,7 +858,7 @@ private fun PasswordField(
 
 @Composable
 private fun installerName(installer: String?): String =
-    Installers.knownName(installer)
+    Installers.knownName(installer, LocalContext.current.packageName)
         ?: if (Installers.byHand(installer)) stringResource(R.string.backup_installer_by_hand) else installer.orEmpty()
 
 @Composable

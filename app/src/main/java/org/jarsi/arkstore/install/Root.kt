@@ -26,10 +26,10 @@ sealed interface RootCheck {
 
 /**
  * Runs commands as root through the device's `su`, the one Magisk, KernelSU or APatch
- * provides, when the user has turned root on in the settings. Nothing here reaches `su`
- * unless the setting is on, and every command is put together from constants, numbers and
- * names that have passed their checks: no path and no name of a file read from a backup
- * ever reaches a command line as it is.
+ * provides, for the callers that have seen root turned on in the settings: [run] itself does
+ * not look at the setting, so whoever calls it has, at the time. Every command is put
+ * together from constants, numbers and names that have passed their checks: no path and no
+ * name of a file read from a backup ever reaches a command line as it is.
  */
 object Root {
     private const val TAG = "Root"
@@ -80,7 +80,7 @@ object Root {
         if (!on) remove(PREF_LOST)
     }
 
-    /** Whether the last install that asked for root did not get it, and went the ordinary way. */
+    /** Whether the last install that asked for root did not get it: its file was saved for the user instead. */
     fun lost(context: Context): Boolean = prefs(context).getBoolean(PREF_LOST, false)
 
     fun markLost(context: Context, lost: Boolean) = prefs(context).edit { putBoolean(PREF_LOST, lost) }

@@ -165,6 +165,11 @@ class RestoreRulesTest {
         assertEquals("Google Play", Installers.knownName(Installers.PLAY))
         assertEquals("F-Droid", Installers.knownName("org.fdroid.fdroid"))
         assertEquals("F-Droid", Installers.knownName("org.fdroid.basic"))
+        assertEquals("F-Droid", Installers.knownName("org.fdroid.fdroid.privileged"))
+        // The store goes by its name under whatever package this build of it has.
+        assertEquals("ARK-Store", Installers.knownName("org.jarsi.arkstore.debug", self = "org.jarsi.arkstore.debug"))
+        assertNull(Installers.knownName("org.jarsi.arkstore.debug"))
+        assertNull(Installers.knownName(null, self = "org.jarsi.arkstore"))
         assertEquals("ARK-Store", Installers.knownName("org.jarsi.arkstore"))
         assertEquals("Aurora Store", Installers.knownName("com.aurora.store"))
         assertEquals("Obtainium", Installers.knownName("dev.imranr.obtainium"))

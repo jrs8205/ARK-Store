@@ -313,7 +313,6 @@
     <string name="restore_fail_invalid">Kansion tiedosto ei ole kelvollinen sovelluspaketti.</string>
     <string name="backup_index_not_written">Kansion luetteloa ja kaupan asetustiedostoa ei voitu kirjoittaa. Kopioidut sovellukset voi silti palauttaa niiden kansioista.</string>
     <string name="backup_ways">Kansio pysyy ajan tasalla: seuraava varmuuskopio kopioi vain muuttuneet sovellukset, ja puhelimesta poistettu sovellus säilyy kansiossa, kunnes poistat sen sieltä. Zip on yksi tiedosto, jonka voi siirtää toiseen puhelimeen tai pilvipalveluun, kuten Google Driveen; se kirjoitetaan joka kerta kokonaan uudelleen.</string>
-    <string name="action_save_zip">Tallenna zip-tiedostoon</string>
     <string name="action_to_zip">Zip-tiedostoon</string>
     <string name="backup_ways_question">Kansio vai zip?</string>
     <string name="action_choose_zip">Valitse zip-tiedosto</string>

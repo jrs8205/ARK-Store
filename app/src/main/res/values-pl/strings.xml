@@ -331,7 +331,6 @@
     <string name="restore_fail_invalid">Plik w folderze nie jest prawidłowym pakietem aplikacji.</string>
     <string name="backup_index_not_written">Nie udało się zapisać indeksu folderu ani pliku ustawień sklepu. Skopiowane aplikacje nadal można przywrócić z ich folderów.</string>
     <string name="backup_ways">Folder pozostaje aktualny: kolejna kopia zapasowa obejmuje tylko to, co się zmieniło, a aplikacja usunięta z urządzenia zostaje w nim, dopóki jej stamtąd nie usuniesz. Plik ZIP to jeden plik do przeniesienia na inny telefon lub do usługi w chmurze, takiej jak Google Drive, za każdym razem zapisywany od nowa w całości.</string>
-    <string name="action_save_zip">Zapisz w pliku ZIP</string>
     <string name="action_to_zip">W pliku ZIP</string>
     <string name="backup_ways_question">Folder czy ZIP?</string>
     <string name="action_choose_zip">Wybierz plik ZIP</string>

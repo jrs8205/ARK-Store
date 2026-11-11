@@ -68,7 +68,7 @@ internal fun newToAnnounce(waiting: Set<String>, announced: Set<String>): Boolea
 
 /**
  * The [updates] left to tell the user of once those [settled] unasked, by their full names,
- * are taken out: installed, or waiting for the user behind a notification of their own.
+ * are taken out: they are installed already.
  */
 internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<StoreApp> =
     updates.filter { it.fullName !in settled }

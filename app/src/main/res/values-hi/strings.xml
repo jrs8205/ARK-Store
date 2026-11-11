@@ -313,7 +313,6 @@
     <string name="restore_fail_invalid">फ़ोल्डर में मौजूद फ़ाइल कोई मान्य ऐप पैकेज नहीं है।</string>
     <string name="backup_index_not_written">फ़ोल्डर का इंडेक्स और स्टोर की सेटिंग फ़ाइल नहीं लिखे जा सके। कॉपी किए गए ऐप अब भी अपने-अपने फ़ोल्डर से रीस्टोर किए जा सकते हैं।</string>
     <string name="backup_ways">फ़ोल्डर अप-टू-डेट रहता है: अगले बैकअप में सिर्फ़ वही कॉपी होता है जो बदला है, और डिवाइस से हटाया गया ऐप उसमें तब तक रहता है, जब तक आप उसे वहां से मिटा नहीं देते। ZIP फ़ाइल एक ही फ़ाइल होती है, जिसे दूसरे फ़ोन पर या Google Drive जैसी क्लाउड सेवा में ले जाया जा सकता है; इसे हर बार पूरा नए सिरे से लिखा जाता है।</string>
-    <string name="action_save_zip">ZIP फ़ाइल में सेव करें</string>
     <string name="action_to_zip">ZIP फ़ाइल में</string>
     <string name="backup_ways_question">फ़ोल्डर या ZIP?</string>
     <string name="action_choose_zip">ZIP फ़ाइल चुनें</string>

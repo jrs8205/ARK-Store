@@ -331,7 +331,6 @@
     <string name="restore_fail_invalid">Файл у папці не є дійсним пакетом додатка.</string>
     <string name="backup_index_not_written">Не вдалося записати індекс у папці й файл налаштувань магазину. Скопійовані додатки все одно можна відновити з їхніх папок.</string>
     <string name="backup_ways">Папка залишається актуальною: наступне резервне копіювання копіює лише те, що змінилося, а додаток, видалений із пристрою, залишається в ній, доки ви не видалите його звідти. ZIP-файл — це один файл для перенесення на інший телефон або в хмарний сервіс, як-от Google Drive; щоразу він записується повністю заново.</string>
-    <string name="action_save_zip">Зберегти в ZIP-файл</string>
     <string name="action_to_zip">У ZIP-файл</string>
     <string name="backup_ways_question">Папка чи ZIP?</string>
     <string name="action_choose_zip">Вибрати ZIP-файл</string>

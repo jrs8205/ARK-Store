@@ -139,7 +139,7 @@ sealed interface RootUiState {
     data object Checking : RootUiState
     /** Root is on; [provider] names the root app when it was asked this time. */
     data class On(val provider: String?) : RootUiState
-    /** Root is on, but the root app refused it just now: installs go the ordinary way. */
+    /** Root is on, but the root app refused it just now: an install asks again, and saves its file when refused again. */
     data object OnButRefused : RootUiState
     /** The root app refused, so root was not turned on. */
     data object Denied : RootUiState

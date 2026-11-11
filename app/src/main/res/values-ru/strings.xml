@@ -331,7 +331,6 @@
     <string name="restore_fail_invalid">Файл в папке не является корректным пакетом приложения.</string>
     <string name="backup_index_not_written">Не удалось записать индекс в папке и файл настроек магазина. Скопированные приложения всё равно можно восстановить из их папок.</string>
     <string name="backup_ways">Папка всегда актуальна: при следующем резервном копировании копируется только то, что изменилось, а приложение, удалённое с устройства, остаётся в ней, пока вы не удалите его оттуда. ZIP-файл — это один файл для переноса на другой телефон или в облачный сервис, например Google Drive; каждый раз он записывается заново целиком.</string>
-    <string name="action_save_zip">Сохранить в ZIP-файл</string>
     <string name="action_to_zip">В ZIP-файл</string>
     <string name="backup_ways_question">Папка или ZIP?</string>
     <string name="action_choose_zip">Выбрать ZIP-файл</string>

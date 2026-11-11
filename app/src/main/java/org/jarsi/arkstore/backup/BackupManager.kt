@@ -458,7 +458,8 @@ object BackupManager {
         /**
          * [input], an archive as written by [wrap], unpacked and, when [encrypted], decrypted:
          * the plain data, and the text an encrypted archive is bound to (null for one in the
-         * clear). The text is checked before anything is read, and vouched for by the first chunk.
+         * clear). The text is checked by the caller before any of the data is used; opening the
+         * first chunk, which vouches for it, is all that is read before that.
          */
         fun unwrap(input: InputStream, encrypted: Boolean): Pair<InputStream, String?> {
             if (!encrypted) return GZIPInputStream(input, BUFFER_BYTES) to null

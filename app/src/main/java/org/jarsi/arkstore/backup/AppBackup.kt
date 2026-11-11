@@ -301,7 +301,8 @@ object Installers {
         PLAY to "Google Play",
         "org.fdroid.fdroid" to "F-Droid",
         "org.fdroid.basic" to "F-Droid",
-        "org.jarsi.arkstore" to "ARK-Store",
+        "org.fdroid.fdroid.privileged" to "F-Droid",
+        STORE to "ARK-Store",
         "com.aurora.store" to "Aurora Store",
         "dev.imranr.obtainium" to "Obtainium",
         "com.looker.droidify" to "Droid-ify",
@@ -314,9 +315,16 @@ object Installers {
 
     /**
      * The name a known [installer] goes by, or null for one not known, or for the system's own
-     * installer, which is the user installing a file by hand.
+     * installer, which is the user installing a file by hand. [self] is the package of the
+     * store as it runs here, which is the store under whatever name this build of it has.
      */
-    fun knownName(installer: String?): String? = installer?.let(NAMES::get)
+    fun knownName(installer: String?, self: String? = null): String? = when (installer) {
+        null -> null
+        self -> NAMES[STORE]
+        else -> NAMES[installer]
+    }
+
+    private const val STORE = "org.jarsi.arkstore"
 
     /**
      * Whether [installer] stands for the user installing a file by hand: no installer at all,

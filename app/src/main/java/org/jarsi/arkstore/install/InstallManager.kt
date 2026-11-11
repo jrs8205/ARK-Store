@@ -189,8 +189,9 @@ object InstallManager {
 
     private val _saved = MutableStateFlow<Map<String, SavedApk>>(emptyMap())
     /**
-     * The files saved to the folder for the user to install, by repository, whose version is not
-     * installed yet and whose file is still there; see [loadSaved].
+     * The files saved to the folder for the user to install, by repository, whose file is
+     * still there; see [loadSaved]. Whether a row shows one, as the installed version stands,
+     * is for [SavedApks.shownFor] to say.
      */
     val saved: StateFlow<Map<String, SavedApk>> = _saved.asStateFlow()
 
@@ -648,7 +649,7 @@ object InstallManager {
             return null
         }
         setRootLost(context, false)
-        return when (val result = RootInstaller.install(context.packageName, packageName, files) {}) {
+        return when (val result = RootInstaller.install(context.packageName, packageName, files)) {
             RootInstaller.Result.NoRoot -> {
                 Log.w(TAG, "Root was lost during the install of $key")
                 setRootLost(context, true)

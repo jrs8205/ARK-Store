@@ -40,7 +40,8 @@ object ApkPicker {
     /**
      * Returns the index of the best file in [fileNames] for a device supporting [deviceAbis]
      * (most preferred first), or null when every file is built for another architecture.
-     * The device's preferred architecture wins, then a universal file; debug builds lose ties.
+     * The device's preferred architecture wins, then a universal file; a debug build is taken
+     * only when there is nothing else.
      */
     fun pick(fileNames: List<String>, deviceAbis: List<String>): Int? =
         fileNames.withIndex().mapNotNull { (index, name) ->

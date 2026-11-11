@@ -322,7 +322,6 @@
     <string name="restore_fail_invalid">Le fichier du dossier n\'est pas un package d\'application valide.</string>
     <string name="backup_index_not_written">L\'index du dossier et le fichier de paramètres de la boutique n\'ont pas pu être écrits. Les applications copiées peuvent tout de même être restaurées à partir de leurs dossiers.</string>
     <string name="backup_ways">Un dossier reste à jour : la sauvegarde suivante ne copie que ce qui a changé, et une application retirée de l\'appareil y reste tant que vous ne l\'en supprimez pas. Un fichier ZIP est un fichier unique pour passer sur un autre téléphone ou vers un service cloud comme Google Drive ; il est entièrement réécrit à chaque fois.</string>
-    <string name="action_save_zip">Enregistrer dans un fichier ZIP</string>
     <string name="action_to_zip">Dans un fichier ZIP</string>
     <string name="backup_ways_question">Dossier ou ZIP ?</string>
     <string name="action_choose_zip">Choisir un fichier ZIP</string>

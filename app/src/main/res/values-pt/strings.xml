@@ -322,7 +322,6 @@
     <string name="restore_fail_invalid">O arquivo na pasta não é um pacote de app válido.</string>
     <string name="backup_index_not_written">Não foi possível gravar o índice da pasta e o arquivo de configurações da loja. Os apps copiados ainda podem ser restaurados a partir das respectivas pastas.</string>
     <string name="backup_ways">Uma pasta fica em dia: o próximo backup copia só o que mudou, e um app removido do dispositivo continua nela até você apagá-lo de lá. Um arquivo ZIP é um único arquivo para levar a outro celular ou a um serviço de nuvem como o Google Drive, gravado por inteiro a cada vez.</string>
-    <string name="action_save_zip">Salvar em arquivo ZIP</string>
     <string name="action_to_zip">Em arquivo ZIP</string>
     <string name="backup_ways_question">Pasta ou ZIP?</string>
     <string name="action_choose_zip">Escolher arquivo ZIP</string>

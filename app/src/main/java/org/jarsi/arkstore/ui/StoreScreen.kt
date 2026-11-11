@@ -150,6 +150,7 @@ import java.time.format.FormatStyle
 import java.util.Locale
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import org.jarsi.arkstore.backup.Installers
 import org.jarsi.arkstore.BuildConfig
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppMetadata
@@ -1251,7 +1252,7 @@ private fun DetailsSheet(
             )
             DetailLine(
                 stringResource(R.string.detail_installed_from),
-                stringResource(installerName(it.installer, context.packageName))
+                installerName(it.installer, context.packageName)
             )
             // With the installer, this tells whether an update the store made unasked went through.
             formatDateTime(it.updatedAt)?.let { time -> DetailLine(stringResource(R.string.detail_updated_at), time) }
@@ -1312,7 +1313,7 @@ private fun DetailsSheet(
                 text = stringResource(
                     R.string.other_app_detail,
                     row.installed.label.orEmpty(),
-                    stringResource(installerName(row.installed.installer, context.packageName))
+                    installerName(row.installed.installer, context.packageName)
                 ),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(top = 16.dp)
@@ -2044,13 +2045,9 @@ private fun sourceName(source: String): Int = when (source) {
 }
 
 /** The name of the app that installed a package, [installer], for what the system tells. */
-private fun installerName(installer: String?, self: String): Int = when (installer) {
-    "com.android.vending" -> R.string.installer_play
-    "org.fdroid.fdroid", "org.fdroid.basic", "org.fdroid.fdroid.privileged" -> R.string.installer_fdroid
-    "com.aurora.store" -> R.string.installer_aurora
-    self -> R.string.installer_store
-    else -> R.string.installer_other
-}
+@Composable
+private fun installerName(installer: String?, self: String): String =
+    Installers.knownName(installer, self) ?: stringResource(R.string.installer_other)
 
 /** The badge that tells an app was not published to the store by its developer, if any. */
 private fun sourceBadge(app: StoreApp): Int? = when {

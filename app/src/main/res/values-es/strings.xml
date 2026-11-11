@@ -322,7 +322,6 @@
     <string name="restore_fail_invalid">El archivo de la carpeta no es un paquete de aplicación válido.</string>
     <string name="backup_index_not_written">No se han podido escribir el índice de la carpeta ni el archivo de ajustes de la tienda. Aun así, las aplicaciones copiadas se pueden restaurar desde sus carpetas.</string>
     <string name="backup_ways">Una carpeta se mantiene al día: la siguiente copia de seguridad solo copia lo que ha cambiado, y una aplicación quitada del dispositivo se queda en ella hasta que la borres de allí. Un archivo ZIP es un único archivo para pasar a otro teléfono o a un servicio en la nube como Google Drive, y se escribe entero cada vez.</string>
-    <string name="action_save_zip">Guardar en un archivo ZIP</string>
     <string name="action_to_zip">En un archivo ZIP</string>
     <string name="backup_ways_question">¿Carpeta o ZIP?</string>
     <string name="action_choose_zip">Elegir archivo ZIP</string>

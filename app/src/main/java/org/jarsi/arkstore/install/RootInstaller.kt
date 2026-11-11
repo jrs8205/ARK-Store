@@ -92,8 +92,8 @@ internal object RootCommands {
 
 /**
  * Installs and uninstalls through `pm` as root, so that nothing is asked of the user. The
- * store is named as the installer, so that its updates go without a prompt even once root is
- * gone again.
+ * store is named as the installer: the apps it installed are the ones it updates unasked, and
+ * the ones the system lets it see whether or not they have a launcher icon.
  */
 internal object RootInstaller {
     private const val TAG = "RootInstaller"
@@ -111,21 +111,18 @@ internal object RootInstaller {
 
     /**
      * Installs [files] of [packageName] as one session, the base file first, [installer]
-     * named as the one who did; [onSession] is told the session's id before anything is
-     * written to it. Any file that cannot be given whole fails the session, which is then
-     * abandoned.
+     * named as the one who did. Any file that cannot be given whole fails the session, which
+     * is then abandoned.
      */
     suspend fun install(
         installer: String,
         packageName: String,
-        files: List<Pair<String, File>>,
-        onSession: (Int) -> Unit
+        files: List<Pair<String, File>>
     ): Result {
         val total = files.sumOf { it.second.length() }
         val created = Root.run(RootCommands.createSession(installer, packageName, total, Root.userId), PM_TIMEOUT_MS)
         if (created !is Root.Outcome.Ran) return Result.NoRoot
         val sessionId = PmOutput.sessionId(created.out) ?: return noSession(created)
-        onSession(sessionId)
         try {
             for ((name, file) in files) {
                 val written = Root.run(RootCommands.writeSplit(sessionId, name, file.length()), PM_TIMEOUT_MS, stdin = { out ->

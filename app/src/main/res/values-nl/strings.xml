@@ -313,7 +313,6 @@
     <string name="restore_fail_invalid">Het bestand in de map is geen geldig app-pakket.</string>
     <string name="backup_index_not_written">De index in de map en het instellingenbestand van de store konden niet worden geschreven. De gekopieerde apps kunnen nog steeds uit hun eigen mappen worden teruggezet.</string>
     <string name="backup_ways">Een map blijft actueel: de volgende back-up kopieert alleen wat er is veranderd, en een app die van het apparaat is verwijderd, blijft erin staan totdat je deze daar verwijdert. Een zip-bestand is één bestand om naar een andere telefoon of een clouddienst zoals Google Drive over te zetten, en wordt elke keer helemaal opnieuw geschreven.</string>
-    <string name="action_save_zip">Opslaan in zip-bestand</string>
     <string name="action_to_zip">In zip-bestand</string>
     <string name="backup_ways_question">Map of zip?</string>
     <string name="action_choose_zip">Zip-bestand kiezen</string>

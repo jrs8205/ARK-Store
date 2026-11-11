@@ -313,7 +313,6 @@
     <string name="restore_fail_invalid">Klasördeki dosya geçerli bir uygulama paketi değil.</string>
     <string name="backup_index_not_written">Klasörün dizini ve mağazanın ayar dosyası yazılamadı. Kopyalanan uygulamalar yine de kendi klasörlerinden geri yüklenebilir.</string>
     <string name="backup_ways">Klasör güncel kalır: sonraki yedekleme yalnızca değişenleri kopyalar ve cihazdan kaldırılan bir uygulama, siz oradan silene kadar klasörde kalır. ZIP dosyası, başka bir telefona veya Google Drive gibi bir bulut hizmetine taşımak için tek bir dosyadır ve her seferinde tamamen yeniden yazılır.</string>
-    <string name="action_save_zip">ZIP dosyasına kaydet</string>
     <string name="action_to_zip">ZIP dosyasına</string>
     <string name="backup_ways_question">Klasör mü, ZIP mi?</string>
     <string name="action_choose_zip">ZIP dosyası seç</string>

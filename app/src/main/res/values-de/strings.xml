@@ -313,7 +313,6 @@
     <string name="restore_fail_invalid">Die Datei im Ordner ist kein gültiges App-Paket.</string>
     <string name="backup_index_not_written">Der Index im Ordner und die Einstellungsdatei des Stores konnten nicht geschrieben werden. Die kopierten Apps lassen sich trotzdem aus ihren Ordnern wiederherstellen.</string>
     <string name="backup_ways">Ein Ordner bleibt aktuell: Die nächste Sicherung kopiert nur, was sich geändert hat, und eine vom Gerät entfernte App bleibt darin, bis du sie dort löschst. Eine ZIP-Datei ist eine einzige Datei zum Übertragen auf ein anderes Smartphone oder in einen Cloud-Dienst wie Google Drive und wird jedes Mal komplett neu geschrieben.</string>
-    <string name="action_save_zip">In ZIP-Datei speichern</string>
     <string name="action_to_zip">In ZIP-Datei</string>
     <string name="backup_ways_question">Ordner oder ZIP?</string>
     <string name="action_choose_zip">ZIP-Datei auswählen</string>

@@ -61,8 +61,8 @@ object SavedApks {
             .trim('-', '.')
 
     /**
-     * The records written by [toJson], by repository. Up to 1.11.0 they were written by package,
-     * with no package inside: the key then is the package.
+     * The records written by [toJson], by repository. The builds of 1.11.0 before its release
+     * wrote them by package, with no package inside: the key then is the package.
      */
     fun parse(json: String?): Map<String, SavedApk> {
         if (json.isNullOrBlank()) return emptyMap()

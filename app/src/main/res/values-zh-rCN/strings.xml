@@ -304,7 +304,6 @@
     <string name="restore_fail_invalid">文件夹中的文件不是有效的应用安装包。</string>
     <string name="backup_index_not_written">无法写入文件夹的索引和商店的设置文件。已复制的应用仍可从各自的文件夹恢复。</string>
     <string name="backup_ways">文件夹会保持最新：下次备份只复制有变化的内容，从设备上移除的应用会一直保留在文件夹中，直到您在那里将其删除。ZIP 文件是单个文件，便于转移到另一部手机或 Google Drive 等云服务，每次都会完整重写。</string>
-    <string name="action_save_zip">保存到 ZIP 文件</string>
     <string name="action_to_zip">存为 ZIP 文件</string>
     <string name="backup_ways_question">文件夹还是 ZIP？</string>
     <string name="action_choose_zip">选择 ZIP 文件</string>
