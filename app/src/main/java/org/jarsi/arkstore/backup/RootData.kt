@@ -146,6 +146,19 @@ internal object RootDataCommands {
     fun old(part: String, userId: Int, token: String): String = "${userDir(part, userId)}/.arkstore-old-${checkedToken(token)}"
 
     /**
+     * Removes what a restore that was cut short left beside the apps' folders: what it had
+     * unpacked of an app's data, in the clear whatever the backup was, and the marks of
+     * folders that were not there. They are named by a token nothing knows any more, so they
+     * are removed by what they begin with, at the start of a restore, when none is on its
+     * way. What a swap cut short set aside of an app's own data ([old]) stays: it may be the
+     * only copy.
+     */
+    fun sweep(userId: Int): String = AppBackup.DATA_PARTS.joinToString("; ") { part ->
+        val dir = userDir(part, userId)
+        "rm -rf $dir/.arkstore-restore-* $dir/.arkstore-none-*"
+    }
+
+    /**
      * A mark the restore [token] leaves when the app had no data folder of [part] at all, so
      * that putting things back means removing what the restore made, not moving the old in.
      */
@@ -307,6 +320,12 @@ object RootData {
         }
         if (packages.isNotEmpty()) Log.i(TAG, "Parts of ${parts.size} of ${packages.size} apps found")
         return parts
+    }
+
+    /** Clears what an earlier restore left unpacked; see [RootDataCommands.sweep]. Best done, not needed. */
+    suspend fun sweep() {
+        val ran = Root.run(RootDataCommands.sweep(userId), TOOL_TIMEOUT_MS, global = true)
+        if (ran !is Root.Outcome.Ran || ran.exit != 0) Log.w(TAG, "What an earlier restore left behind could not be cleared")
     }
 
     suspend fun forceStop(packageName: String) {

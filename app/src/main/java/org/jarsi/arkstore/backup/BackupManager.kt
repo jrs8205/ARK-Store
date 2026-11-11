@@ -767,6 +767,8 @@ object BackupManager {
         val dataFailed = ArrayList<String>()
         var wrongPassword = false
         val run = dataRun(data)
+        // What a restore cut short left unpacked beside the apps goes before this one begins.
+        if (run != null) RootData.sweep()
         // Without a run the data archives are not wanted: left out of what is asked of the
         // zip, they are passed over rather than taken out, however large they are.
         val asked = selected.map { if (run == null) it.entry.copy(data = emptyList()) else it.entry }
@@ -1092,6 +1094,8 @@ object BackupManager {
         val dataFailed = ArrayList<String>()
         var wrongPassword = false
         val run = dataRun(data)
+        // What a restore cut short left unpacked beside the apps goes before this one begins.
+        if (run != null) RootData.sweep()
         selected.forEachIndexed { i, row ->
             coroutineContext.ensureActive()
             val entry = row.entry

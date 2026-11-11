@@ -131,6 +131,22 @@ class RootDataCommandsTest {
     }
 
     @Test
+    fun whatARestoreCutShortUnpackedIsClearedBeforeTheNext() {
+        // The app's data unpacked beside its folder, in the clear whatever the backup was,
+        // and the marks of folders that were not there: a process that ended first never
+        // removed them, and no later restore knows their names.
+        val sweep = RootDataCommands.sweep(0)
+        assertEquals(
+            "rm -rf /data/user/0/.arkstore-restore-* /data/user/0/.arkstore-none-*; " +
+                "rm -rf /data/user_de/0/.arkstore-restore-* /data/user_de/0/.arkstore-none-*",
+            sweep
+        )
+        // What a swap cut short set aside of an app's own data may be the only copy of it.
+        assertFalse(".arkstore-old-" in sweep)
+        assertTrue("/data/user/10/.arkstore-restore-*" in RootDataCommands.sweep(10))
+    }
+
+    @Test
     fun theSwapKeepsTheOldDataUntilTheNewIsInPlaceAndLabelled() {
         val staging = RootDataCommands.staging(AppBackup.DATA_USER, 0, token)
         val target = "/data/user/0/$pkg"
