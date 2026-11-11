@@ -45,6 +45,14 @@ class StoreAppTest {
     }
 
     @Test
+    fun keyAFileIsTakenToHaveIsKeptAsThatInTheStoredCopy() {
+        val taken = testApp().copy(signer = "a", signerAssumed = true)
+        assertTrue(StoreApp.fromJson(taken.toJson()).signerAssumed)
+        assertEquals("a", StoreApp.fromJson(taken.toJson()).signer)
+        assertFalse(StoreApp.fromJson(testApp().copy(signer = "a").toJson()).signerAssumed)
+    }
+
+    @Test
     fun catalogueSigningKeysDoNotComeFromTheIndexReader() {
         for (source in listOf(StoreApp.SOURCE_FDROID, StoreApp.SOURCE_IZZY)) {
             val app = testApp().copy(source = source, signer = "ab".repeat(32))

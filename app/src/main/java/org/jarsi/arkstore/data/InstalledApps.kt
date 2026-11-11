@@ -148,8 +148,12 @@ object InstalledApps {
         signers: Set<String>?,
         defaultLabel: String?
     ): InstalledVersion {
-        val sameSigner = CatalogRules.sameSigner(app.signer, signers)
-        val differentSigner = app.signer != null && !signers.isNullOrEmpty() && !sameSigner
+        // A key the file is only taken to have, see [StoreApp.signerAssumed], says nothing
+        // here: neither that the keys match, which would undo a conflict seen, nor that they
+        // differ.
+        val signer = app.signer.takeUnless { app.signerAssumed }
+        val sameSigner = CatalogRules.sameSigner(signer, signers)
+        val differentSigner = signer != null && !signers.isNullOrEmpty() && !sameSigner
         // Repository labels come from APK resources. Catalogue labels are translated
         // metadata, and a repository name standing in for a missing label is not an APK name.
         val offeredLabel = app.label?.trim()?.takeIf { app.fromRepository && it.isNotEmpty() }

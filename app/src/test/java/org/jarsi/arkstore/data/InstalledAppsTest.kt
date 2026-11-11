@@ -115,6 +115,27 @@ class InstalledAppsTest {
     }
 
     @Test
+    fun keyAFileIsOnlyTakenToHaveSaysNothingOfTheInstalledApp() {
+        // The release was read from GitHub, where nothing tells its key; it is taken to be
+        // signed as the release before it. That chooses the row, and no more than that.
+        val app = offered.copy(label = "Calculator", signer = "a", signerAssumed = true)
+        // A file of this release was downloaded and seen to be signed otherwise: that was
+        // seen, and what the file is taken to be does not undo it.
+        val conflict = InstalledVersion(4, "1.4", otherSigner = true, installer = "store", label = "Calculator")
+        val installed = InstalledApps.compareIdentity(app, conflict, setOf("a"), "Calculator")
+        assertFalse(installed.sameSigner)
+        assertTrue(installed.otherSigner)
+        assertEquals(AppStatus.OTHER_SIGNER, InstalledApps.status(app, installed))
+        // Nor is a key it is taken to have, and that differs, a conflict seen, or another app.
+        val fresh = InstalledApps.compareIdentity(
+            app.copy(label = "Companion"), InstalledVersion(4, "1.4", label = "Calculator"), setOf("b"), "Calculator"
+        )
+        assertFalse(fresh.otherSigner)
+        assertFalse(fresh.otherApp)
+        assertEquals(AppStatus.UPDATE_AVAILABLE, InstalledApps.status(app, fresh))
+    }
+
+    @Test
     fun anExactSignerMatchOverridesAnEarlierConflict() {
         val app = offered.copy(label = "Calculator", signer = "a")
         val before = InstalledVersion(4, "1.4", otherSigner = true, beta = true, installer = "store", label = "Laskin")

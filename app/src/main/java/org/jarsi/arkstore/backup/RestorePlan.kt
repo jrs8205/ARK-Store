@@ -25,7 +25,8 @@ internal object RestorePlan {
      * The catalogue's newest version of [entry]'s app for a device running [android], among
      * [apps]: a full release, of the project whose key the backup has when that is known, that
      * runs here and is not signed with a key the backup does not have. One whose key the
-     * catalogue does not tell is tried, and its key compared once it is downloaded.
+     * catalogue does not tell, or only takes it to have, is tried, and its key compared once
+     * it is downloaded.
      */
     fun offer(entry: BackupEntry, apps: List<StoreApp>, android: CatalogRules.Android): StoreApp? {
         val offers = apps.filter { it.packageName == entry.packageName && !it.prerelease }
@@ -34,7 +35,9 @@ internal object RestorePlan {
         return CatalogRules.merged(offers, android) { signers }
             .filter { !it.otherBuild && CatalogRules.runsOn(it.app, android) }
             .map { it.app }
-            .firstOrNull { signers == null || it.signer == null || CatalogRules.sameSigner(it.signer, signers) }
+            .firstOrNull {
+                signers == null || it.signer == null || it.signerAssumed || CatalogRules.sameSigner(it.signer, signers)
+            }
     }
 
     /**

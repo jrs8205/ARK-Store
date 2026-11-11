@@ -407,7 +407,8 @@ class CatalogRepository private constructor(context: Context) {
                                 val listed = indexed?.get(fullName)
                                 fetchApp(
                                     repo,
-                                    listOfNotNull(old?.app, old?.beta, listed?.app, listed?.beta),
+                                    own = listOfNotNull(old?.app, old?.beta),
+                                    listed = listOfNotNull(listed?.app, listed?.beta),
                                     auto
                                 )
                             }
@@ -1027,9 +1028,11 @@ class CatalogRepository private constructor(context: Context) {
      */
     private fun fetchApp(
         repo: JSONObject,
-        previous: List<StoreApp>,
+        own: List<StoreApp>,
+        listed: List<StoreApp>,
         auto: Boolean
     ): Pair<StoreApp?, StoreApp?> {
+        val previous = own + listed
         val fullName = repo.getString("full_name")
         val page = JSONArray(api("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
@@ -1100,7 +1103,7 @@ class CatalogRepository private constructor(context: Context) {
                 allDownloads = downloads
             )
             // Nor does anything but the index read how a file is signed, or its icon.
-            return CatalogRules.withWhatTheIndexRead(read, previous)
+            return CatalogRules.withWhatTheIndexRead(read, listed, own)
         }
 
         // Releases come newest first; the first full release is what GitHub calls "latest".

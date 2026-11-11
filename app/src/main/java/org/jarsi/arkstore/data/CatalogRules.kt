@@ -366,28 +366,38 @@ internal object CatalogRules {
 
     /**
      * [app], a release just read straight from GitHub, with what only the index reads of a
-     * file: the key it is signed with and its icon, taken from what was listed [before] of
-     * the same repository. The same file, by its asset id, is as the index described it,
-     * whichever of the entries says so: the store's own earlier reading of it tells neither.
-     * A newer file is taken to be signed, and drawn, as the release before it was, of the
-     * same package and preferably of the same kind, since an app keeps its key from one
-     * version to the next; the downloaded file is compared with the installed app all the
-     * same before anything is done with it.
+     * file: the key it is signed with and its icon. They are taken from what the index has
+     * [listed] of the same repository and, after that, from what the store held of it on its
+     * [own] before, so that what the index has read of a file goes before anything the store
+     * took the file to be.
+     *
+     * The same file, by its asset id, is as it was described there. A newer file is taken to
+     * be signed, and drawn, as the release before it was, of the same package and preferably
+     * of the same kind, since an app keeps its key from one version to the next; such a key
+     * is marked as one nobody has read ([StoreApp.signerAssumed]), and stays so marked for
+     * as long as it is passed on. The downloaded file is compared with the installed app all
+     * the same before anything is done with it.
      *
      * Without the key, the row of an installed app would go to a catalogue that is known to
      * sign the same way, however far behind the developer's release it is; see [merged].
      */
-    fun withWhatTheIndexRead(app: StoreApp, before: List<StoreApp>): StoreApp {
-        fun <T : Any> known(of: (StoreApp) -> T?): T? =
-            before.firstNotNullOfOrNull { entry -> of(entry).takeIf { entry.assetId == app.assetId } }
-                ?: app.packageName?.let { packageName ->
-                    before.filter { it.packageName == packageName && of(it) != null }
-                        .minByOrNull { it.prerelease != app.prerelease }
-                        ?.let(of)
-                }
-        val signer = app.signer ?: known { it.signer }
-        val icon = app.icon ?: known { it.icon }
-        return if (signer == app.signer && icon == app.icon) app else app.copy(signer = signer, icon = icon)
+    fun withWhatTheIndexRead(app: StoreApp, listed: List<StoreApp>, own: List<StoreApp>): StoreApp {
+        val before = listed + own
+        val sameFile = before.filter { it.assetId == app.assetId }
+        val earlier = app.packageName?.let { packageName ->
+            before.filter { it.packageName == packageName }.sortedBy { it.prerelease != app.prerelease }
+        }.orEmpty()
+
+        val icon = app.icon ?: sameFile.firstNotNullOfOrNull { it.icon } ?: earlier.firstNotNullOfOrNull { it.icon }
+        if (app.signer != null) return if (icon == app.icon) app else app.copy(icon = icon)
+        // Of the same file a key that was read goes before one it was taken to have.
+        val read = sameFile.filter { it.signer != null }.minByOrNull { it.signerAssumed }
+        val from = read ?: earlier.filter { it.signer != null }.minByOrNull { it.signerAssumed }
+        return when {
+            from != null -> app.copy(signer = from.signer, signerAssumed = read == null || from.signerAssumed, icon = icon)
+            icon != app.icon -> app.copy(icon = icon)
+            else -> app
+        }
     }
 
     /**

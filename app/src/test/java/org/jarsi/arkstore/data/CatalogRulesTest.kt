@@ -165,9 +165,29 @@ class CatalogRulesTest {
         // entry of the same file, which does.
         val own = app(versionCode = 3).copy(assetId = 7, minSdk = 26)
         val indexed = app(versionCode = 3).copy(assetId = 7, minSdk = 26, signer = "dev", icon = icon)
-        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 3).copy(assetId = 7), listOf(own, indexed))
+        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 3).copy(assetId = 7), listOf(indexed), listOf(own))
         assertEquals("dev", read.signer)
         assertEquals(icon, read.icon)
+        // Read of this very file, not taken from another.
+        assertFalse(read.signerAssumed)
+    }
+
+    @Test
+    fun keyTheIndexHasReadOfAFileGoesBeforeOneTheStoreTookItToHave() {
+        // The store read the release from GitHub before the index did and took it to be signed
+        // as the one before it, with "a"; the index has since read the file itself: "b".
+        val oldIcon = AppIcon("https://example.invalid/old.png", null, null)
+        val newIcon = AppIcon("https://example.invalid/new.png", null, null)
+        val taken = app(versionCode = 3).copy(assetId = 7, signer = "a", signerAssumed = true, icon = oldIcon)
+        val indexed = app(versionCode = 3).copy(assetId = 7, signer = "b", icon = newIcon)
+        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 3).copy(assetId = 7), listOf(indexed), listOf(taken))
+        assertEquals("b", read.signer)
+        assertFalse(read.signerAssumed)
+        assertEquals(newIcon, read.icon)
+        // Until the index has read it, what the store took it to have stands, as that still.
+        val still = CatalogRules.withWhatTheIndexRead(app(versionCode = 3).copy(assetId = 7), emptyList(), listOf(taken))
+        assertEquals("a", still.signer)
+        assertTrue(still.signerAssumed)
     }
 
     @Test
@@ -177,17 +197,19 @@ class CatalogRulesTest {
         val beta = app(versionCode = 4, prerelease = true).copy(assetId = 8, signer = "beta")
         val before = listOf(stable, beta)
 
-        val next = CatalogRules.withWhatTheIndexRead(app(versionCode = 5).copy(assetId = 9), before)
+        val next = CatalogRules.withWhatTheIndexRead(app(versionCode = 5).copy(assetId = 9), before, emptyList())
         assertEquals("dev", next.signer)
         assertEquals(icon, next.icon)
+        // Nobody has read this file: its key is what it is taken to be, no more.
+        assertTrue(next.signerAssumed)
         // A beta may be signed with a key of its own; its own kind of release goes first.
-        val nextBeta = CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), before)
+        val nextBeta = CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), before, emptyList())
         assertEquals("beta", nextBeta.signer)
         // The other kind of release will do when its own tells nothing.
         assertEquals(icon, nextBeta.icon)
         assertEquals(
             "dev",
-            CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), listOf(stable)).signer
+            CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), listOf(stable), emptyList()).signer
         )
     }
 
@@ -196,14 +218,15 @@ class CatalogRulesTest {
         val other = app(packageName = "org.another", versionCode = 3).copy(assetId = 7, signer = "dev")
         val read = app(versionCode = 5).copy(assetId = 9)
         // A repository can release several apps, each signed its own way.
-        assertNull(CatalogRules.withWhatTheIndexRead(read, listOf(other)).signer)
-        assertNull(CatalogRules.withWhatTheIndexRead(read, emptyList()).signer)
+        assertNull(CatalogRules.withWhatTheIndexRead(read, listOf(other), emptyList()).signer)
+        assertNull(CatalogRules.withWhatTheIndexRead(read, emptyList(), emptyList()).signer)
+        assertFalse(CatalogRules.withWhatTheIndexRead(read, emptyList(), emptyList()).signerAssumed)
         // A file whose manifest could not be read is not known to be any of them.
         val unread = read.copy(packageName = null)
-        assertNull(CatalogRules.withWhatTheIndexRead(unread, listOf(app().copy(assetId = 7, signer = "dev"))).signer)
+        assertNull(CatalogRules.withWhatTheIndexRead(unread, listOf(app().copy(assetId = 7, signer = "dev")), emptyList()).signer)
         // What the reading itself knows stays.
         val known = read.copy(signer = "own")
-        assertEquals("own", CatalogRules.withWhatTheIndexRead(known, listOf(app().copy(assetId = 9, signer = "dev"))).signer)
+        assertEquals("own", CatalogRules.withWhatTheIndexRead(known, listOf(app().copy(assetId = 9, signer = "dev")), emptyList()).signer)
     }
 
     private fun catalogue(source: String, signer: String?, packageName: String = "org.example") =
@@ -286,7 +309,7 @@ class CatalogRulesTest {
         // F-Droid's own build of an older version, reproduced with the developer's key.
         val indexed = app(versionCode = 71).copy(assetId = 71, signer = "dev")
         val fdroid = catalogue(StoreApp.SOURCE_FDROID, "dev").copy(versionCode = 69)
-        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 72).copy(assetId = 72), listOf(indexed))
+        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 72).copy(assetId = 72), listOf(indexed), emptyList())
 
         val row = merged(listOf(read, fdroid), installed = setOf("dev")).single()
         assertSame(read, row.app)

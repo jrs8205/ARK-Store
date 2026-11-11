@@ -61,6 +61,13 @@ data class StoreApp(
     val author: String? = null,
     /** SHA-256 of the certificate the APK is signed with, in hex, when the catalogue tells it. */
     val signer: String? = null,
+    /**
+     * True when nobody has read [signer] from this file: the release was read straight from
+     * GitHub, and is taken to be signed as the release before it was. That is good for
+     * choosing the place an installed app's row comes from, and for nothing that says the
+     * keys match or differ; see [CatalogRules.withWhatTheIndexRead].
+     */
+    val signerAssumed: Boolean = false,
     /** SHA-256 the APK file must have, in hex, when the catalogue tells it. */
     val sha256: String? = null,
     /**
@@ -162,6 +169,7 @@ data class StoreApp(
         .put("author", author ?: JSONObject.NULL)
         .put("signer", signer ?: JSONObject.NULL)
         .put("signerReader", if (fromRepository) SIGNER_READER else JSONObject.NULL)
+        .put("signerAssumed", signerAssumed)
         .put("sha256", sha256 ?: JSONObject.NULL)
         .put("minSdk", minSdk ?: JSONObject.NULL)
         .put("minSdkCodename", minSdkCodename ?: JSONObject.NULL)
@@ -236,6 +244,7 @@ data class StoreApp(
             } else {
                 if (json.isNull("signer")) null else json.getString("signer")
             },
+            signerAssumed = json.optBoolean("signerAssumed"),
             sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
             minSdk = minSdkOf(json),
             minSdkCodename = minSdkCodenameOf(json),
