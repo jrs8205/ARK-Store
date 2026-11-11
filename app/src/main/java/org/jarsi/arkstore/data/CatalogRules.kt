@@ -480,6 +480,15 @@ internal object CatalogRules {
     }
 
     /**
+     * What is known of the quota once an answer [told] this, beside what was [known]. Several
+     * requests run at once and their answers come in whatever order, so of one and the same
+     * count the lower number is the later one; a count that starts over at another time is a
+     * new count.
+     */
+    fun quotaAfter(known: Quota?, told: Quota): Quota =
+        if (known != null && known.resetAt == told.resetAt && known.remaining < told.remaining) known else told
+
+    /**
      * Whether GitHub is known to refuse a request made at [now]: every one, until the count
      * starts over, so that none is sent only to be refused.
      */

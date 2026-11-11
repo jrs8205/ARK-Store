@@ -166,6 +166,8 @@ class CatalogRepository private constructor(context: Context) {
      * to be asked whatever it said; see [api]. Kept from one run of the app to the next, as
      * the hour it counts does not start over with the app.
      */
+    private val quotaLock = Any()
+
     @Volatile
     private var quota: CatalogRules.Quota? = preferences.getLong(PREF_QUOTA_RESET, 0).takeIf { it > 0 }
         ?.let { CatalogRules.Quota(preferences.getInt(PREF_QUOTA_REMAINING, 0), it) }
@@ -455,9 +457,9 @@ class CatalogRepository private constructor(context: Context) {
     suspend fun verifySource(source: String): Boolean = withContext(Dispatchers.IO) {
         // Asked whatever GitHub said last of its quota: the user is waiting for the answer.
         if (SourceStore.isRepository(source)) {
-            isListable(JSONObject(Http.getApi("$API/repos/$source", onQuota = { quota = it })))
+            isListable(JSONObject(Http.getApi("$API/repos/$source", onQuota = ::told)))
         } else {
-            Http.getApi("$API/users/$source", onQuota = { quota = it })
+            Http.getApi("$API/users/$source", onQuota = ::told)
             true
         }
     }
@@ -473,7 +475,12 @@ class CatalogRepository private constructor(context: Context) {
         if (known != null && CatalogRules.quotaSpent(known, System.currentTimeMillis())) {
             throw RateLimitedException(known.resetAt)
         }
-        return Http.getApi(url, onQuota = { quota = it })
+        return Http.getApi(url, onQuota = ::told)
+    }
+
+    /** Takes in what an answer said of the quota; see [CatalogRules.quotaAfter]. */
+    private fun told(answer: CatalogRules.Quota) = synchronized(quotaLock) {
+        quota = CatalogRules.quotaAfter(quota, answer)
     }
 
     /**

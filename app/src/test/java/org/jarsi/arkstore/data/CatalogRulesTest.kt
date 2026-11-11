@@ -673,6 +673,20 @@ class CatalogRulesTest {
     }
 
     @Test
+    fun answerThatComesLateDoesNotGiveBackRequestsAlreadyUsed() {
+        // Four lookups run at once, and their answers come in whatever order.
+        val reset = 200 * minute
+        val spent = CatalogRules.Quota(0, reset)
+        val late = CatalogRules.Quota(2, reset)
+        assertEquals(spent, CatalogRules.quotaAfter(spent, late))
+        assertEquals(spent, CatalogRules.quotaAfter(late, spent))
+        assertEquals(late, CatalogRules.quotaAfter(null, late))
+        // A count that has started over is a new one.
+        val next = CatalogRules.Quota(59, reset + 60 * minute)
+        assertEquals(next, CatalogRules.quotaAfter(spent, next))
+    }
+
+    @Test
     fun nothingIsAskedOfGitHubWhileItsQuotaIsSpent() {
         val now = 100 * minute
         assertTrue(CatalogRules.quotaSpent(CatalogRules.Quota(0, now + 20 * minute), now))
