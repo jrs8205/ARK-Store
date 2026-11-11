@@ -54,6 +54,15 @@ internal object RootDataCommands {
     }
 
     /** The size of every part of the data of [packages], in kilobytes, one line each: "123\t/data/user/0/org.example". */
+    /**
+     * [packages] in runs short enough for each to be asked about in one command. A command is
+     * a single argument to `su`, and the system starts nothing with an argument of more than
+     * 128 kB; the longest command here is some 2 kB for an app with the longest name allowed.
+     */
+    fun batches(packages: List<String>): List<List<String>> = packages.chunked(PACKAGES_PER_COMMAND)
+
+    private const val PACKAGES_PER_COMMAND = 40
+
     fun sizes(userId: Int, packages: List<String>): String {
         require(packages.isNotEmpty()) { "No packages" }
         val dirs = AppBackup.DATA_PARTS.flatMap { part -> packages.map { "${userDir(part, userId)}/${checked(it)}" } }
@@ -267,10 +276,14 @@ object RootData {
 
     /** The size of the data of each of [packages], in bytes, as far as it could be read. */
     suspend fun sizes(packages: List<String>): Map<String, Long> {
-        if (packages.isEmpty()) return emptyMap()
-        val ran = Root.run(RootDataCommands.sizes(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: return emptyMap()
-        if (ran.exit != 0 || ran.cut) Log.w(TAG, "du ended with ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}")
-        return RootDataCommands.sizesFrom(ran.out, userId).also { Log.i(TAG, "Sizes of ${it.size} of ${packages.size} apps read") }
+        val sizes = HashMap<String, Long>()
+        for (batch in RootDataCommands.batches(packages)) {
+            val ran = Root.run(RootDataCommands.sizes(userId, batch), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran ?: break
+            if (ran.exit != 0 || ran.cut) Log.w(TAG, "du ended with ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}")
+            sizes += RootDataCommands.sizesFrom(ran.out, userId)
+        }
+        if (packages.isNotEmpty()) Log.i(TAG, "Sizes of ${sizes.size} of ${packages.size} apps read")
+        return sizes
     }
 
     /**
@@ -278,15 +291,21 @@ object RootData {
      * the listing could not be had whole, which is not the same as apps that have no data.
      */
     suspend fun parts(packages: List<String>): Map<String, List<String>>? {
-        if (packages.isEmpty()) return emptyMap()
-        val ran = Root.run(RootDataCommands.parts(userId, packages), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
-        if (ran == null || ran.exit != 0 || ran.cut) {
-            Log.w(TAG, "The data could not be listed: ${if (ran == null) "no root" else "exit ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}"}")
-            return null
+        val parts = HashMap<String, List<String>>()
+        for (batch in RootDataCommands.batches(packages)) {
+            val ran = Root.run(RootDataCommands.parts(userId, batch), TOOL_TIMEOUT_MS, global = true) as? Root.Outcome.Ran
+            if (ran == null || ran.exit != 0 || ran.cut) {
+                Log.w(TAG, "The data could not be listed: ${if (ran == null) "no root" else "exit ${ran.exit}${if (ran.cut) ", cut short" else ""}: ${ran.err.take(200)}"}")
+                return null
+            }
+            val found = RootDataCommands.partsFrom(ran.out)
+            if (found == null) {
+                Log.w(TAG, "The listing of the data did not run to its end: ${ran.err.take(200)}")
+                return null
+            }
+            parts += found
         }
-        val parts = RootDataCommands.partsFrom(ran.out)
-        if (parts == null) Log.w(TAG, "The listing of the data did not run to its end: ${ran.err.take(200)}")
-        else Log.i(TAG, "Parts of ${parts.size} of ${packages.size} apps found")
+        if (packages.isNotEmpty()) Log.i(TAG, "Parts of ${parts.size} of ${packages.size} apps found")
         return parts
     }
 

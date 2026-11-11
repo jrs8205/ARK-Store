@@ -69,6 +69,23 @@ class RootDataCommandsTest {
     }
 
     @Test
+    fun manyAppsAreAskedAboutInCommandsShortEnoughToStart() {
+        // A command is one argument to su, and the system starts nothing with an argument of
+        // more than 128 kB: asked about in one command, some 230 apps were too many, and
+        // then no app's data was taken at all.
+        val packages = List(300) { "org.example." + "a".repeat(230) + ".n$it" }
+        val batches = RootDataCommands.batches(packages)
+        assertEquals(packages, batches.flatten())
+        assertTrue(batches.size > 1)
+        for (batch in batches) {
+            assertTrue(RootDataCommands.parts(0, batch).toByteArray().size < 100_000)
+            assertTrue(RootDataCommands.sizes(0, batch).toByteArray().size < 100_000)
+        }
+        assertEquals(listOf(listOf("org.example.app")), RootDataCommands.batches(listOf("org.example.app")))
+        assertTrue(RootDataCommands.batches(emptyList()).isEmpty())
+    }
+
+    @Test
     fun theArchiveLeavesTheCachesAndTheLibrariesOut() {
         assertEquals(
             "/system/bin/tar -c -f - -C /data/user/0 --exclude=$pkg/cache --exclude=$pkg/code_cache --exclude=$pkg/lib $pkg",
