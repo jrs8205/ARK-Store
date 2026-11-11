@@ -20,11 +20,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -96,9 +99,13 @@ internal fun reserved(states: Map<String, InstallState>, repo: String): Map<Stri
 internal fun installOrder(apps: List<StoreApp>, self: String): List<StoreApp> =
     apps.filter { it.packageName != self } + apps.filter { it.packageName == self }
 
-/** Whether no install other than [repo]'s is on its way in [states]. */
-internal fun othersSettled(states: Map<String, InstallState>, repo: String): Boolean =
-    states.none { (name, state) -> name != repo && state.isOnItsWay() }
+/**
+ * Whether nothing stands in the way of an install that ends the process: no install other
+ * than [repo]'s is on its way in [states], and no other work of the app, a backup or a
+ * restore, is [working].
+ */
+internal fun othersSettled(states: Map<String, InstallState>, repo: String, working: Boolean = false): Boolean =
+    !working && states.none { (name, state) -> name != repo && state.isOnItsWay() }
 
 /**
  * The outcome of one [attempt] of [repo], as it is settled, for whoever waits for that attempt;
@@ -159,6 +166,14 @@ object InstallManager {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _states = MutableStateFlow<Map<String, InstallState>>(emptyMap())
+
+    /**
+     * Whether other work of the app is under way that the end of the process would cut off,
+     * a backup or a restore: the store's own update through root waits for it as it waits for
+     * the other installs. Whoever does such work says so here; nobody does to begin with.
+     */
+    @Volatile
+    internal var otherWork: Flow<Boolean> = flowOf(false)
     /** In-flight or failed installs keyed by the repository's full name. */
     val states: StateFlow<Map<String, InstallState>> = _states.asStateFlow()
 
@@ -535,11 +550,12 @@ object InstallManager {
         InstalledApps.forgetConflict(appContext, app, archive.packageName)
 
         // Installing the store itself through root ends this process, so it waits for every
-        // other install to be done with, however long that takes: the wait shows as queued,
-        // and can be cancelled like any download. A file saved for the user ends nothing.
+        // other install to be done with, and for a backup or a restore under way, however
+        // long that takes: the wait shows as queued, and can be cancelled like any download.
+        // A file saved for the user ends nothing.
         val rootWanted = rootFor(archive.packageName == appContext.packageName, { Root.enabled(appContext) }) {
             setState(app.fullName, InstallState.Queued)
-            _states.first { othersSettled(it, app.fullName) }
+            _states.combine(otherWork) { states, working -> othersSettled(states, app.fullName, working) }.first { it }
         }
         // From here on the attempt is root's or the folder's: a cancel is refused, and one
         // that came first refuses this.

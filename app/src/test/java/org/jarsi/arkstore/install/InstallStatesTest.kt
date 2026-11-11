@@ -56,6 +56,9 @@ class InstallStatesTest {
         assertTrue(othersSettled(failed + (store to InstallState.Queued), store))
         assertFalse(othersSettled(downloading + (store to InstallState.Queued), store))
         assertFalse(othersSettled(mapOf(repo to InstallState.Installing), store))
+        // A backup or a restore under way is cut off by the end of the process just the same.
+        assertFalse(othersSettled(emptyMap(), store, working = true))
+        assertFalse(othersSettled(mapOf(store to InstallState.Queued), store, working = true))
         assertFalse(othersSettled(mapOf(repo to InstallState.Queued), store))
     }
 
