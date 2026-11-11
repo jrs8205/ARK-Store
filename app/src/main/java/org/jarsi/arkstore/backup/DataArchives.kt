@@ -41,10 +41,11 @@ internal object DataArchives {
         fun delete(id: String): Boolean
 
         /**
-         * Whether the folder is known to hold [id] no more: it could be listed, and the
-         * listing does not have it. False when it is there, and when the folder cannot say.
+         * The ids of every document the folder holds, or null when its listing could not be
+         * had whole: not at all, with an error, or while the folder says the rest of it is
+         * still loading, as one kept somewhere else may.
          */
-        fun gone(id: String): Boolean
+        fun ids(): Set<String>?
 
         /** Whether the folder can give [id] another name. */
         fun canRename(id: String): Boolean
@@ -164,9 +165,8 @@ internal object DataArchives {
         } catch (e: IOException) {
             // Nothing of it stays: neither what is still beside nor what has taken its place.
             // A removal that is refused may be of a document that is gone already, as one
-            // renamed away is; only the folder's own listing says so. That it cannot be opened
-            // says nothing: a folder that cannot be read just now holds what it held.
-            val left = beside.filter { !folder.delete(it.id) && !folder.gone(it.id) }
+            // renamed away is; see [gone] for what says so.
+            val left = beside.filter { !folder.delete(it.id) && !gone(folder, it.id) }
             for (name in names) {
                 folder.find(partName(name))?.let { folder.delete(it) }
                 folder.find(name)?.let { folder.delete(it) }
@@ -178,6 +178,24 @@ internal object DataArchives {
                 throw IOException("A data file left beside the archives could not be removed", e)
             }
             Result(emptyList(), e)
+        }
+    }
+
+    /**
+     * Whether [id] is known to be in [folder] no more. It takes the folder's whole listing
+     * without it: a listing that could not be had, or is still loading, says nothing of what
+     * it lacks. And it takes that the document cannot be opened, as one that opens is there
+     * whatever a listing says. Neither is enough alone: a folder that cannot be read just now
+     * holds what it held. Whatever is not known to be gone is taken to be there.
+     */
+    private fun gone(folder: Folder, id: String): Boolean {
+        val ids = folder.ids() ?: return false
+        if (id in ids) return false
+        return try {
+            folder.openRead(id).close()
+            false
+        } catch (_: IOException) {
+            true
         }
     }
 

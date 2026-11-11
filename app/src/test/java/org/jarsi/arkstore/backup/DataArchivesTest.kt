@@ -48,6 +48,12 @@ class DataArchivesTest {
         /** Whether the folder can be listed just now. */
         var listed = true
 
+        /** Whether the folder answers with what it has so far and says it is still loading. */
+        var loading = false
+
+        /** The names of the documents a listing does not show although they are there. */
+        var unlisted = emptySet<String>()
+
         fun put(name: String, text: String) {
             files["id${next++}"] = File(name, text.toByteArray())
         }
@@ -83,7 +89,8 @@ class DataArchivesTest {
             return ByteArrayInputStream(file.bytes)
         }
 
-        override fun gone(id: String): Boolean = listed && id !in files
+        override fun ids(): Set<String>? =
+            if (!listed || loading) null else files.filterValues { it.name !in unlisted }.keys.toSet()
 
         override fun delete(id: String): Boolean {
             if (files[id]?.name in kept) return false
@@ -247,6 +254,40 @@ class DataArchivesTest {
         } catch (_: IOException) {
         }
         assertEquals(mapOf("$user.gz" to "new user"), folder.contents())
+    }
+
+    @Test
+    fun listingStillOnItsWayDoesNotSayAnArchiveIsGone() {
+        // A folder in the cloud may answer with what it has at hand and say that the rest is
+        // loading. What such a listing lacks is not known to be gone: here the archive is
+        // there, readable, and only its removal is refused.
+        val folder = Folder().apply { put(user, "old user") }
+        folder.renamesOtherwise = true
+        folder.kept = setOf("$user.gz")
+        folder.full = false
+        // The copy to its name fails, so that the archive under the other name is what is left.
+        folder.onRename = { folder.full = true }
+        folder.loading = true
+        try {
+            runBlocking { DataArchives.replace(folder, listOf(user), emptyList(), writing(user to "new user")) }
+            fail("An archive a listing still loading did not show was taken for gone")
+        } catch (_: IOException) {
+        }
+        assertEquals(mapOf("$user.gz" to "new user"), folder.contents())
+    }
+
+    @Test
+    fun archiveThatStillOpensIsThereWhateverTheListingSays() {
+        val folder = Folder().apply { put(user, "old user") }
+        folder.renamesOtherwise = true
+        folder.kept = setOf("$user.gz")
+        folder.onRename = { folder.full = true }
+        folder.unlisted = setOf("$user.gz")
+        try {
+            runBlocking { DataArchives.replace(folder, listOf(user), emptyList(), writing(user to "new user")) }
+            fail("An archive that can still be opened was taken for gone")
+        } catch (_: IOException) {
+        }
     }
 
     @Test

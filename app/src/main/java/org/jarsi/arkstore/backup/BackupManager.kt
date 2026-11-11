@@ -1044,7 +1044,7 @@ object BackupManager {
             override fun delete(id: String): Boolean =
                 docs.delete(id).also { gone -> if (gone) byName.values.removeAll { it.id == id } }
 
-            override fun gone(id: String): Boolean = docs.children(folderId)?.none { it.id == id } == true
+            override fun ids(): Set<String>? = docs.ids(folderId)
 
             override fun canRename(id: String): Boolean = docs.canRename(id)
 

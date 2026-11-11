@@ -20,6 +20,13 @@ class Doc(val id: String, val name: String, val mime: String, val size: Long) {
 internal class RenamedOtherwise(val id: String, message: String) : IOException(message)
 
 /**
+ * Whether a listing is all there is: a provider may answer with what it has at hand and say
+ * that the rest is still [loading], as one that keeps its files somewhere else does, or say
+ * that an [error] kept it from listing everything.
+ */
+internal fun wholeListing(loading: Boolean, error: String?): Boolean = !loading && error == null
+
+/**
  * The folder the user chose, through the documents provider that holds it. Nothing in it is
  * reached by a path: every document is found by listing its parent and named by the id the
  * provider gives it, so that whatever a file in the folder says, it can point nowhere else.
@@ -44,6 +51,29 @@ internal class Documents(private val resolver: ContentResolver, val tree: Uri) {
                     list += Doc(id, name, mime, size)
                 }
                 list
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not list a folder", e)
+            null
+        }
+    }
+
+    /**
+     * The ids of every document in the folder [parentId], or null when the listing could not
+     * be had whole: the query failed, a row had no id, or the provider said what it gave was
+     * not all of it; see [wholeListing]. Asked for when something is to be known to be gone, which a
+     * listing that only happens to lack it does not tell.
+     */
+    fun ids(parentId: String): Set<String>? {
+        val uri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, parentId)
+        return try {
+            resolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID), null, null, null)?.use { cursor ->
+                val extras = cursor.extras
+                val loading = extras?.getBoolean(DocumentsContract.EXTRA_LOADING, false) == true
+                if (!wholeListing(loading, extras?.getString(DocumentsContract.EXTRA_ERROR))) return null
+                val ids = HashSet<String>(cursor.count)
+                while (cursor.moveToNext()) ids += cursor.getString(0) ?: return null
+                ids
             }
         } catch (e: Exception) {
             Log.w(TAG, "Could not list a folder", e)

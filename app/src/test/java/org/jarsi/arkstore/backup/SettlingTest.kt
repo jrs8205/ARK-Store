@@ -30,6 +30,13 @@ class SettlingTest {
     private val settled = ArrayList<String>()
 
     @Test
+    fun listingIsWholeOnlyWhenTheFolderSaysNeitherThatItIsLoadingNorThatItFailed() {
+        assertTrue(wholeListing(loading = false, error = null))
+        assertEquals(false, wholeListing(loading = true, error = null))
+        assertEquals(false, wholeListing(loading = false, error = "No connection"))
+    }
+
+    @Test
     fun workThatRunsToItsEndSettlesWithWhatItReturned() {
         val job = launchSettling(scope, otherwise = "cancelled", settle = { settled += it }) { "done" }
         dispatcher.runAll()
