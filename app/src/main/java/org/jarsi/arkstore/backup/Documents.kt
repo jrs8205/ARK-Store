@@ -64,7 +64,7 @@ internal class Documents(private val resolver: ContentResolver, val tree: Uri) {
     /**
      * Creates the document [name] of [mime] in [parentId] and returns its id. A provider that
      * has a document of that name already gives the new one another name; such a document is
-     * removed again, since a backup writes into the file it has, never beside it.
+     * removed again, since a backup finds its files by the names it gave them.
      */
     @Throws(IOException::class)
     fun create(parentId: String, mime: String, name: String): String {
@@ -80,6 +80,33 @@ internal class Documents(private val resolver: ContentResolver, val tree: Uri) {
             throw IOException("The folder named the new document $given instead of $name")
         }
         return id
+    }
+
+    /** Whether the provider says it can give the document [id] another name. */
+    fun canRename(id: String): Boolean = try {
+        resolver.query(uri(id), arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use {
+            it.moveToFirst() && it.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_RENAME != 0
+        } ?: false
+    } catch (e: Exception) {
+        Log.w(TAG, "Could not read the flags of a document", e)
+        false
+    }
+
+    /**
+     * Gives the document [id] the name [name] and returns its id under that name, which a
+     * provider may change with the name. A provider that names it otherwise, as when a
+     * document of that name is there already, has not done what was asked.
+     */
+    @Throws(IOException::class)
+    fun rename(id: String, name: String): String {
+        val renamed = try {
+            DocumentsContract.renameDocument(resolver, uri(id), name)
+        } catch (e: Exception) {
+            throw IOException("Could not rename a document to $name", e)
+        } ?: throw IOException("Could not rename a document to $name")
+        val given = displayName(renamed)
+        if (given != name) throw IOException("The folder named the document $given instead of $name")
+        return DocumentsContract.getDocumentId(renamed)
     }
 
     fun delete(id: String): Boolean = try {

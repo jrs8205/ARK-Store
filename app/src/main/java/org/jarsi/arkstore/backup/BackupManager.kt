@@ -921,19 +921,21 @@ object BackupManager {
                         }
                     }
                     var archives = emptyList<BackupData>()
+                    // What the folder holds of the data, as its entry may go on naming it.
+                    val kept = if (sameApp) stored!!.data.filter { it.name in byName } else emptyList()
                     if (dataLost) {
                         // What the folder holds of the data stays, and the entry goes on naming it.
-                        archives = if (sameApp) stored!!.data.filter { it.name in byName } else emptyList()
+                        archives = kept
                     } else if (run != null && wanted.isNotEmpty()) {
-                        try {
-                            archives = writeData(docs, folderId, byName, entry, run, wanted) { sofar ->
-                                _state.value = BackupState.Running(false, i + 1, selected.size, entry.label, done + sofar, total)
-                            }
+                        // Data that cannot be taken now leaves what was taken before, likewise.
+                        val taken = writeData(docs, folderId, byName, entry, run, wanted, kept) { sofar ->
+                            _state.value = BackupState.Running(false, i + 1, selected.size, entry.label, done + sofar, total)
+                        }
+                        archives = taken.archives
+                        if (taken.failure == null) {
                             done += archives.sumOf { it.size }
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Could not take the data of ${entry.packageName}", e)
+                        } else {
+                            Log.w(TAG, "Could not take the data of ${entry.packageName}", taken.failure)
                             dataFailed += entry.label
                         }
                     }
@@ -941,8 +943,8 @@ object BackupManager {
                     // earlier choice, which the entry would not tell of, stays. An archive
                     // that cannot be removed, as one in the clear beside an encrypted one,
                     // fails the app rather than stay unnamed beside its entry.
-                    val kept = archives.mapTo(HashSet()) { it.name }
-                    byName.values.filter { AppBackup.isDataName(it.name) && it.name !in kept }.forEach {
+                    val named = archives.mapTo(HashSet()) { it.name }
+                    byName.values.filter { AppBackup.isDataName(it.name) && it.name !in named }.forEach {
                         if (!docs.delete(it.id)) throw IOException("An old data file could not be removed: ${it.name}")
                     }
                     val made = entry.copy(data = archives)
@@ -980,9 +982,11 @@ object BackupManager {
     }
 
     /**
-     * Writes the data archives of [entry], one for each of [parts], into the app's folder
-     * [folderId], whose files [byName] are kept up to date; returns their descriptions. An
-     * archive that cannot be written whole is removed, and the rest are not written.
+     * Takes the data archives of [entry], one for each of [parts], into the app's folder
+     * [folderId], whose files [byName] are kept up to date; returns what the folder then holds
+     * of the data, and why it could not be taken when it could not. The new archives take the
+     * place of the old only when every one is whole, and the folder is otherwise left with
+     * those it had, [kept]; see [DataArchives.replace].
      */
     private suspend fun writeData(
         docs: Documents,
@@ -991,30 +995,38 @@ object BackupManager {
         entry: BackupEntry,
         run: DataRun,
         parts: List<String>,
+        kept: List<BackupData>,
         onBytes: (Long) -> Unit
-    ): List<BackupData> {
-        val archives = ArrayList<BackupData>()
+    ): DataArchives.Result {
+        val folder = object : DataArchives.Folder {
+            override fun find(name: String): String? = byName[name]?.id
+
+            override fun create(name: String): String =
+                docs.create(folderId, DATA_MIME, name).also { byName[name] = Doc(it, name, DATA_MIME, -1) }
+
+            override fun openWrite(id: String): OutputStream = docs.openWrite(id)
+
+            override fun delete(id: String): Boolean =
+                docs.delete(id).also { gone -> if (gone) byName.values.removeAll { it.id == id } }
+
+            override fun canRename(id: String): Boolean = docs.canRename(id)
+
+            override fun rename(id: String, name: String): String {
+                val renamed = docs.rename(id, name)
+                byName.values.removeAll { it.id == id }
+                byName[name] = Doc(renamed, name, DATA_MIME, -1)
+                return renamed
+            }
+        }
+        val names = parts.associateBy { DataCrypt.fileName(it, run.encrypt) }
         var before = 0L
-        for (part in parts) {
-            val name = DataCrypt.fileName(part, run.encrypt)
-            val id = byName[name]?.id ?: docs.create(folderId, DATA_MIME, name).also {
-                byName[name] = Doc(it, name, DATA_MIME, -1)
+        return DataArchives.replace(folder, names.keys.toList(), kept) { name, document ->
+            val counting = Counting(document)
+            run.wrap(counting, entry).use { sink ->
+                RootData.archive(run.tar, names.getValue(name), entry.packageName, sink) { sofar -> onBytes(before + sofar) }
             }
-            val counting = Counting(docs.openWrite(id))
-            try {
-                run.wrap(counting, entry).use { sink ->
-                    RootData.archive(run.tar, part, entry.packageName, sink) { sofar -> onBytes(before + sofar) }
-                }
-            } catch (e: Throwable) {
-                runCatching { counting.close() }
-                docs.delete(id)
-                byName.remove(name)
-                throw e
-            }
-            archives += BackupData(name, counting.count)
             before += counting.count
         }
-        return archives
     }
 
     /** A cancel, carrying whether the folder's index was still written. */

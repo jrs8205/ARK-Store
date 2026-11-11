@@ -98,7 +98,7 @@ object AppBackup {
     val DATA_PARTS = listOf(DATA_USER, DATA_USER_DE)
 
     /** The names a data archive may have in an app's folder. */
-    private val DATA_NAMES = DATA_PARTS.flatMap { listOf(DataCrypt.fileName(it, false), DataCrypt.fileName(it, true)) }.toSet()
+    internal val DATA_NAMES = DATA_PARTS.flatMap { listOf(DataCrypt.fileName(it, false), DataCrypt.fileName(it, true)) }.toSet()
 
     /** The most bytes an index or an entry is read for; an index of thousands of apps is far smaller. */
     const val MAX_JSON_BYTES = 4 * 1024 * 1024
