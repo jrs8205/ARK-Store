@@ -166,8 +166,21 @@ def gitlab_license(key):
     return GITLAB_LICENSES.get(name)
 
 
+def with_token(request, variable, header, prefix=""):
+    """request with the token of the environment variable, when one is given, in the header
+    that place reads it from. Both places answer the runners of GitHub, whose addresses many
+    share, with "too many requests" much of the time; a request with a token is counted for
+    the token's owner. The header does not go on with a redirect: an answer may send the
+    request on to another host, which is not to have the token."""
+    token = os.environ.get(variable)
+    if token:
+        request.add_unredirected_header(header, prefix + token)
+    return request
+
+
 def forge(path, raw=False, limit=None):
     request = urllib.request.Request(HOST + "/api/v1" + path, headers={"User-Agent": USER_AGENT})
+    with_token(request, "CODEBERG_TOKEN", "Authorization", "token ")
     with urllib.request.urlopen(request, timeout=30) as response:
         if raw:
             return response.read(limit)
@@ -428,6 +441,7 @@ class Codeberg:
 
 def gitlab(path):
     request = urllib.request.Request(GITLAB_HOST + "/api/v4" + path, headers={"User-Agent": USER_AGENT})
+    with_token(request, "GITLAB_TOKEN", "PRIVATE-TOKEN")
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
 
@@ -440,6 +454,8 @@ def remote_file(url):
     request = urllib.request.Request(url, headers={
         "Range": "bytes=0-0", "Accept-Encoding": "identity", "User-Agent": USER_AGENT,
     })
+    if urllib.parse.urlsplit(url).netloc == urllib.parse.urlsplit(GITLAB_HOST).netloc:
+        with_token(request, "GITLAB_TOKEN", "PRIVATE-TOKEN")
     with urllib.request.urlopen(request, timeout=30) as response:
         total = (response.headers.get("Content-Range") or "").rpartition("/")[2]
         if response.status != 206 or not total.isdigit():

@@ -2,9 +2,12 @@
 
 import hashlib
 import http.client
+import io
+import os
 import re
 import unittest
 import urllib.error
+import urllib.request
 from unittest import mock
 
 import build_forge
@@ -296,6 +299,50 @@ def gitlab_release(links, tag="v1", released="2026-09-01T08:00:00.000Z", upcomin
 
 def link(link_id, name, url, direct=None):
     return {"id": link_id, "name": name, "url": url, "direct_asset_url": direct or url}
+
+
+class TokenTest(unittest.TestCase):
+    """Codeberg and GitLab answer the runners of GitHub, which many share, with "too many
+    requests" more often than not. A token of one's own is counted on its own."""
+
+    def asked(self, environment):
+        seen = []
+
+        def urlopen(request, timeout=None):
+            seen.append(request)
+            return io.BytesIO(b"[]")
+
+        ranged = mock.MagicMock()
+        ranged.__enter__.return_value = mock.Mock(status=206, headers={"Content-Range": "bytes 0-0/9", "ETag": "x"})
+
+        def ranged_urlopen(request, timeout=None):
+            seen.append(request)
+            return ranged
+
+        with mock.patch.dict(os.environ, environment):
+            with mock.patch.object(urllib.request, "urlopen", side_effect=urlopen):
+                build_forge.forge("/repos/search")
+                build_forge.gitlab("/projects")
+            with mock.patch.object(urllib.request, "urlopen", side_effect=ranged_urlopen):
+                build_forge.remote_file("https://gitlab.com/group/app/-/package_files/5/download")
+        return seen
+
+    def test_tokens_go_with_the_requests_to_the_place_they_are_for(self):
+        codeberg, gitlab, file = self.asked({"CODEBERG_TOKEN": "c-secret", "GITLAB_TOKEN": "g-secret"})
+        self.assertEqual(codeberg.get_header("Authorization"), "token c-secret")
+        self.assertEqual(gitlab.get_header("Private-token"), "g-secret")
+        self.assertEqual(file.get_header("Private-token"), "g-secret")
+        self.assertIsNone(codeberg.get_header("Private-token"))
+        self.assertIsNone(gitlab.get_header("Authorization"))
+        # And nowhere else: not to wherever an answer may send the request on.
+        for request in (codeberg, gitlab, file):
+            self.assertNotIn("Authorization", request.headers)
+            self.assertNotIn("Private-token", request.headers)
+
+    def test_no_token_is_sent_when_none_is_given(self):
+        for request in self.asked({"CODEBERG_TOKEN": "", "GITLAB_TOKEN": ""}):
+            self.assertIsNone(request.get_header("Authorization"))
+            self.assertIsNone(request.get_header("Private-token"))
 
 
 class GitLabTest(unittest.TestCase):

@@ -31,10 +31,14 @@ jobs:
     timeout-minutes: 40
     steps:
       # A release runs this workflow at its tag, which may be on another branch. The index is
-      # always built with the script on main.
-      - uses: actions/checkout@v4
+      # always built with the script on main. The action is named by its commit, which a tag
+      # moved to other code cannot change. Nothing after this needs the token of the run in
+      # the repository's settings: the steps that read files other people wrote run without
+      # it, and the last step is given it by name.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: main
+          persist-credentials: false
 
       - name: Test the index builder
         run: python3 -m unittest discover -s tools
@@ -87,12 +91,17 @@ jobs:
         run: python3 tools/build_repos.py --previous-dir previous --output-dir out
 
       # Apps released on Codeberg and GitLab: those published with the store topic, and those
-      # found by searching. Whatever cannot be read keeps its previous entry.
+      # found by searching. Whatever cannot be read keeps its previous entry. Both places
+      # answer these runners, whose addresses many share, with "too many requests" much of
+      # the time; a personal access token of each, read-only and kept as the secrets
+      # CODEBERG_TOKEN and GITLAB_TOKEN, is counted on its own and is used when set.
       - name: Build the lists of apps on Codeberg and GitLab
         continue-on-error: true
         timeout-minutes: 12
         env:
           ICONS_URL: https://raw.githubusercontent.com/${{ github.repository }}/index/icons
+          CODEBERG_TOKEN: ${{ secrets.CODEBERG_TOKEN }}
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
           python3 tools/build_forge.py --previous-dir previous --output-dir out \
             --icons-dir out/icons --icons-url "$ICONS_URL"
@@ -116,6 +125,8 @@ jobs:
         run: PYTHONPATH=tools python3 -c 'import build_index; print(build_index.prune_icons("out"), "icons dropped")'
 
       - name: Publish to the index branch
+        env:
+          PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           cd out
           git init -q -b index
@@ -125,5 +136,5 @@ jobs:
           git commit -q -m "Update the store index"
           # The branch holds only the newest index, so its history never grows.
           git push -q --force \
-            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" \
+            "https://x-access-token:${PUSH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             index
