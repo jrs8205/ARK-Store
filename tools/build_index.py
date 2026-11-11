@@ -2181,6 +2181,14 @@ def main():
     parser.add_argument("--icons-url", help="the address the files of --icons-dir are published at")
     arguments = parser.parse_args()
     icons = IconStore(arguments.icons_dir, arguments.icons_url) if arguments.icons_dir and arguments.icons_url else None
+    # A release that is edited or deleted runs the workflow file of its tag, with this script
+    # from main. The workflows of the first versions give the icons no place and publish the
+    # lists without them, and without the lists added since, in place of everything the index
+    # branch holds. Such a run is stopped here, before it has anything to publish; the next
+    # scheduled run lists the release. When the workflow comes to publish more than it does
+    # now, the versions before it have to be told apart here in the same way.
+    if icons is None and os.environ.get("GITHUB_ACTIONS") == "true":
+        sys.exit("This run is of a workflow older than the script: it would publish an index without icons.")
 
     previous_apps = load_previous(arguments.previous, ("apps", "betaApps")) or {}
     previous_auto = load_previous(arguments.previous_auto, ("autoApps", "autoBetaApps"))

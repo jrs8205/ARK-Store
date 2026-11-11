@@ -2339,7 +2339,7 @@ class MainTest(unittest.TestCase):
         return release(asset_id=8)
 
     def run_main(self, previous, candidates=(), previous_auto=None, repo=REPO, api=None, manifest=None,
-                 found=None, complete=True):
+                 found=None, complete=True, environment=None, icons=False):
         """Runs main while GitHub cannot be reached, so that only what the previous files
         hold can be listed, unless api and manifest say what GitHub and the APKs answer.
         Returns the index and the list of automatically found apps."""
@@ -2354,7 +2354,12 @@ class MainTest(unittest.TestCase):
             argv = ["build_index.py", "--previous", paths["previous.json"],
                     "--previous-auto", paths["previous-auto.json"],
                     "--output", paths["index.json"], "--auto-output", paths["auto.json"]]
-            with mock.patch.object(build_index, "discover",
+            if icons:
+                argv += ["--icons-dir", os.path.join(directory, "icons"),
+                         "--icons-url", "https://example.invalid/icons"]
+            # The tests themselves are run by the workflow, on GitHub's runners.
+            with mock.patch.dict(os.environ, environment or {"GITHUB_ACTIONS": ""}), \
+                    mock.patch.object(build_index, "discover",
                                    return_value=([repo] if found is None else found, complete)), \
                     mock.patch.object(build_index, "discover_candidates",
                                       return_value=list(candidates)), \
@@ -2370,6 +2375,18 @@ class MainTest(unittest.TestCase):
             with open(paths["auto.json"], encoding="utf-8") as file:
                 auto = json.load(file)
         return index, auto
+
+    def test_run_of_a_workflow_from_before_the_icons_is_refused(self):
+        # A release that is edited or deleted runs the workflow file of its tag with the
+        # script of main. The workflows of the first versions give the icons no place and
+        # publish the lists without them, in place of everything the index branch holds.
+        with self.assertRaises(SystemExit) as refused:
+            self.run_main({"apps": [self.KNOWN]}, environment={"GITHUB_ACTIONS": "true"})
+        self.assertNotIn(refused.exception.code, (0, None))
+
+    def test_run_of_the_workflow_that_keeps_the_icons_goes_on(self):
+        index, _ = self.run_main({"apps": [self.KNOWN]}, environment={"GITHUB_ACTIONS": "true"}, icons=True)
+        self.assertEqual(index["apps"], [self.KNOWN])
 
     def test_network_failure_keeps_the_previously_listed_app(self):
         index, _ = self.run_main({"apps": [self.KNOWN]})
