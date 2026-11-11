@@ -291,7 +291,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     IconButton(
                         onClick = {
                             haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                            viewModel.refresh()
+                            viewModel.refresh(asked = true)
                         },
                         enabled = !state.refreshing
                     ) {
@@ -434,7 +434,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
             }
             PullToRefreshBox(
                 isRefreshing = state.refreshing,
-                onRefresh = { viewModel.refresh() },
+                onRefresh = { viewModel.refresh(asked = true) },
                 state = pullState,
                 modifier = Modifier.fillMaxSize()
             ) {

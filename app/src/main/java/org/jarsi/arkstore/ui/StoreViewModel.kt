@@ -160,6 +160,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     // Only touched on the main thread.
     private var refreshAgain = false
+    private var askedAgain = false
     private var lastResumeRefresh = 0L
 
     private val policy = MutableStateFlow(UpdatePolicy.read(application))
@@ -258,7 +259,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             if (failure == null) {
                 repository.sources.add(source)
                 onAdded()
-                refresh()
+                refresh(asked = true)
             }
             _sources.update {
                 SourcesUiState(sources = repository.sources.list(), error = failure)
@@ -439,20 +440,27 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Refreshes the catalogue. A request made while a refresh is running is not dropped: the
      * running one may have started before a change it should cover (a newly added source), so
-     * another pass follows it.
+     * another pass follows it. [asked] says the user asked for this check by hand, which
+     * then asks GitHub at once about everything, see [CatalogRepository.refresh]; a check
+     * the store makes on its own spares the requests GitHub allows.
      */
-    fun refresh() {
+    fun refresh(asked: Boolean = false) {
         if (refreshing.value) {
             refreshAgain = true
+            askedAgain = askedAgain || asked
             return
         }
         refreshing.value = true
         viewModelScope.launch {
             try {
+                var first = asked
                 do {
                     refreshAgain = false
+                    val byHand = first || askedAgain
+                    first = false
+                    askedAgain = false
                     try {
-                        repository.refresh(foreground = true)
+                        repository.refresh(foreground = true, asked = byHand)
                         error.value = null
                     } catch (_: RateLimitedException) {
                         error.value = LoadError.RATE_LIMIT

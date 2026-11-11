@@ -592,6 +592,87 @@ class CatalogRulesTest {
         assertTrue(CatalogRules.accountsToAsk(listOf("owner/app"), listOf("Owner")).isEmpty())
     }
 
+    private val minute = 60 * 1000L
+
+    @Test
+    fun accountOfAnInstalledAppIsAskedAboutOnceInHalfAnHour() {
+        val now = 100 * minute
+        val askedAt = mapOf("owner" to now - 29 * minute, "dev" to now - 30 * minute)
+        // "Owner" was asked a moment ago, under whatever case; "Dev" half an hour ago, and
+        // "New" never.
+        assertEquals(
+            listOf("New", "Dev"),
+            CatalogRules.accountsDue(listOf("Owner", "Dev", "New"), askedAt, now, atOnce = false)
+        )
+    }
+
+    @Test
+    fun accountsNotAskedForTheLongestAreAskedFirst() {
+        val now = 100 * minute
+        val askedAt = mapOf("a" to now - 40 * minute, "b" to now - 90 * minute, "c" to now - 60 * minute)
+        assertEquals(listOf("b", "c", "a"), CatalogRules.accountsDue(listOf("a", "b", "c"), askedAt, now, atOnce = false))
+    }
+
+    @Test
+    fun everyAccountIsAskedAboutWhenTheCheckIsAskedFor() {
+        val now = 100 * minute
+        val askedAt = mapOf("owner" to now - minute)
+        assertEquals(listOf("Owner"), CatalogRules.accountsDue(listOf("Owner"), askedAt, now, atOnce = true))
+    }
+
+    @Test
+    fun manyAccountsAreAskedAboutLessOften() {
+        // Each account is a request, and a network gets sixty an hour: forty accounts asked
+        // every half hour would be eighty.
+        val now = 100 * minute
+        val accounts = List(40) { "owner$it" }
+        val askedAt = accounts.associateWith { now - 45 * minute }
+        assertTrue(CatalogRules.accountsDue(accounts, askedAt, now, atOnce = false).isEmpty())
+        assertEquals(40, CatalogRules.accountsDue(accounts, accounts.associateWith { now - 60 * minute }, now, atOnce = false).size)
+    }
+
+    @Test
+    fun accountAskedAtATimeThatHasNotComeIsAskedAgain() {
+        // The clock was set back since: what it said then tells nothing now.
+        val now = 100 * minute
+        assertEquals(listOf("owner"), CatalogRules.accountsDue(listOf("owner"), mapOf("owner" to now + minute), now, atOnce = false))
+    }
+
+    @Test
+    fun quotaIsReadFromWhatGitHubSaysOfItsApi() {
+        assertEquals(CatalogRules.Quota(41, 1_794_000_000_000), CatalogRules.quotaOf("core", "41", "1794000000"))
+        // Searching has an allowance of its own, which says nothing of the rest.
+        assertNull(CatalogRules.quotaOf("search", "9", "1794000000"))
+        assertNull(CatalogRules.quotaOf(null, "41", "1794000000"))
+        assertNull(CatalogRules.quotaOf("core", null, "1794000000"))
+        assertNull(CatalogRules.quotaOf("core", "many", "1794000000"))
+        assertNull(CatalogRules.quotaOf("core", "41", null))
+    }
+
+    @Test
+    fun nothingIsAskedOfGitHubWhileItsQuotaIsSpent() {
+        val now = 100 * minute
+        assertTrue(CatalogRules.quotaSpent(CatalogRules.Quota(0, now + 20 * minute), now))
+        assertFalse(CatalogRules.quotaSpent(CatalogRules.Quota(1, now + 20 * minute), now))
+        // The hour is out, and the count has started over.
+        assertFalse(CatalogRules.quotaSpent(CatalogRules.Quota(0, now), now))
+        // Nothing is known before GitHub has answered once.
+        assertFalse(CatalogRules.quotaSpent(null, now))
+        // A count that starts over later than an hour from now was read against another
+        // clock, and holds nothing back.
+        assertFalse(CatalogRules.quotaSpent(CatalogRules.Quota(0, now + 61 * minute), now))
+    }
+
+    @Test
+    fun whatCouldBeDoneWithoutIsNotAskedWhenLittleOfTheQuotaIsLeft() {
+        val now = 100 * minute
+        assertTrue(CatalogRules.quotaToSpare(CatalogRules.Quota(21, now + 20 * minute), now))
+        assertFalse(CatalogRules.quotaToSpare(CatalogRules.Quota(20, now + 20 * minute), now))
+        assertFalse(CatalogRules.quotaToSpare(CatalogRules.Quota(0, now + 20 * minute), now))
+        assertTrue(CatalogRules.quotaToSpare(CatalogRules.Quota(3, now - minute), now))
+        assertTrue(CatalogRules.quotaToSpare(null, now))
+    }
+
     @Test
     fun repositoryPushedToSinceTheIndexSawItIsAskedAbout() {
         assertTrue(CatalogRules.pushedSince("2026-10-08T16:00:00Z", "2026-10-08T18:14:46Z"))

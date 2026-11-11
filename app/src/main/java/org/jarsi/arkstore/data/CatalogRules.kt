@@ -432,6 +432,68 @@ internal object CatalogRules {
             .associateBy { it.first().substringBefore('/') }
 
     /**
+     * The accounts among [accounts] to ask GitHub about at [now], those not asked for the
+     * longest first; see [accountsToAsk]. [askedAt] says when each was last asked, by its
+     * name in lower case. An answer lasts half an hour, which is how often the index is
+     * rebuilt, and longer the more accounts there are: each costs a request whenever the
+     * store is opened, and a network gets sixty an hour. With [atOnce] every account is
+     * asked: the user asked for the check, or a token lifts the limit.
+     */
+    fun accountsDue(accounts: Collection<String>, askedAt: Map<String, Long>, now: Long, atOnce: Boolean): List<String> {
+        if (atOnce) return accounts.toList()
+        val lasts = maxOf(ACCOUNT_ANSWER_MS, accounts.size * MS_PER_ACCOUNT)
+        return accounts
+            .filter { account -> askedAt[account.lowercase()].let { it == null || now - it !in 0 until lasts } }
+            .sortedBy { askedAt[it.lowercase()] ?: 0 }
+    }
+
+    private const val ACCOUNT_ANSWER_MS = 30 * 60 * 1000L
+    private const val MS_PER_ACCOUNT = 90 * 1000L
+
+    /**
+     * What GitHub last said of the requests it allows: how many are [remaining] until
+     * [resetAt], in milliseconds since the epoch, when the count starts over.
+     */
+    data class Quota(val remaining: Int, val resetAt: Long)
+
+    /**
+     * The quota an answer of GitHub's API tells in its headers: the [resource] it counts,
+     * how many requests are [remaining] and when, in seconds since the epoch, the count is
+     * [reset]. Null when the answer does not tell, or tells of another allowance than that
+     * of the API at large, as searching has one of its own.
+     */
+    fun quotaOf(resource: String?, remaining: String?, reset: String?): Quota? {
+        if (resource != "core") return null
+        val left = remaining?.toIntOrNull() ?: return null
+        val at = reset?.toLongOrNull() ?: return null
+        return Quota(left, at * 1000)
+    }
+
+    /**
+     * Whether GitHub is known to refuse a request made at [now]: every one, until the count
+     * starts over, so that none is sent only to be refused.
+     */
+    fun quotaSpent(quota: Quota?, now: Long): Boolean =
+        quota != null && holds(quota, now) && quota.remaining <= 0
+
+    /**
+     * Whether a request that could be done without may be made at [now]: not when few are
+     * left, which are kept for what the user asks for by name.
+     */
+    fun quotaToSpare(quota: Quota?, now: Long): Boolean =
+        quota == null || !holds(quota, now) || quota.remaining > QUOTA_RESERVE
+
+    /**
+     * Whether [quota] still says anything at [now]: until its count starts over. The count
+     * runs for an hour, so one that starts over later than that was read against another
+     * clock than this.
+     */
+    private fun holds(quota: Quota, now: Long): Boolean = quota.resetAt - now in 1..QUOTA_HOUR_MS
+
+    private const val QUOTA_RESERVE = 20
+    private const val QUOTA_HOUR_MS = 60 * 60 * 1000L
+
+    /**
      * Whether a repository has been pushed to, at [pushedAt], since the index saw it at
      * [stamp]; both are GitHub's timestamps, which order as text. An index that does not
      * say is not trusted over GitHub, and GitHub not saying leaves the index to speak.

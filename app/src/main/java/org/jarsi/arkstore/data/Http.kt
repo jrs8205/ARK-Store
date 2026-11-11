@@ -34,10 +34,15 @@ object Http {
     /**
      * Fetches a GitHub API document, with the [token] the user has given, if any. Redirects,
      * as for a renamed repository, are followed by hand, so that the token goes to the API
-     * alone, see [GitHubToken.authorization].
+     * alone, see [GitHubToken.authorization]. [onQuota] is told what the answer, whether it
+     * is the document or a refusal, says of the requests that are left.
      */
     @Throws(IOException::class)
-    fun getApi(url: String, token: String? = GitHubToken.get()): String {
+    internal fun getApi(
+        url: String,
+        token: String? = GitHubToken.get(),
+        onQuota: ((CatalogRules.Quota) -> Unit)? = null
+    ): String {
         var address = url
         repeat(MAX_REDIRECTS + 1) {
             val connection = open(address).apply {
@@ -48,6 +53,13 @@ object Http {
             }
             try {
                 val code = connection.responseCode
+                if (onQuota != null) {
+                    CatalogRules.quotaOf(
+                        connection.getHeaderField("x-ratelimit-resource"),
+                        connection.getHeaderField("x-ratelimit-remaining"),
+                        connection.getHeaderField("x-ratelimit-reset")
+                    )?.let(onQuota)
+                }
                 if (code == 200) return connection.inputStream.use { it.readBytes().toString(Charsets.UTF_8) }
                 if (code in REDIRECTS) {
                     val location = connection.getHeaderField("Location") ?: throw HttpStatusException(code)

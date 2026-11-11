@@ -161,6 +161,26 @@ class CatalogRepository private constructor(context: Context) {
     private var storeDownloads: Long? = null
     private var storeDownloadsAt = 0L
 
+    /**
+     * What GitHub last said of the requests it allows, or null when it has not said, or is
+     * to be asked whatever it said; see [api]. Kept from one run of the app to the next, as
+     * the hour it counts does not start over with the app.
+     */
+    @Volatile
+    private var quota: CatalogRules.Quota? = preferences.getLong(PREF_QUOTA_RESET, 0).takeIf { it > 0 }
+        ?.let { CatalogRules.Quota(preferences.getInt(PREF_QUOTA_REMAINING, 0), it) }
+
+    /**
+     * When the account of each installed app was last asked about, by its name in lower
+     * case; see [CatalogRules.accountsDue]. Only touched within a refresh.
+     */
+    private var accountsAsked: Map<String, Long> = try {
+        JSONObject(preferences.getString(PREF_ACCOUNTS_ASKED, null) ?: "{}")
+            .let { json -> json.keys().asSequence().associateWith { json.getLong(it) } }
+    } catch (_: JSONException) {
+        emptyMap()
+    }
+
     private val _catalog = MutableStateFlow(Catalog.EMPTY)
     val catalog: StateFlow<Catalog> = _catalog.asStateFlow()
 
@@ -208,11 +228,22 @@ class CatalogRepository private constructor(context: Context) {
      * A source or repository that cannot be reached keeps its previous state. The rest of the
      * catalogue is still updated and published, but the call then throws and the time of the
      * last successful check stays where it was, so callers can tell the user and try again.
+     *
+     * GitHub allows a network sixty requests an hour without a token. Once it has said they
+     * are used up, nothing more is asked of it until the hour is out, see [api]; and the
+     * accounts of the installed apps, which the index tells of as well, are asked about only
+     * now and then, and not with the last of the requests, see [CatalogRules.accountsDue].
+     * With [asked], a check the user asked for by hand, GitHub is asked whatever it said
+     * last, and about every account: the limit is the network's, and the device may be on
+     * another by now.
      */
     @Throws(IOException::class)
-    suspend fun refresh(foreground: Boolean): Catalog = mutex.withLock {
+    suspend fun refresh(foreground: Boolean, asked: Boolean = false): Catalog = mutex.withLock {
         withContext(Dispatchers.IO) {
             val now = System.currentTimeMillis()
+            // A token has an allowance of its own, large enough to ask every time.
+            val atOnce = asked || GitHubToken.get() != null
+            if (atOnce) quota = null
             val limiter = Semaphore(PARALLEL_REQUESTS)
             val failure = AtomicReference<IOException?>(null)
             // A quota error explains every later failure, so it is the one worth reporting.
@@ -276,12 +307,23 @@ class CatalogRepository private constructor(context: Context) {
             // for, so the account of each is asked directly, as a source is, about the
             // repositories pushed to since the index was built; only those of the installed
             // apps are looked up. A device with none installed asks nothing, as before.
+            //
+            // The index tells of the same apps, half an hour later at most, so these are
+            // requests that could be done without. An account is asked about again only once
+            // its answer has grown old, the requests that are left when few are go to what
+            // the user asked for by name, and a quota used up over these is no failure to
+            // tell the user of: it costs the apps only the wait for the next index.
+            val byAccountOnly = HashSet<String>()
             if (indexed != null) {
                 val packages = InstalledApps.snapshot(appContext)
                 val installed = indexed.filter { (_, entry) ->
                     (entry.app ?: entry.beta)?.packageName in packages
                 }.keys
-                for ((owner, names) in CatalogRules.accountsToAsk(installed, sources.list())) {
+                val accounts = CatalogRules.accountsToAsk(installed, sources.list())
+                val answered = HashMap<String, Long>()
+                for (owner in CatalogRules.accountsDue(accounts.keys, accountsAsked, now, atOnce)) {
+                    if (!atOnce && !CatalogRules.quotaToSpare(quota, System.currentTimeMillis())) break
+                    val names = accounts.getValue(owner)
                     // The index's spelling of each name is kept, whatever case GitHub gives
                     // it, so that the app has one name throughout: in the catalogue, on the
                     // screen and in the install under way. GitHub answers to either spelling.
@@ -293,16 +335,18 @@ class CatalogRepository private constructor(context: Context) {
                             val known = indexed.getValue(fullName)
                             if (!CatalogRules.pushedSince(known.stamp, repo.optString("pushed_at"))) continue
                             repo.put("full_name", fullName)
-                            repos.putIfAbsent(fullName, repo)
+                            if (repos.putIfAbsent(fullName, repo) == null) byAccountOnly += fullName
                         }
+                        answered[owner.lowercase()] = now
                     } catch (e: IOException) {
                         // What was read of these apps before stays, as for a source: a release
                         // found since the index was built would otherwise give way to the index.
                         Log.w(TAG, "Account $owner of installed apps unavailable", e)
-                        record(e)
+                        if (e !is RateLimitedException) record(e)
                         names.forEach { name -> entries[name]?.let { updated[name] = it } }
                     }
                 }
+                rememberAsked(accounts.keys, answered)
             }
 
             // The index speaks for every repository that is not asked about directly, unless
@@ -370,7 +414,8 @@ class CatalogRepository private constructor(context: Context) {
                             fullName to Entry(stamp, now, app, beta, isDiscovered)
                         } catch (e: IOException) {
                             Log.w(TAG, "Release lookup failed for $fullName", e)
-                            record(e)
+                            // An app asked about for its account alone is in the index too.
+                            if (!(e is RateLimitedException && fullName in byAccountOnly)) record(e)
                             // The newer of what was known before and what the index says, so
                             // that an app is neither dropped for a lookup that failed, when
                             // the index has it, nor put back to a release older than one
@@ -392,6 +437,7 @@ class CatalogRepository private constructor(context: Context) {
             updated += forgeEntries(now)
 
             refreshStoreDownloads(updated, now)
+            rememberQuota()
             val error = failure.get()
             val result = publish(updated, if (error == null) now else _catalog.value.checkedAt)
             save(result.checkedAt)
@@ -406,11 +452,50 @@ class CatalogRepository private constructor(context: Context) {
      */
     @Throws(IOException::class)
     suspend fun verifySource(source: String): Boolean = withContext(Dispatchers.IO) {
+        // Asked whatever GitHub said last of its quota: the user is waiting for the answer.
         if (SourceStore.isRepository(source)) {
-            isListable(JSONObject(Http.getApi("$API/repos/$source")))
+            isListable(JSONObject(Http.getApi("$API/repos/$source", onQuota = { quota = it })))
         } else {
-            Http.getApi("$API/users/$source")
+            Http.getApi("$API/users/$source", onQuota = { quota = it })
             true
+        }
+    }
+
+    /**
+     * Asks GitHub's API on behalf of a refresh, and keeps what the answer says of the quota.
+     * While GitHub is known to refuse every request, none is sent: the answer would be the
+     * same refusal, and a client that goes on asking is one GitHub may shut out for longer.
+     */
+    @Throws(IOException::class)
+    private fun api(url: String): String {
+        val known = quota
+        if (known != null && CatalogRules.quotaSpent(known, System.currentTimeMillis())) {
+            throw RateLimitedException(known.resetAt)
+        }
+        return Http.getApi(url, onQuota = { quota = it })
+    }
+
+    /**
+     * Keeps when the accounts [answered] now, by their names in lower case, were asked, for
+     * those of [accounts], the ones there are to ask about; the rest are forgotten.
+     */
+    private fun rememberAsked(accounts: Collection<String>, answered: Map<String, Long>) {
+        val current = accounts.mapTo(HashSet()) { it.lowercase() }
+        val asked = accountsAsked.filterKeys { it in current } + answered
+        if (asked == accountsAsked) return
+        accountsAsked = asked
+        preferences.edit { putString(PREF_ACCOUNTS_ASKED, JSONObject(asked).toString()) }
+    }
+
+    /** Keeps what GitHub last said of its quota for the next run of the app. */
+    private fun rememberQuota() {
+        val known = quota
+        val reset = known?.resetAt ?: 0
+        val remaining = known?.remaining ?: 0
+        if (preferences.getLong(PREF_QUOTA_RESET, 0) == reset && preferences.getInt(PREF_QUOTA_REMAINING, 0) == remaining) return
+        preferences.edit {
+            putLong(PREF_QUOTA_RESET, reset)
+            putInt(PREF_QUOTA_REMAINING, remaining)
         }
     }
 
@@ -442,7 +527,7 @@ class CatalogRepository private constructor(context: Context) {
         if (now - storeDownloadsAt < MAX_AGE_BACKGROUND_MS) return
         try {
             val releases = JSONArray(
-                Http.getApi("$API/repos/${BuildConfig.STORE_REPO}/releases?per_page=$PAGE_SIZE")
+                api("$API/repos/${BuildConfig.STORE_REPO}/releases?per_page=$PAGE_SIZE")
             )
             var total = 0L
             for (i in 0 until releases.length()) {
@@ -862,7 +947,7 @@ class CatalogRepository private constructor(context: Context) {
         val repos = ArrayList<JSONObject>()
         for (page in 1..MAX_DISCOVERY_PAGES) {
             val result = JSONObject(
-                Http.getApi(
+                api(
                     "$API/search/repositories?q=topic:${BuildConfig.STORE_TOPIC}+archived:false" +
                         "&sort=updated&per_page=$PAGE_SIZE&page=$page"
                 )
@@ -877,12 +962,12 @@ class CatalogRepository private constructor(context: Context) {
 
     private fun listRepositories(source: String): List<JSONObject> {
         if (SourceStore.isRepository(source)) {
-            return listOf(JSONObject(Http.getApi("$API/repos/$source"))).filter(::isListable)
+            return listOf(JSONObject(api("$API/repos/$source"))).filter(::isListable)
         }
         val repos = ArrayList<JSONObject>()
         for (page in 1..MAX_REPO_PAGES) {
             val batch = JSONArray(
-                Http.getApi("$API/users/$source/repos?per_page=$PAGE_SIZE&type=owner&page=$page")
+                api("$API/users/$source/repos?per_page=$PAGE_SIZE&type=owner&page=$page")
             )
             for (i in 0 until batch.length()) repos += batch.getJSONObject(i)
             if (batch.length() < PAGE_SIZE) break
@@ -899,7 +984,7 @@ class CatalogRepository private constructor(context: Context) {
         val repos = ArrayList<JSONObject>()
         for (page in 1..MAX_REPO_PAGES) {
             val batch = JSONArray(
-                Http.getApi(
+                api(
                     "$API/users/$source/repos?per_page=$PAGE_SIZE&type=owner&sort=pushed&direction=desc&page=$page"
                 )
             )
@@ -946,7 +1031,7 @@ class CatalogRepository private constructor(context: Context) {
         auto: Boolean
     ): Pair<StoreApp?, StoreApp?> {
         val fullName = repo.getString("full_name")
-        val page = JSONArray(Http.getApi("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
+        val page = JSONArray(api("$API/repos/$fullName/releases?per_page=$PAGE_SIZE"))
             .let { array -> (0 until array.length()).map { array.getJSONObject(it) } }
         val releases = page.filter { !it.optBoolean("draft") }
 
@@ -1025,7 +1110,7 @@ class CatalogRepository private constructor(context: Context) {
                 null
             } else {
                 try {
-                    JSONObject(Http.getApi("$API/repos/$fullName/releases/latest"))
+                    JSONObject(api("$API/repos/$fullName/releases/latest"))
                 } catch (e: HttpStatusException) {
                     if (e.code == 404) null else throw e
                 }
@@ -1067,7 +1152,7 @@ class CatalogRepository private constructor(context: Context) {
             // until its next push.
             val folder = Uri.encode("$branch:${FastlaneMetadata.FOLDER.trimEnd('/')}", "/:")
             val tree = try {
-                JSONObject(Http.getApi("$API/repos/$fullName/git/trees/$folder?recursive=1"))
+                JSONObject(api("$API/repos/$fullName/git/trees/$folder?recursive=1"))
             } catch (e: HttpStatusException) {
                 if (e.code == 404) return emptyMap<String, AppMetadata>() to mark else throw e
             }
@@ -1255,6 +1340,9 @@ class CatalogRepository private constructor(context: Context) {
         private const val PREF_CATALOGUE = "include_"
         private const val PREF_CATALOGUE_ETAG = "etag_"
         private const val PREF_FORGE_ETAG = "forge_etag"
+        private const val PREF_QUOTA_REMAINING = "quota_remaining"
+        private const val PREF_QUOTA_RESET = "quota_reset"
+        private const val PREF_ACCOUNTS_ASKED = "accounts_asked"
 
         /** The other catalogues the store can show, and where the list of each is. */
         private val CATALOGUES = mapOf(

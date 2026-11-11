@@ -134,8 +134,10 @@ following a developer who has not added it.
   F-Droid. The list itself comes from the store's index. GitHub is asked directly only about
   the accounts of the apps installed from the store, for releases newer than the index, and
   about the sources you add; a fresh install asks it for nothing. GitHub allows 60 such
-  requests an hour per network without a token. A GitHub token given in the settings lifts
-  that limit; it stays on the device, outside backups, and goes to GitHub alone.
+  requests an hour per network without a token, so an account is asked about at most every
+  half hour unless you refresh by hand, and once the requests are used up the store waits
+  for the hour to pass and shows what the index says. A GitHub token given in the settings
+  lifts that limit; it stays on the device, outside backups, and goes to GitHub alone.
 - The sources, bookmarks and settings can be exported to a file and imported on another
   device. The apps installed from outside Google Play can be backed up as their APK files to
   a folder or a zip file, and restored from either: with root they are installed back, and
