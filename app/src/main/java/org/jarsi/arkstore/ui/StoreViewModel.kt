@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
+import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.Backup
@@ -34,6 +35,7 @@ import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.ApkFolder
+import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.Root
 import org.jarsi.arkstore.install.RootCheck
@@ -66,6 +68,29 @@ data class AppRow(
     val betaInstalled: Boolean
         get() = newerInstalled &&
             (installed!!.beta || (betaVersion != null && installed.versionCode <= betaVersion))
+}
+
+/**
+ * The package this row offers to uninstall, or null when it offers none: nothing is installed,
+ * or what is installed under the package name is another app altogether, whose removal is not
+ * this row's to offer, least of all under this app's name.
+ */
+val AppRow.removable: String?
+    get() = app.packageName?.takeIf { installed != null && status != AppStatus.OTHER_APP }
+
+/**
+ * The text that tells why an install on a row of [status] failed, for [reason]. A key that does
+ * not match is, on the row of an app whose package name another app holds, said as that: the
+ * advice to uninstall first would be given of the other app.
+ */
+internal fun failureText(reason: FailReason, status: AppStatus): Int = when (reason) {
+    FailReason.DOWNLOAD -> R.string.fail_download
+    FailReason.INVALID_APK -> R.string.fail_invalid_apk
+    FailReason.SIGNATURE_MISMATCH ->
+        if (status == AppStatus.OTHER_APP) R.string.other_app_note else R.string.fail_signature
+    FailReason.INSTALL -> R.string.fail_install
+    FailReason.SAVE -> R.string.fail_save
+    FailReason.NO_ROOT -> R.string.fail_no_root
 }
 
 enum class LoadError { NETWORK, RATE_LIMIT, TOKEN }

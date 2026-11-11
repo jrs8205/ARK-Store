@@ -949,7 +949,9 @@ private fun AppCard(
                     stringResource(R.string.newer_android_note, requirement(app).orEmpty())
                 row.status == AppStatus.OTHER_SIGNER -> stringResource(R.string.other_signer_note)
                 row.status == AppStatus.OTHER_BUILD -> stringResource(R.string.other_build_note)
-                row.status == AppStatus.OTHER_APP -> stringResource(R.string.other_app_note)
+                // Said by the failure below instead, when an attempt has just come to it.
+                row.status == AppStatus.OTHER_APP ->
+                    if (install is InstallState.Failed) null else stringResource(R.string.other_app_note)
                 row.betaInstalled -> stringResource(R.string.newer_installed_note)
                 row.newerInstalled -> stringResource(R.string.newer_version_note)
                 else -> null
@@ -969,7 +971,7 @@ private fun AppCard(
             }
 
             if (install is InstallState.Failed) {
-                FailureRow(install, app.packageName, app.title, onRetry = startInstall, onDismiss = onDismissFailure)
+                FailureRow(install, row.status, row.removable, app.title, onRetry = startInstall, onDismiss = onDismissFailure)
             }
         }
     }
@@ -978,23 +980,16 @@ private fun AppCard(
 @Composable
 private fun FailureRow(
     failure: InstallState.Failed,
-    packageName: String?,
+    status: AppStatus,
+    /** The package to offer to uninstall when its key did not match; see [removable]. */
+    removable: String?,
     title: String,
     onRetry: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Column(modifier = Modifier.padding(top = 12.dp)) {
         Text(
-            text = stringResource(
-                when (failure.reason) {
-                    FailReason.DOWNLOAD -> R.string.fail_download
-                    FailReason.INVALID_APK -> R.string.fail_invalid_apk
-                    FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
-                    FailReason.INSTALL -> R.string.fail_install
-                    FailReason.SAVE -> R.string.fail_save
-                    FailReason.NO_ROOT -> R.string.fail_no_root
-                }
-            ),
+            text = stringResource(failureText(failure.reason, status)),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
@@ -1007,8 +1002,8 @@ private fun FailureRow(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (failure.reason == FailReason.SIGNATURE_MISMATCH && packageName != null) {
-                UninstallButton(packageName, title)
+            if (failure.reason == FailReason.SIGNATURE_MISMATCH && removable != null) {
+                UninstallButton(removable, title)
             }
             TextButton(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_dismiss)) }
@@ -1302,9 +1297,7 @@ private fun DetailsSheet(
                 Text(stringResource(if (bookmarked) R.string.action_unbookmark else R.string.action_bookmark))
             }
             // Not for another app under this name: that would be the other app's removal.
-            if (row.installed != null && app.packageName != null && row.status != AppStatus.OTHER_APP) {
-                UninstallButton(app.packageName, app.title)
-            }
+            row.removable?.let { UninstallButton(it, app.title) }
         }
 
         if (row.status == AppStatus.OTHER_APP && row.installed != null) {

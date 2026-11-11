@@ -1,8 +1,10 @@
 package org.jarsi.arkstore.ui
 
+import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.testApp
+import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.SavedApk
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -101,6 +103,27 @@ class AppRowTest {
         assertEquals(record, withStatus(AppStatus.UPDATE_AVAILABLE, installed = 3).downloaded(saved))
         // Download all does not take the row whose file is saved, whichever finished first.
         assertEquals(emptyList<AppRow>(), toDownload(listOf(mirror), saved, direct = false))
+    }
+
+    @Test
+    fun rowOffersToRemoveOnlyTheAppItIsOf() {
+        assertEquals("org.example.app", withStatus(AppStatus.UP_TO_DATE, installed = 5).removable)
+        assertEquals("org.example.app", withStatus(AppStatus.OTHER_SIGNER).removable)
+        // Another app altogether under the same package name: removing it is not this row's
+        // to offer, least of all under this app's name.
+        assertNull(withStatus(AppStatus.OTHER_APP).removable)
+        assertNull(withStatus(AppStatus.NOT_INSTALLED, installed = null).removable)
+        val unread = withStatus(AppStatus.UP_TO_DATE).let { it.copy(app = it.app.copy(packageName = null)) }
+        assertNull(unread.removable)
+    }
+
+    @Test
+    fun keyThatDoesNotMatchAnotherAppIsNotToldAsAReasonToRemoveIt() {
+        assertEquals(R.string.fail_signature, failureText(FailReason.SIGNATURE_MISMATCH, AppStatus.OTHER_SIGNER))
+        assertEquals(R.string.fail_signature, failureText(FailReason.SIGNATURE_MISMATCH, AppStatus.UPDATE_AVAILABLE))
+        // "Uninstall it first" would be said of the other app.
+        assertEquals(R.string.other_app_note, failureText(FailReason.SIGNATURE_MISMATCH, AppStatus.OTHER_APP))
+        assertEquals(R.string.fail_download, failureText(FailReason.DOWNLOAD, AppStatus.OTHER_APP))
     }
 
     @Test
