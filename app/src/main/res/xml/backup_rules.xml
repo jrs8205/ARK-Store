@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Backups before Android 12. The GitHub token stays on the device it was given to. -->
+<!-- Backups before Android 12. The GitHub token stays on the device it was given to, and so
+     does what is true of this device alone: whether root was given, and where the files saved
+     for the user are. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="github.xml" />
+    <exclude domain="sharedpref" path="root.xml" />
+    <exclude domain="sharedpref" path="saved_apks.xml" />
 </full-backup-content>
