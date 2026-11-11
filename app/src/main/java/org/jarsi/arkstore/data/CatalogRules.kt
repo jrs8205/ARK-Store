@@ -365,6 +365,32 @@ internal object CatalogRules {
     }
 
     /**
+     * [app], a release just read straight from GitHub, with what only the index reads of a
+     * file: the key it is signed with and its icon, taken from what was listed [before] of
+     * the same repository. The same file, by its asset id, is as the index described it,
+     * whichever of the entries says so: the store's own earlier reading of it tells neither.
+     * A newer file is taken to be signed, and drawn, as the release before it was, of the
+     * same package and preferably of the same kind, since an app keeps its key from one
+     * version to the next; the downloaded file is compared with the installed app all the
+     * same before anything is done with it.
+     *
+     * Without the key, the row of an installed app would go to a catalogue that is known to
+     * sign the same way, however far behind the developer's release it is; see [merged].
+     */
+    fun withWhatTheIndexRead(app: StoreApp, before: List<StoreApp>): StoreApp {
+        fun <T : Any> known(of: (StoreApp) -> T?): T? =
+            before.firstNotNullOfOrNull { entry -> of(entry).takeIf { entry.assetId == app.assetId } }
+                ?: app.packageName?.let { packageName ->
+                    before.filter { it.packageName == packageName && of(it) != null }
+                        .minByOrNull { it.prerelease != app.prerelease }
+                        ?.let(of)
+                }
+        val signer = app.signer ?: known { it.signer }
+        val icon = app.icon ?: known { it.icon }
+        return if (signer == app.signer && icon == app.icon) app else app.copy(signer = signer, icon = icon)
+    }
+
+    /**
      * What was known of the file [assetId] among what was listed [before], or null when none
      * of it has read the file's manifest. The store's own copy from before the lowest Android
      * was read and the index entry of the same file may both be there: the one that knows the

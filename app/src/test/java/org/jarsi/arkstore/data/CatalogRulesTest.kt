@@ -158,6 +158,54 @@ class CatalogRulesTest {
         assertNull(CatalogRules.inheritedLabel(before, null, prerelease = false))
     }
 
+    @Test
+    fun fileReadFromGitHubIsSignedAsTheIndexSaidItIs() {
+        val icon = AppIcon("https://example.invalid/icon.png", null, null)
+        // The store's own earlier reading of the file, which tells no key, and the index
+        // entry of the same file, which does.
+        val own = app(versionCode = 3).copy(assetId = 7, minSdk = 26)
+        val indexed = app(versionCode = 3).copy(assetId = 7, minSdk = 26, signer = "dev", icon = icon)
+        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 3).copy(assetId = 7), listOf(own, indexed))
+        assertEquals("dev", read.signer)
+        assertEquals(icon, read.icon)
+    }
+
+    @Test
+    fun newerFileReadFromGitHubIsTakenToBeSignedAsTheReleaseBeforeIt() {
+        val icon = AppIcon("https://example.invalid/icon.png", null, null)
+        val stable = app(versionCode = 3).copy(assetId = 7, signer = "dev", icon = icon)
+        val beta = app(versionCode = 4, prerelease = true).copy(assetId = 8, signer = "beta")
+        val before = listOf(stable, beta)
+
+        val next = CatalogRules.withWhatTheIndexRead(app(versionCode = 5).copy(assetId = 9), before)
+        assertEquals("dev", next.signer)
+        assertEquals(icon, next.icon)
+        // A beta may be signed with a key of its own; its own kind of release goes first.
+        val nextBeta = CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), before)
+        assertEquals("beta", nextBeta.signer)
+        // The other kind of release will do when its own tells nothing.
+        assertEquals(icon, nextBeta.icon)
+        assertEquals(
+            "dev",
+            CatalogRules.withWhatTheIndexRead(app(versionCode = 6, prerelease = true).copy(assetId = 10), listOf(stable)).signer
+        )
+    }
+
+    @Test
+    fun fileReadFromGitHubTellsNoKeyWhenNothingListedBeforeDoes() {
+        val other = app(packageName = "org.another", versionCode = 3).copy(assetId = 7, signer = "dev")
+        val read = app(versionCode = 5).copy(assetId = 9)
+        // A repository can release several apps, each signed its own way.
+        assertNull(CatalogRules.withWhatTheIndexRead(read, listOf(other)).signer)
+        assertNull(CatalogRules.withWhatTheIndexRead(read, emptyList()).signer)
+        // A file whose manifest could not be read is not known to be any of them.
+        val unread = read.copy(packageName = null)
+        assertNull(CatalogRules.withWhatTheIndexRead(unread, listOf(app().copy(assetId = 7, signer = "dev"))).signer)
+        // What the reading itself knows stays.
+        val known = read.copy(signer = "own")
+        assertEquals("own", CatalogRules.withWhatTheIndexRead(known, listOf(app().copy(assetId = 9, signer = "dev"))).signer)
+    }
+
     private fun catalogue(source: String, signer: String?, packageName: String = "org.example") =
         app(fullName = "$source:$packageName", packageName = packageName)
             .copy(source = source, signer = signer)
@@ -230,6 +278,19 @@ class CatalogRulesTest {
         // A key nobody is known to use: the repository, whose key is not known, may yet match.
         assertSame(found, merged(all, installed = setOf("x")).single().app)
         assertSame(izzy, merged(listOf(izzy, fdroid), installed = setOf("x")).single().app)
+    }
+
+    @Test
+    fun releaseNewerThanTheIndexGoesBeforeACatalogueThatBuildsWithTheSameKey() {
+        // The developer's release, read from GitHub after a push the index has not seen, and
+        // F-Droid's own build of an older version, reproduced with the developer's key.
+        val indexed = app(versionCode = 71).copy(assetId = 71, signer = "dev")
+        val fdroid = catalogue(StoreApp.SOURCE_FDROID, "dev").copy(versionCode = 69)
+        val read = CatalogRules.withWhatTheIndexRead(app(versionCode = 72).copy(assetId = 72), listOf(indexed))
+
+        val row = merged(listOf(read, fdroid), installed = setOf("dev")).single()
+        assertSame(read, row.app)
+        assertEquals(listOf(StoreApp.SOURCE_FDROID), row.alsoFrom)
     }
 
     @Test

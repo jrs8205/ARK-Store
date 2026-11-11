@@ -984,7 +984,7 @@ class CatalogRepository private constructor(context: Context) {
                     known
                 }
             }
-            return StoreApp(
+            val read = StoreApp(
                 fullName = fullName,
                 description = repo.optStringOrEmpty("description"),
                 stars = repo.optInt("stargazers_count"),
@@ -1014,6 +1014,8 @@ class CatalogRepository private constructor(context: Context) {
                     ?: CatalogRules.inheritedLabel(previous, info?.packageName, prerelease),
                 allDownloads = downloads
             )
+            // Nor does anything but the index read how a file is signed, or its icon.
+            return CatalogRules.withWhatTheIndexRead(read, previous)
         }
 
         // Releases come newest first; the first full release is what GitHub calls "latest".
