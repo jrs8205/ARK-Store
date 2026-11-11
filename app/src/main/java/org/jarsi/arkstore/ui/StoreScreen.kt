@@ -850,7 +850,9 @@ private fun AppCard(
                 .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                RowIcon(app.title, app.packageName, row.installed != null, app.icon)
+                // What is installed under the name of another app altogether is not this
+                // app's icon to show.
+                RowIcon(app.title, app.packageName, row.installed != null && !row.installed.otherApp, app.icon)
                 Spacer(Modifier.width(16.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -920,7 +922,12 @@ private fun AppCard(
                                 StoreOutlinedButton(
                                     onClick = {
                                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                                        context.startActivity(launch)
+                                        // Asked for again: the app may open with another
+                                        // activity than when the row was drawn, and one that
+                                        // is no longer there must not take the store with it.
+                                        val now = app.packageName
+                                            ?.let { context.packageManager.getLaunchIntentForPackage(it) } ?: launch
+                                        runCatching { context.startActivity(now) }
                                     }
                                 ) {
                                     Text(stringResource(R.string.action_open))

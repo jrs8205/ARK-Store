@@ -60,6 +60,10 @@ class AppRowTest {
         assertEquals(record, withStatus(AppStatus.NOT_INSTALLED, installed = null).downloaded(saved))
         assertNull(withStatus(AppStatus.UP_TO_DATE, installed = 5).downloaded(saved))
         assertNull(withStatus(AppStatus.OTHER_SIGNER).downloaded(saved))
+        // Another project's build as far as was known, tried from its details all the same:
+        // the file passed the key check and was saved, and the row says so, as its status
+        // stays what it was until the index tells the key.
+        assertEquals(record, withStatus(AppStatus.OTHER_BUILD).downloaded(saved))
         assertNull(withStatus(AppStatus.UPDATE_AVAILABLE).downloaded(emptyMap()))
     }
 

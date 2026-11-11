@@ -557,7 +557,8 @@ object InstallManager {
             notifyInstalledChanged()
             return
         }
-        InstalledApps.forgetConflict(appContext, app, archive.packageName)
+        // The row stood as one of another key: it is looked at again, whatever becomes of the file.
+        if (InstalledApps.forgetConflict(appContext, app, archive.packageName)) notifyInstalledChanged()
 
         // Installing the store itself through root ends this process, so it waits for every
         // other install to be done with, and for a backup or a restore under way, however

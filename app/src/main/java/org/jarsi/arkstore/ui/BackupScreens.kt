@@ -192,7 +192,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                             viewModel.startBackup(settingsJson())
                         } else {
                             saveWhenChosen = true
-                            noPicker = !launch { folderPicker.launch(null) }
+                            noPicker = !picking { folderPicker.launch(null) }
                         }
                     },
                     enabled = canStart,
@@ -203,7 +203,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                 StoreOutlinedButton(
                     onClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                        noPicker = !launch { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
+                        noPicker = !picking { zipPicker.launch(ZipBackup.fileName(LocalDate.now())) }
                     },
                     enabled = canStart,
                     modifier = Modifier.weight(1f)
@@ -229,7 +229,7 @@ internal fun BackupScreen(viewModel: BackupViewModel, settingsJson: () -> String
                 enabled = !running,
                 actions = listOf(
                     stringResource(if (tree == null) R.string.action_choose_folder else R.string.action_change_folder) to {
-                        noPicker = !launch { folderPicker.launch(tree) }
+                        noPicker = !picking { folderPicker.launch(tree) }
                     },
                     stringResource(R.string.backup_ways_question) to { explainWays = !explainWays }
                 )
@@ -287,10 +287,10 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
             enabled = !running,
             actions = listOf(
                 stringResource(if (tree == null || isZip) R.string.action_choose_folder else R.string.action_change_folder) to {
-                    noPicker = !launch { folderPicker.launch(tree) }
+                    noPicker = !picking { folderPicker.launch(tree) }
                 },
                 stringResource(R.string.action_choose_zip) to {
-                    noPicker = !launch { zipPicker.launch(arrayOf("*/*")) }
+                    noPicker = !picking { zipPicker.launch(arrayOf("*/*")) }
                 }
             )
         )
@@ -433,7 +433,7 @@ internal fun RestoreScreen(viewModel: BackupViewModel, onImportSettings: (Uri) -
 }
 
 /** Opens a picker through [open]; false when the device has no app to pick with. */
-private inline fun launch(open: () -> Unit): Boolean = try {
+internal inline fun picking(open: () -> Unit): Boolean = try {
     open()
     true
 } catch (_: ActivityNotFoundException) {

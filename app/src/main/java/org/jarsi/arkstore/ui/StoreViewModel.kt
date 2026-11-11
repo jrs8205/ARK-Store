@@ -104,10 +104,12 @@ enum class TransferError { NOT_A_BACKUP, FAILED }
 /**
  * The file saved for this row's app for the user to install, when the row shows it: an update or
  * a new install, downloaded for this very row's repository, whose file is newer than what is
- * installed, see [SavedApks.shownFor]. Another build of the package has a row of its own.
+ * installed, see [SavedApks.shownFor]. Another build of the package has a row of its own. A
+ * row taken for another project's build shows a file as well: one is saved only once its key
+ * has been seen to match, when the user tried it from the details.
  */
 fun AppRow.downloaded(saved: Map<String, SavedApk>): SavedApk? =
-    if (status != AppStatus.UPDATE_AVAILABLE && status != AppStatus.NOT_INSTALLED) {
+    if (status != AppStatus.UPDATE_AVAILABLE && status != AppStatus.NOT_INSTALLED && status != AppStatus.OTHER_BUILD) {
         null
     } else {
         SavedApks.shownFor(

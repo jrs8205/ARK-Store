@@ -486,6 +486,7 @@ private fun TransferSettings(viewModel: StoreViewModel) {
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) viewModel.importFrom(uri)
     }
+    var noPicker by remember { mutableStateOf(false) }
     Text(
         text = stringResource(R.string.transfer_title),
         style = MaterialTheme.typography.titleMedium,
@@ -506,7 +507,7 @@ private fun TransferSettings(viewModel: StoreViewModel) {
         StoreOutlinedButton(
             onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                export.launch(Backup.FILE_NAME)
+                noPicker = !picking { export.launch(Backup.FILE_NAME) }
             },
             enabled = !state.busy
         ) {
@@ -515,7 +516,7 @@ private fun TransferSettings(viewModel: StoreViewModel) {
         StoreOutlinedButton(
             onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.ContextClick)
-                import.launch(arrayOf("*/*"))
+                noPicker = !picking { import.launch(arrayOf("*/*")) }
             },
             enabled = !state.busy
         ) {
@@ -524,6 +525,7 @@ private fun TransferSettings(viewModel: StoreViewModel) {
     }
     val imported = state.imported
     val outcome = when {
+        noPicker -> stringResource(R.string.backup_no_picker)
         state.error == TransferError.NOT_A_BACKUP -> stringResource(R.string.transfer_not_backup)
         state.error == TransferError.FAILED -> stringResource(R.string.transfer_failed)
         imported != null -> stringResource(R.string.transfer_imported, imported.first, imported.second)
@@ -534,7 +536,7 @@ private fun TransferSettings(viewModel: StoreViewModel) {
         Text(
             text = outcome,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            color = if (noPicker || state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 8.dp)
         )
     }

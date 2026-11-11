@@ -370,10 +370,15 @@ object InstalledApps {
         conflicts(context).edit { putString(conflictKey(app, packageName), key(installed)) }
     }
 
-    /** Called when an APK of [app] turned out to match the installed app after all. */
-    fun forgetConflict(context: Context, app: StoreApp, packageName: String) {
+    /**
+     * Called when an APK of [app] turned out to match the installed app after all; says
+     * whether there was a conflict to forget, which changes how the app's row stands.
+     */
+    fun forgetConflict(context: Context, app: StoreApp, packageName: String): Boolean {
         val key = conflictKey(app, packageName)
-        if (conflicts(context).contains(key)) conflicts(context).edit { remove(key) }
+        if (!conflicts(context).contains(key)) return false
+        conflicts(context).edit { remove(key) }
+        return true
     }
 
     /**
