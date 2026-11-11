@@ -309,7 +309,10 @@ fun StoreScreen(viewModel: StoreViewModel) {
         val categories = Categories.ALL.filter { id -> state.rows.any { it.app.category == id } }
         val activeCategory = category?.takeIf { it in categories }
         val activePlace = place
-        val bookmarkCount = state.rows.count { Bookmarks.marked(it.app, bookmarked) }
+        // What is worked out of the whole list is worked out again only when the list, or what
+        // it is filtered and ordered by, has changed: this is drawn again at every step of a
+        // download, and the list can be thousands of rows.
+        val bookmarkCount = remember(state.rows, bookmarked) { state.rows.count { Bookmarks.marked(it.app, bookmarked) } }
         // Taking the last bookmark away ends the bookmark filter for good, so that the next
         // bookmark does not bring it back by itself. A list still loading has no bookmarks
         // yet and is left alone, so that a filter restored with the screen stays.
@@ -323,14 +326,22 @@ fun StoreScreen(viewModel: StoreViewModel) {
         // alone; within each the chosen order holds.
         val words = remember(query) { searchWords(query) }
         val languages = deviceLanguages()
-        val visible = state.rows.mapNotNull { row ->
-            val shown = (activeCategory == null || row.app.category == activeCategory) &&
-                (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
-                (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
-            if (shown) matchRank(row, words, languages)?.let { Pair(row, it) } else null
+        val visible = remember(state.rows, activeCategory, activePlace, activeBookmarks, bookmarked, words, languages, sortOrder) {
+            state.rows.mapNotNull { row ->
+                val shown = (activeCategory == null || row.app.category == activeCategory) &&
+                    (activePlace == null || CatalogRules.offeredFrom(row.app, row.alsoFrom, activePlace)) &&
+                    (!activeBookmarks || Bookmarks.marked(row.app, bookmarked))
+                if (shown) matchRank(row, words, languages)?.let { Pair(row, it) } else null
+            }
+                .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
+                .map { it.first }
         }
-            .sortedWith(compareBy<Pair<AppRow, Int>> { it.second }.thenBy(sortOrder.comparator) { it.first })
-            .map { it.first }
+        val categoryCounts = remember(state.rows) { state.rows.groupingBy { it.app.category }.eachCount() }
+        val placeCounts = remember(state.rows) {
+            CatalogRules.PLACES.associateWith { place ->
+                state.rows.count { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
+            }
+        }
         // A changed search or filter shows its result from the top; a list restored as it
         // was, after a turn of the screen, stays where it was.
         val listState = rememberLazyListState()
@@ -360,7 +371,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                 )
                 CategoryChips(
                     categories = categories,
-                    counts = state.rows.groupingBy { it.app.category }.eachCount(),
+                    counts = categoryCounts,
                     total = state.rows.size,
                     selected = activeCategory,
                     onSelect = { category = it },
@@ -369,9 +380,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     onBookmarksToggle = { onlyBookmarks = !activeBookmarks }
                 )
                 PlaceChips(
-                    counts = CatalogRules.PLACES.associateWith { place ->
-                        state.rows.count { CatalogRules.offeredFrom(it.app, it.alsoFrom, place) }
-                    },
+                    counts = placeCounts,
                     enabled = enabledPlaces,
                     selected = activePlace,
                     onSelect = { chosen ->
