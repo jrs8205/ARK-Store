@@ -316,13 +316,16 @@ object RootData {
     /**
      * Writes the data [part] of [packageName] as a tar into [sink], telling [onBytes] the
      * bytes so far, and returns the bytes written. The app is stopped first, so that what is
-     * taken is whole.
+     * taken is whole. What tar writes passes through the check a restore puts an archive
+     * through ([TarCheck]), and an archive it refuses is an error here: data that could never
+     * be put back, such as a folder with a link that leads out of it, is not called a backup.
      */
     @Throws(IOException::class)
     suspend fun archive(tar: String, part: String, packageName: String, sink: OutputStream, onBytes: (Long) -> Unit): Long {
         forceStop(packageName)
         var total = 0L
-        val ran = Root.run(RootDataCommands.archive(tar, part, userId, packageName), null, global = true, stdout = { input ->
+        val ran = Root.run(RootDataCommands.archive(tar, part, userId, packageName), null, global = true, stdout = { output ->
+            val input = TarCheck(output, packageName)
             val buffer = ByteArray(BUFFER_BYTES)
             var told = 0L
             while (true) {

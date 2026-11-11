@@ -137,6 +137,36 @@ class RootDataTest {
     }
 
     @Test
+    fun dataThatARestoreWouldRefuseIsNotTakenForABackup() = runBlocking {
+        fun tarGives(bytes: ByteArray) {
+            Root.transport = { command, _, stdout, _ ->
+                commands += command
+                stdout?.invoke(ByteArrayInputStream(bytes))
+                Root.Outcome.Ran(0, "", "")
+            }
+        }
+        // What tar wrote goes into the backup as it is.
+        tarGives(archive())
+        val taken = ByteArrayOutputStream()
+        assertEquals(archive().size.toLong(), RootData.archive("tar", AppBackup.DATA_USER, pkg, taken) {})
+        assertTrue(archive().contentEquals(taken.toByteArray()))
+        // Unless it is something the restore refuses, which would be a backup in name only:
+        // an app's data can hold a link that leads out of its folder, or a pipe, and the same
+        // check that guards the restore says so while there is still data to take again.
+        val outside = archive().copyOf().also { "other.app/".toByteArray().copyInto(it, 0) }
+        tarGives(outside)
+        assertThrows(IOException::class.java) {
+            runBlocking { RootData.archive("tar", AppBackup.DATA_USER, pkg, ByteArrayOutputStream()) {} }
+        }
+        // And one that was cut short is no archive at all.
+        tarGives(archive().copyOf(512))
+        assertThrows(IOException::class.java) {
+            runBlocking { RootData.archive("tar", AppBackup.DATA_USER, pkg, ByteArrayOutputStream()) {} }
+        }
+        Unit
+    }
+
+    @Test
     fun anArchiveThatIsRefusedLeavesNothingBehindAndTouchesNoData() = runBlocking {
         device()
         val outside = archive().copyOf().also { "other.app/".toByteArray().copyInto(it, 0) }
