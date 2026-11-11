@@ -36,6 +36,12 @@ class DataArchivesTest {
         /** Whether the folder has stopped taking anything new. */
         var full = false
 
+        /** The names of the documents the folder will not remove. */
+        var kept = emptySet<String>()
+
+        /** Whether a rename is carried out under another name, and another id, than asked. */
+        var renamesOtherwise = false
+
         fun put(name: String, text: String) {
             files["id${next++}"] = File(name, text.toByteArray())
         }
@@ -68,7 +74,10 @@ class DataArchivesTest {
         override fun openRead(id: String): InputStream =
             ByteArrayInputStream((files[id] ?: throw IOException("No such document")).bytes)
 
-        override fun delete(id: String): Boolean = files.remove(id) != null
+        override fun delete(id: String): Boolean {
+            if (files[id]?.name in kept) return false
+            return files.remove(id) != null
+        }
 
         override fun canRename(id: String): Boolean = renames
 
@@ -78,7 +87,15 @@ class DataArchivesTest {
                 it()
             }
             if (find(name) != null) throw IOException("$name is there already")
-            (files[id] ?: throw IOException("No such document")).name = name
+            val file = files[id] ?: throw IOException("No such document")
+            if (renamesOtherwise) {
+                // Renamed, but not to the name asked for, and known by another id since.
+                files.remove(id)
+                val moved = "id${next++}"
+                files[moved] = file.also { it.name = "$name.gz" }
+                throw RenamedOtherwise(moved, "The folder named the document $name.gz instead of $name")
+            }
+            file.name = name
             return id
         }
     }
@@ -191,6 +208,66 @@ class DataArchivesTest {
         assertNull(result.failure)
         assertEquals(listOf(BackupData(user, 8), BackupData(device, 10)), result.archives)
         assertEquals(mapOf(user to "new user", device to "new device"), folder.contents())
+    }
+
+    @Test
+    fun archiveRenamedOtherwiseThanAskedIsCopiedFromWhereItIsNow() = runBlocking {
+        val folder = Folder().apply { put(user, "old user") }
+        folder.renamesOtherwise = true
+        val result = DataArchives.replace(folder, listOf(user), emptyList(), writing(user to "new user"))
+        assertNull(result.failure)
+        assertEquals(listOf(BackupData(user, 8)), result.archives)
+        // Nothing is left under the name the folder gave it.
+        assertEquals(mapOf(user to "new user"), folder.contents())
+    }
+
+    @Test
+    fun leftoverOfARunCutShortThatCannotBeRemovedIsAFailure() = runBlocking {
+        // Half an archive in the clear from a run that ended in the middle; this run encrypts.
+        val folder = Folder().apply { put(DataArchives.partName(user), "half, in the clear") }
+        folder.kept = setOf(DataArchives.partName(user))
+        val result = DataArchives.replace(folder, listOf("$user.aes"), emptyList(), writing("$user.aes" to "encrypted"))
+        assertTrue(result.failure is IOException)
+        assertEquals(emptyList<BackupData>(), result.archives)
+        // No archive is written beside data that could not be removed.
+        assertEquals(mapOf(DataArchives.partName(user) to "half, in the clear"), folder.contents())
+    }
+
+    @Test
+    fun leftoversAreClearedWhetherOrNotDataIsTaken() {
+        val folder = Folder().apply {
+            put(user, "old user")
+            put(DataArchives.partName(user), "half")
+            put(DataArchives.partName("$device.aes"), "half")
+            put("base.apk", "apk")
+        }
+        DataArchives.clearLeftovers(folder)
+        assertEquals(mapOf(user to "old user", "base.apk" to "apk"), folder.contents())
+
+        folder.put(DataArchives.partName(device), "half")
+        folder.kept = setOf(DataArchives.partName(device))
+        try {
+            DataArchives.clearLeftovers(folder)
+            fail("A leftover that stays was passed over")
+        } catch (_: IOException) {
+        }
+    }
+
+    @Test
+    fun halfAnArchiveThatCannotBeRemovedAfterAFailureIsNotPassedOver() {
+        val folder = Folder().apply { put(user, "old user") }
+        folder.kept = setOf(DataArchives.partName(user))
+        try {
+            runBlocking {
+                DataArchives.replace(folder, listOf(user), listOf(BackupData(user, 8))) { _, sink ->
+                    sink.use { it.write("ne".toByteArray()) }
+                    throw IOException("tar gave up")
+                }
+            }
+            fail("Half an archive was left beside the entry without a word")
+        } catch (e: IOException) {
+            assertEquals("tar gave up", e.cause?.message)
+        }
     }
 
     @Test

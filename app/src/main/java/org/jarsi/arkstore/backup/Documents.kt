@@ -14,6 +14,12 @@ class Doc(val id: String, val name: String, val mime: String, val size: Long) {
 }
 
 /**
+ * A rename the provider carried out otherwise than asked: the document is now [id], under a
+ * name that is not the one asked for, or that could not be read.
+ */
+internal class RenamedOtherwise(val id: String, message: String) : IOException(message)
+
+/**
  * The folder the user chose, through the documents provider that holds it. Nothing in it is
  * reached by a path: every document is found by listing its parent and named by the id the
  * provider gives it, so that whatever a file in the folder says, it can point nowhere else.
@@ -95,7 +101,9 @@ internal class Documents(private val resolver: ContentResolver, val tree: Uri) {
     /**
      * Gives the document [id] the name [name] and returns its id under that name, which a
      * provider may change with the name. A provider that names it otherwise, as when a
-     * document of that name is there already, has not done what was asked.
+     * document of that name is there already, or whose name cannot be read back, has not
+     * done what was asked; the document may be known by another id all the same, which
+     * [RenamedOtherwise] then tells, so that it can still be read or removed.
      */
     @Throws(IOException::class)
     fun rename(id: String, name: String): String {
@@ -104,9 +112,10 @@ internal class Documents(private val resolver: ContentResolver, val tree: Uri) {
         } catch (e: Exception) {
             throw IOException("Could not rename a document to $name", e)
         } ?: throw IOException("Could not rename a document to $name")
+        val now = DocumentsContract.getDocumentId(renamed)
         val given = displayName(renamed)
-        if (given != name) throw IOException("The folder named the document $given instead of $name")
-        return DocumentsContract.getDocumentId(renamed)
+        if (given != name) throw RenamedOtherwise(now, "The folder named the document $given instead of $name")
+        return now
     }
 
     fun delete(id: String): Boolean = try {

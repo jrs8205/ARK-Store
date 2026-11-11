@@ -11,6 +11,10 @@ import kotlinx.coroutines.CancellationException
  * of its own, and takes the old one's place only once every archive of the app is whole. Taking
  * the data fails for reasons that have nothing to do with the folder, such as root given for a
  * while only, and the archives of the last backup are then the only copy there is.
+ *
+ * What is written beside holds an app's data like any archive, in the clear when no password
+ * was given, and is named by no entry. None of it is left in the folder without a word: what
+ * cannot be removed is a failure.
  */
 internal object DataArchives {
     private const val PART = ".part"
@@ -39,7 +43,11 @@ internal object DataArchives {
         /** Whether the folder can give [id] another name. */
         fun canRename(id: String): Boolean
 
-        /** Gives [id] the name [name], which no document has, and returns its id under it. */
+        /**
+         * Gives [id] the name [name], which no document has, and returns its id under it. A
+         * folder that renamed it otherwise than asked says so with [RenamedOtherwise], which
+         * tells the id the document has now.
+         */
         @Throws(IOException::class)
         fun rename(id: String, name: String): String
     }
@@ -51,10 +59,24 @@ internal object DataArchives {
     class Result(val archives: List<BackupData>, val failure: Exception?)
 
     /**
+     * Removes what a run cut short left beside the archives of [folder]. It is done for every
+     * app of a backup, whether or not its data is taken this time: a backup without the data
+     * must not leave half of it behind either.
+     */
+    @Throws(IOException::class)
+    fun clearLeftovers(folder: Folder) {
+        for (name in AppBackup.DATA_NAMES) {
+            val id = folder.find(partName(name)) ?: continue
+            if (!folder.delete(id)) throw IOException("A data file left half written could not be removed: ${partName(name)}")
+        }
+    }
+
+    /**
      * Takes the archives [names] into [folder], each written by [write], which closes the
      * stream it is given. When one cannot be written, none of them is kept, and the folder is
      * left with the archives it had, [old], as its entry named them; a cancel is passed on,
-     * and leaves them as well.
+     * and leaves them as well. Half an archive that cannot be removed again is not a result
+     * but an error thrown, so that no entry is written beside it.
      *
      * A folder that cannot rename a document, or takes none under the name an archive has
      * until it is whole, is written over the old archives where they lie, as there is no other
@@ -62,14 +84,20 @@ internal object DataArchives {
      * nothing that is the data of one moment, and nothing for the entry to name. An archive
      * the folder will not rename after saying it could is copied to its name.
      */
+    @Throws(IOException::class)
     suspend fun replace(
         folder: Folder,
         names: List<String>,
         old: List<BackupData>,
         write: suspend (name: String, sink: OutputStream) -> Unit
     ): Result {
-        // What a run cut short left beside the archives.
-        for (name in AppBackup.DATA_NAMES) folder.find(partName(name))?.let { folder.delete(it) }
+        try {
+            clearLeftovers(folder)
+        } catch (e: IOException) {
+            // Nothing is written beside data that could not be removed; the archives the
+            // folder had are as they were.
+            return Result(old, e)
+        }
         if (names.isEmpty()) return Result(emptyList(), null)
 
         val first = try {
@@ -78,13 +106,16 @@ internal object DataArchives {
             null
         }
         if (first == null || !folder.canRename(first)) {
-            first?.let { folder.delete(it) }
+            if (first != null && !folder.delete(first)) {
+                throw IOException("A data file left half written could not be removed: ${partName(names.first())}")
+            }
             return inPlace(folder, names, write)
         }
 
-        class Written(val name: String, val id: String, var size: Long = 0)
+        class Written(val name: String, var id: String, var size: Long = 0)
         val beside = ArrayList<Written>()
-        fun discard() = beside.forEach { folder.delete(it.id) }
+        /** Removes what was written beside, and tells whether all of it went. */
+        fun discard(): Boolean = beside.map { folder.delete(it.id) }.all { it }
         val failure: Exception? = try {
             for (name in names) {
                 val written = Written(name, if (beside.isEmpty()) first else folder.create(partName(name)))
@@ -96,7 +127,7 @@ internal object DataArchives {
             discard()
             throw e
         } catch (e: Exception) {
-            discard()
+            if (!discard()) throw IOException("A data file left half written could not be removed", e)
             e
         }
         if (failure != null) return Result(old, failure)
@@ -109,25 +140,44 @@ internal object DataArchives {
                         if (!folder.delete(it)) throw IOException("An old data file could not be removed: ${written.name}")
                     }
                     try {
-                        folder.rename(written.id, written.name)
+                        written.id = folder.rename(written.id, written.name)
                     } catch (e: IOException) {
-                        // The folder will not rename after all: the archive, which is whole, is
-                        // copied to its name instead.
+                        // The folder will not rename after all, or renamed otherwise than asked:
+                        // the archive, which is whole, is copied to its name from where it is.
+                        if (e is RenamedOtherwise) written.id = e.id
+                        val from = written.id
                         val named = folder.create(written.name)
-                        folder.openRead(written.id).use { input -> folder.openWrite(named).use { input.copyTo(it) } }
-                        folder.delete(written.id)
+                        folder.openRead(from).use { input -> folder.openWrite(named).use { input.copyTo(it) } }
+                        if (!folder.delete(from)) throw IOException("A copied data file could not be removed: ${written.name}")
+                        written.id = named
                     }
                     BackupData(written.name, written.size)
                 },
                 null
             )
         } catch (e: IOException) {
+            // Nothing of it stays: neither what is still beside nor what has taken its place.
+            val left = beside.filter { !folder.delete(it.id) && stillThere(folder, it.id) }
             for (name in names) {
                 folder.find(partName(name))?.let { folder.delete(it) }
                 folder.find(name)?.let { folder.delete(it) }
             }
+            // An archive that stays under its own name is the caller's to remove or to fail
+            // over, as any data file its entry does not name. One that stays under another
+            // name is told of by nothing, and is not passed over.
+            if (left.any { written -> names.none { folder.find(it) == written.id } }) {
+                throw IOException("A data file left beside the archives could not be removed", e)
+            }
             Result(emptyList(), e)
         }
+    }
+
+    /** Whether the document [id] can still be opened: a refused removal does not tell that it is there. */
+    private fun stillThere(folder: Folder, id: String): Boolean = try {
+        folder.openRead(id).close()
+        true
+    } catch (_: IOException) {
+        false
     }
 
     /** Writes the archives over the old ones of their names; see [replace]. */
@@ -149,7 +199,9 @@ internal object DataArchives {
                 folder.delete(id)
                 throw e
             } catch (e: Exception) {
-                // An archive that cannot be written whole is removed, and the rest are not written.
+                // An archive that cannot be written whole is removed, and the rest are not
+                // written. One that stays is named a data file, which the caller removes or
+                // fails over.
                 folder.delete(id)
                 return Result(emptyList(), e)
             }

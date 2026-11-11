@@ -874,6 +874,10 @@ object BackupManager {
                         }
                     val children = docs.children(folderId) ?: throw IOException("The app's folder cannot be listed")
                     val byName = children.filter { !it.isDirectory }.associateBy { it.name }.toMutableMap()
+                    // Half an archive of a run cut short goes whatever this run takes, and
+                    // before anything says the folder is as it should be: it is an app's data,
+                    // which a backup without the data must not leave behind either.
+                    DataArchives.clearLeftovers(dataFolder(docs, folderId, byName))
                     val stored = byName[AppBackup.ENTRY_NAME]
                         ?.let { docs.readText(it.id, AppBackup.MAX_JSON_BYTES) }
                         ?.let(AppBackup::entryFromText)
@@ -998,7 +1002,21 @@ object BackupManager {
         kept: List<BackupData>,
         onBytes: (Long) -> Unit
     ): DataArchives.Result {
-        val folder = object : DataArchives.Folder {
+        val folder = dataFolder(docs, folderId, byName)
+        val names = parts.associateBy { DataCrypt.fileName(it, run.encrypt) }
+        var before = 0L
+        return DataArchives.replace(folder, names.keys.toList(), kept) { name, document ->
+            val counting = Counting(document)
+            run.wrap(counting, entry).use { sink ->
+                RootData.archive(run.tar, names.getValue(name), entry.packageName, sink) { sofar -> onBytes(before + sofar) }
+            }
+            before += counting.count
+        }
+    }
+
+    /** The app's folder [folderId] as [DataArchives] works on it, keeping [byName] in step with what it does. */
+    private fun dataFolder(docs: Documents, folderId: String, byName: MutableMap<String, Doc>) =
+        object : DataArchives.Folder {
             override fun find(name: String): String? = byName[name]?.id
 
             override fun create(name: String): String =
@@ -1014,22 +1032,13 @@ object BackupManager {
             override fun canRename(id: String): Boolean = docs.canRename(id)
 
             override fun rename(id: String, name: String): String {
-                val renamed = docs.rename(id, name)
+                // Under whatever name it ends up, it is no longer the document it was listed as.
                 byName.values.removeAll { it.id == id }
+                val renamed = docs.rename(id, name)
                 byName[name] = Doc(renamed, name, DATA_MIME, -1)
                 return renamed
             }
         }
-        val names = parts.associateBy { DataCrypt.fileName(it, run.encrypt) }
-        var before = 0L
-        return DataArchives.replace(folder, names.keys.toList(), kept) { name, document ->
-            val counting = Counting(document)
-            run.wrap(counting, entry).use { sink ->
-                RootData.archive(run.tar, names.getValue(name), entry.packageName, sink) { sofar -> onBytes(before + sofar) }
-            }
-            before += counting.count
-        }
-    }
 
     /** A cancel, carrying whether the folder's index was still written. */
     private class CancelledWith(val indexWritten: Boolean, cause: CancellationException) :
