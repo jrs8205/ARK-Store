@@ -40,6 +40,12 @@ internal object DataArchives {
 
         fun delete(id: String): Boolean
 
+        /**
+         * Whether the folder is known to hold [id] no more: it could be listed, and the
+         * listing does not have it. False when it is there, and when the folder cannot say.
+         */
+        fun gone(id: String): Boolean
+
         /** Whether the folder can give [id] another name. */
         fun canRename(id: String): Boolean
 
@@ -157,7 +163,10 @@ internal object DataArchives {
             )
         } catch (e: IOException) {
             // Nothing of it stays: neither what is still beside nor what has taken its place.
-            val left = beside.filter { !folder.delete(it.id) && stillThere(folder, it.id) }
+            // A removal that is refused may be of a document that is gone already, as one
+            // renamed away is; only the folder's own listing says so. That it cannot be opened
+            // says nothing: a folder that cannot be read just now holds what it held.
+            val left = beside.filter { !folder.delete(it.id) && !folder.gone(it.id) }
             for (name in names) {
                 folder.find(partName(name))?.let { folder.delete(it) }
                 folder.find(name)?.let { folder.delete(it) }
@@ -170,14 +179,6 @@ internal object DataArchives {
             }
             Result(emptyList(), e)
         }
-    }
-
-    /** Whether the document [id] can still be opened: a refused removal does not tell that it is there. */
-    private fun stillThere(folder: Folder, id: String): Boolean = try {
-        folder.openRead(id).close()
-        true
-    } catch (_: IOException) {
-        false
     }
 
     /** Writes the archives over the old ones of their names; see [replace]. */

@@ -42,6 +42,12 @@ class DataArchivesTest {
         /** Whether a rename is carried out under another name, and another id, than asked. */
         var renamesOtherwise = false
 
+        /** The names of the documents the folder will not let be read just now. */
+        var unreadable = emptySet<String>()
+
+        /** Whether the folder can be listed just now. */
+        var listed = true
+
         fun put(name: String, text: String) {
             files["id${next++}"] = File(name, text.toByteArray())
         }
@@ -71,8 +77,13 @@ class DataArchivesTest {
             }
         }
 
-        override fun openRead(id: String): InputStream =
-            ByteArrayInputStream((files[id] ?: throw IOException("No such document")).bytes)
+        override fun openRead(id: String): InputStream {
+            val file = files[id] ?: throw IOException("No such document")
+            if (file.name in unreadable) throw IOException("The folder cannot read this document now")
+            return ByteArrayInputStream(file.bytes)
+        }
+
+        override fun gone(id: String): Boolean = listed && id !in files
 
         override fun delete(id: String): Boolean {
             if (files[id]?.name in kept) return false
@@ -219,6 +230,39 @@ class DataArchivesTest {
         assertEquals(listOf(BackupData(user, 8)), result.archives)
         // Nothing is left under the name the folder gave it.
         assertEquals(mapOf(user to "new user"), folder.contents())
+    }
+
+    @Test
+    fun archiveLeftUnderAnotherNameThatCanBeNeitherReadNorRemovedIsNotPassedOver() {
+        // Renamed otherwise than asked, and then neither readable, to copy it to its name,
+        // nor removable. That it cannot be read does not say it is gone: it is an app's data
+        // under a name nothing knows, and no entry is to be written beside it.
+        val folder = Folder().apply { put(user, "old user") }
+        folder.renamesOtherwise = true
+        folder.unreadable = setOf("$user.gz")
+        folder.kept = setOf("$user.gz")
+        try {
+            runBlocking { DataArchives.replace(folder, listOf(user), listOf(BackupData(user, 8)), writing(user to "new user")) }
+            fail("An archive left under a name nothing knows was passed over")
+        } catch (_: IOException) {
+        }
+        assertEquals(mapOf("$user.gz" to "new user"), folder.contents())
+    }
+
+    @Test
+    fun removalThatCannotBeConfirmedIsNotTakenForOne() {
+        // The removal is refused and the folder cannot be listed either: nothing says the
+        // archive is gone.
+        val folder = Folder().apply { put(user, "old user") }
+        folder.renamesOtherwise = true
+        folder.unreadable = setOf("$user.gz")
+        folder.kept = setOf("$user.gz")
+        folder.listed = false
+        try {
+            runBlocking { DataArchives.replace(folder, listOf(user), emptyList(), writing(user to "new user")) }
+            fail("A removal nothing confirmed was taken for one")
+        } catch (_: IOException) {
+        }
     }
 
     @Test

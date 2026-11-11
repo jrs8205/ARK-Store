@@ -19,6 +19,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.time.Instant
 import java.time.LocalDate
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
@@ -633,7 +634,12 @@ object BackupManager {
         if (job?.isActive == true) return false
         _state.value = BackupState.Running(restoring, 0, 0, "", 0, 0)
         BackupService.start(context)
-        job = scope.launch {
+        // A job cancelled before its first turn says nothing of how it ended; it is said for it.
+        job = launchSettling(
+            scope,
+            otherwise = BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip),
+            settle = { _state.value = it }
+        ) {
             val place = try {
                 told.place()
             } catch (e: CancellationException) {
@@ -657,7 +663,7 @@ object BackupManager {
                 val event = BackupLog.event(told.kind, System.currentTimeMillis(), place, told.apps, told.bytes, end)
                 prefs(context).edit { putString(PREF_LOG, BackupLog.toText(BackupLog.added(history(context), event))) }
             }
-            _state.value = end
+            end
         }
         return true
     }
@@ -1038,6 +1044,8 @@ object BackupManager {
             override fun delete(id: String): Boolean =
                 docs.delete(id).also { gone -> if (gone) byName.values.removeAll { it.id == id } }
 
+            override fun gone(id: String): Boolean = docs.children(folderId)?.none { it.id == id } == true
+
             override fun canRename(id: String): Boolean = docs.canRename(id)
 
             override fun rename(id: String, name: String): String {
@@ -1356,4 +1364,22 @@ object BackupManager {
     }
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+}
+
+
+/**
+ * Launches [work] in [scope] and hands what it returns to [settle]. When the job ends without
+ * [work] having returned anything, [settle] is handed [otherwise] instead: a job cancelled
+ * before its first turn runs none of its body, so whatever the body was to say at its end is
+ * never said by it, and what was shown as running would stay so for good, with everything
+ * that waits for it. Either way [settle] is called once.
+ */
+internal fun <T> launchSettling(scope: CoroutineScope, otherwise: T, settle: (T) -> Unit, work: suspend () -> T): Job {
+    val settled = AtomicBoolean(false)
+    val job = scope.launch {
+        val result = work()
+        if (settled.compareAndSet(false, true)) settle(result)
+    }
+    job.invokeOnCompletion { if (settled.compareAndSet(false, true)) settle(otherwise) }
+    return job
 }
