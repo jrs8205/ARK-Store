@@ -171,7 +171,9 @@ def with_token(request, variable, header, prefix=""):
     that place reads it from. Both places answer the runners of GitHub, whose addresses many
     share, with "too many requests" much of the time; a request with a token is counted for
     the token's owner. The header does not go on with a redirect: an answer may send the
-    request on to another host, which is not to have the token."""
+    request on to another host, which is not to have the token. Only the requests to a
+    place's own API, at addresses made here, carry it: never one to an address a release
+    link gave, which anyone can write and which the token would read on its owner's behalf."""
     token = os.environ.get(variable)
     if token:
         request.add_unredirected_header(header, prefix + token)
@@ -454,8 +456,6 @@ def remote_file(url):
     request = urllib.request.Request(url, headers={
         "Range": "bytes=0-0", "Accept-Encoding": "identity", "User-Agent": USER_AGENT,
     })
-    if urllib.parse.urlsplit(url).netloc == urllib.parse.urlsplit(GITLAB_HOST).netloc:
-        with_token(request, "GITLAB_TOKEN", "PRIVATE-TOKEN")
     with urllib.request.urlopen(request, timeout=30) as response:
         total = (response.headers.get("Content-Range") or "").rpartition("/")[2]
         if response.status != 206 or not total.isdigit():

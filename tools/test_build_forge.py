@@ -331,7 +331,9 @@ class TokenTest(unittest.TestCase):
         codeberg, gitlab, file = self.asked({"CODEBERG_TOKEN": "c-secret", "GITLAB_TOKEN": "g-secret"})
         self.assertEqual(codeberg.get_header("Authorization"), "token c-secret")
         self.assertEqual(gitlab.get_header("Private-token"), "g-secret")
-        self.assertEqual(file.get_header("Private-token"), "g-secret")
+        # A file is asked for at an address a release link gave, which anyone can write: it
+        # gets no token, which would read on its owner's behalf whatever the link points at.
+        self.assertIsNone(file.get_header("Private-token"))
         self.assertIsNone(codeberg.get_header("Private-token"))
         self.assertIsNone(gitlab.get_header("Authorization"))
         # And nowhere else: not to wherever an answer may send the request on.
