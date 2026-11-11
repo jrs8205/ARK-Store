@@ -128,9 +128,13 @@ fun toDownload(updates: List<AppRow>, saved: Map<String, SavedApk>, direct: Bool
 
 /**
  * Whether the store installs apps itself, through root, rather than saving their files for the
- * user: root is on and given, and was not [lost] at the last install.
+ * user: root is on, and was not [lost] when it was last asked for, by an install or by the
+ * settings. An install asks for root whenever it is on, so how the last asking went is what
+ * the next is most likely to meet; a refusal the settings saw is noted as lost like any other,
+ * and root given to an install since undoes it.
  */
-internal fun installsDirectly(root: RootUiState, lost: Boolean = false): Boolean = root is RootUiState.On && !lost
+internal fun installsDirectly(root: RootUiState, lost: Boolean = false): Boolean =
+    (root is RootUiState.On || root is RootUiState.OnButRefused) && !lost
 
 /** How root stands in the settings: off, being asked for, on, or refused one way or another. */
 
@@ -580,8 +584,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             if (Root.enabled(context)) {
                 val check = Root.check()
                 if (!Root.enabled(context)) return@launch
-                // Given again: the rows go back to installing through it.
-                if (check is RootCheck.Granted) InstallManager.setRootLost(context, false)
+                // Given again: the rows go back to installing through it. Refused: they save
+                // files, as after an install that was refused, until root is had again.
+                InstallManager.setRootLost(context, check !is RootCheck.Granted)
                 _root.value = when (check) {
                     is RootCheck.Granted -> RootUiState.On(check.provider)
                     RootCheck.Denied, RootCheck.Missing -> RootUiState.OnButRefused

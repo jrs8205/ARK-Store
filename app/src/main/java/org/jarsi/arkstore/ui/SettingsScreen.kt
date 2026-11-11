@@ -388,7 +388,8 @@ private fun AutoUpdateSettings(viewModel: StoreViewModel) {
     val imports by viewModel.imports.collectAsStateWithLifecycle()
     var settings by remember(imports) { mutableStateOf(AutoUpdate.read(context)) }
     val root by viewModel.root.collectAsStateWithLifecycle()
-    val supported = installsDirectly(root)
+    val rootLost by viewModel.rootLost.collectAsStateWithLifecycle()
+    val supported = installsDirectly(root, rootLost)
     fun change(changed: AutoUpdate) {
         settings = changed
         AutoUpdate.write(context, changed)

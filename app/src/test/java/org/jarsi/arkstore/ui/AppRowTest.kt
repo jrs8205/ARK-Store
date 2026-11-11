@@ -76,9 +76,18 @@ class AppRowTest {
     fun installsDirectlyOnlyWithRootGranted() {
         assertTrue(installsDirectly(RootUiState.On(null)))
         assertTrue(installsDirectly(RootUiState.On("Magisk 30.7")))
-        for (state in listOf(RootUiState.Off, RootUiState.Checking, RootUiState.OnButRefused, RootUiState.Denied, RootUiState.Missing)) {
+        for (state in listOf(RootUiState.Off, RootUiState.Checking, RootUiState.Denied, RootUiState.Missing)) {
             assertFalse(state.toString(), installsDirectly(state))
         }
+    }
+
+    @Test
+    fun rowsGoByHowRootStoodAtTheLastInstallOrLook() {
+        // Refused when the settings last looked, which is noted as lost: the rows save files.
+        assertFalse(installsDirectly(RootUiState.OnButRefused, lost = true))
+        // Given again at an install since: that install went through root, and so do the
+        // rows say, though the settings have not looked again.
+        assertTrue(installsDirectly(RootUiState.OnButRefused, lost = false))
     }
 
     @Test
