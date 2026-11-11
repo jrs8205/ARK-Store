@@ -16,6 +16,8 @@ import androidx.annotation.RequiresApi
 import androidx.core.net.toUri
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -81,12 +83,7 @@ object ApkFolder {
         val dir = File(root, relative(subfolder))
         if (!dir.mkdirs() && !dir.isDirectory) throw IOException("Could not make $dir")
         val target = reserve(dir, displayName)
-        try {
-            source.inputStream().use { input -> target.outputStream().use { input.copyTo(it, 64 * 1024) } }
-        } catch (e: IOException) {
-            target.delete()
-            throw e
-        }
+        copyWhole(source, target)
         return Uri.fromFile(target)
     }
 
@@ -100,6 +97,25 @@ object ApkFolder {
         var n = 1
         while (!target.createNewFile()) target = File(dir, "$base (${n++}).apk")
         return target
+    }
+
+    /**
+     * Copies [source] to [target], a name [reserve]d for it, so that the name never holds
+     * half a file: the copy is made beside it and takes the name only when it is whole, and
+     * a copy that fails leaves neither. The folder is one the user installs from, and a file
+     * there under the name of an app is taken for the app.
+     */
+    @Throws(IOException::class)
+    internal fun copyWhole(source: File, target: File) {
+        val part = File(target.parentFile, target.name + ".part")
+        try {
+            source.inputStream().use { input -> part.outputStream().use { input.copyTo(it, 64 * 1024) } }
+            Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        } catch (e: Throwable) {
+            part.delete()
+            target.delete()
+            throw e
+        }
     }
 
     private fun relative(subfolder: String?): String = if (subfolder == null) FOLDER else "$FOLDER/$subfolder"
@@ -117,9 +133,14 @@ object ApkFolder {
         )
     }
 
-    /** [exists] apart from Android: a file of its own on Android 8 and 9, an entry of MediaStore later. */
+    /**
+     * [exists] apart from Android: a file of its own on Android 8 and 9, an entry of MediaStore
+     * later, which tells where the file is, or "" when it has it no more. When MediaStore
+     * cannot be asked, null, the file is taken to be where it was: what cannot be read is
+     * read again the next time, and a record dropped over it would leave the file behind.
+     */
     internal fun stillSaved(isFile: Boolean, fileExists: () -> Boolean, relativePath: () -> String?): Boolean =
-        if (isFile) fileExists() else SavedApks.inFolder(relativePath())
+        if (isFile) fileExists() else relativePath().let { it == null || SavedApks.inFolder(it) }
 
     /**
      * Deletes the file the store saved at [uri]; one already gone, not the store's to delete, or
@@ -130,7 +151,7 @@ object ApkFolder {
         try {
             if (parsed.scheme == "file") {
                 parsed.path?.let { File(it).delete() }
-            } else if (SavedApks.inFolder(relativePath(context, parsed))) {
+            } else if (relativePath(context, parsed).let { it != null && SavedApks.inFolder(it) }) {
                 context.contentResolver.delete(parsed, null, null)
             } else {
                 Log.i(TAG, "Not deleting $uri: it is no longer in the folder")
@@ -140,12 +161,16 @@ object ApkFolder {
         }
     }
 
-    /** Where MediaStore has the file at [uri], or null when it cannot tell. */
+    /**
+     * Where MediaStore has the file at [uri]: "" when it has it no more, or says nothing of
+     * where, and null when it cannot be asked just now.
+     */
     private fun relativePath(context: Context, uri: Uri): String? = try {
         context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH), null, null, null)?.use {
-            if (it.moveToFirst()) it.getString(0) else null
+            if (it.moveToFirst()) it.getString(0).orEmpty() else ""
         }
     } catch (e: Exception) {
+        Log.i(TAG, "Could not ask where $uri is: ${e.message}")
         null
     }
 
