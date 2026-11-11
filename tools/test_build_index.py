@@ -1,6 +1,7 @@
 """Tests for the index builder. Run with: python3 -m unittest discover tools"""
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -2339,7 +2340,7 @@ class MainTest(unittest.TestCase):
         return release(asset_id=8)
 
     def run_main(self, previous, candidates=(), previous_auto=None, repo=REPO, api=None, manifest=None,
-                 found=None, complete=True, environment=None, icons=False):
+                 found=None, complete=True, environment=None, icons=False, search_error=None):
         """Runs main while GitHub cannot be reached, so that only what the previous files
         hold can be listed, unless api and manifest say what GitHub and the APKs answer.
         Returns the index and the list of automatically found apps."""
@@ -2359,7 +2360,7 @@ class MainTest(unittest.TestCase):
                          "--icons-url", "https://example.invalid/icons"]
             # The tests themselves are run by the workflow, on GitHub's runners.
             with mock.patch.dict(os.environ, environment or {"GITHUB_ACTIONS": ""}), \
-                    mock.patch.object(build_index, "discover",
+                    mock.patch.object(build_index, "discover", side_effect=search_error,
                                    return_value=([repo] if found is None else found, complete)), \
                     mock.patch.object(build_index, "discover_candidates",
                                       return_value=list(candidates)), \
@@ -2447,10 +2448,66 @@ class MainTest(unittest.TestCase):
         self.assertEqual(index["apps"], [self.KNOWN])
         self.assertEqual(index["betaApps"], [self.BETA])
 
+    GONE = {"fullName": "owner/gone", "tag": "v2", "apks": [{"id": 3}]}
+
+    def asked_about_gone(self, answer):
+        """What GitHub answers: answer for the repository the search left out, which may be
+        an error to raise, and the usual for the rest."""
+        def api(path):
+            if path == "/repos/owner/gone":
+                if isinstance(answer, Exception):
+                    raise answer
+                return answer
+            return self.api(path)
+        return api
+
     def test_complete_search_drops_an_app_that_lost_the_topic(self):
-        gone = {"fullName": "owner/gone", "tag": "v2", "apks": [{"id": 3}]}
-        index, _ = self.run_main({"apps": [self.KNOWN, gone]})
+        lost = dict(REPO, full_name="owner/gone", html_url="https://github.com/owner/gone", topics=["android"])
+        index, _ = self.run_main({"apps": [self.KNOWN, self.GONE]}, api=self.asked_about_gone(lost))
         self.assertEqual(index["apps"], [self.KNOWN])
+
+    def test_complete_search_drops_an_app_whose_repository_is_gone(self):
+        gone = urllib.error.HTTPError("https://api.github.com/repos/owner/gone", 404, "Not Found", {}, None)
+        index, _ = self.run_main({"apps": [self.KNOWN, self.GONE]}, api=self.asked_about_gone(gone))
+        self.assertEqual(index["apps"], [self.KNOWN])
+
+    def test_app_a_complete_search_left_out_stays_while_it_has_the_topic(self):
+        # The search now and then leaves a repository out of an answer it calls complete.
+        still = dict(REPO, full_name="owner/gone", html_url="https://github.com/owner/gone")
+        index, _ = self.run_main({"apps": [self.KNOWN, self.GONE]}, api=self.asked_about_gone(still))
+        self.assertEqual(index["apps"], [self.KNOWN, self.GONE])
+
+    def test_app_a_complete_search_left_out_stays_when_github_cannot_be_asked_about_it(self):
+        index, _ = self.run_main({"apps": [self.KNOWN, self.GONE]},
+                                 api=self.asked_about_gone(urllib.error.URLError("down")))
+        self.assertEqual(index["apps"], [self.KNOWN, self.GONE])
+
+    def test_search_that_fails_keeps_the_published_apps(self):
+        for error in (urllib.error.HTTPError("https://api.github.com/search", 502, "Bad Gateway", {}, None),
+                      http.client.IncompleteRead(b"")):
+            index, _ = self.run_main({"apps": [self.KNOWN], "betaApps": [self.BETA]}, search_error=error)
+            self.assertEqual(index["apps"], [self.KNOWN])
+            self.assertEqual(index["betaApps"], [self.BETA])
+
+    def test_answer_cut_short_keeps_the_previously_listed_app(self):
+        def api(path):
+            raise http.client.IncompleteRead(b"")
+        index, _ = self.run_main({"apps": [self.KNOWN]}, api=api)
+        self.assertEqual(index["apps"], [self.KNOWN])
+
+    @staticmethod
+    def without_files(minutes_ago):
+        published = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(1790000000 - minutes_ago * 60))
+        return lambda path: [{"tag_name": "v2", "published_at": published, "assets": []}]
+
+    def test_release_whose_files_are_still_on_their_way_keeps_the_previous_entry(self):
+        # A tag is pushed, the release is made, and a build attaches the APK minutes later.
+        index, _ = self.run_main({"apps": [self.KNOWN]}, api=self.without_files(minutes_ago=10))
+        self.assertEqual(index["apps"], [self.KNOWN])
+
+    def test_release_left_without_files_is_not_waited_for(self):
+        index, _ = self.run_main({"apps": [self.KNOWN]}, api=self.without_files(minutes_ago=600))
+        self.assertEqual(index["apps"], [])
 
     def test_search_that_finds_nothing_with_no_previous_index_lists_nothing(self):
         index, _ = self.run_main({}, found=[])

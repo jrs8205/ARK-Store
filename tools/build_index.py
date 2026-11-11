@@ -16,6 +16,7 @@ import collections
 import concurrent.futures
 import functools
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -162,6 +163,19 @@ AUTO_MAX_NOTES = 800
 # download counts, its metadata and any file replaced by one of the same name and size, and
 # one found to have nothing fit to install for a file replaced by one that is.
 AUTO_SETTLE_HOURS = 2
+
+# A release is often made first and given its files by a build some minutes later. One without
+# any APK that is no older than this is waited for rather than taken for a release without one.
+RELEASE_SETTLE_HOURS = 2
+
+# What goes wrong for a while and then passes: the network, an answer that is not what it
+# should be, and one that was cut short, which is none of the others. A repository that
+# meets one of these keeps the entry it had.
+PASSING = (urllib.error.URLError, OSError, ValueError, KeyError, http.client.HTTPException)
+
+
+class NotReady(ValueError):
+    """A release so new that its files may still be on their way."""
 AUTO_RECHECK_HOURS = 24
 AUTO_REFRESH_HOURS = 7 * 24
 
@@ -1273,6 +1287,33 @@ def discover():
     return repos, complete
 
 
+def left_out(previous_apps, found):
+    """What became of the published apps a search did not return: the repositories that
+    still carry the topic, to be examined like those it returned, and the names of those
+    GitHub could not be asked about, which keep their entries. The rest are gone, or have
+    given the topic up."""
+    returned = {repo["full_name"].lower() for repo in found}
+    still, unasked = [], []
+    for name in previous_apps:
+        if name.lower() in returned:
+            continue
+        try:
+            repo = api("/repos/%s" % name)
+        except urllib.error.HTTPError as error:
+            if error.code not in (404, 410, 451):
+                print("%s: not asked about: %s" % (name, error), file=sys.stderr)
+                unasked.append(name)
+            continue
+        except PASSING as error:
+            print("%s: not asked about: %s" % (name, error), file=sys.stderr)
+            unasked.append(name)
+            continue
+        # A repository that moved answers under its new name, which the search may have returned.
+        if TOPIC in (repo.get("topics") or []) and repo.get("full_name", "").lower() not in returned:
+            still.append(repo)
+    return still, unasked
+
+
 def refusal_pause(error, deadline=None):
     """How many seconds to wait after GitHub refused a request as coming too often: the pause
     it asks for, or a minute when it asks for none, at most a minute and never past deadline,
@@ -1507,7 +1548,7 @@ def ask_releases(batch, deadline=None):
     for attempt in range(2):
         try:
             return graphql(query)
-        except (urllib.error.URLError, OSError, ValueError) as error:
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as error:
             print("release check failed: %s" % error, file=sys.stderr)
             if attempt == 0:
                 refused = isinstance(error, urllib.error.HTTPError) and error.code in (403, 429)
@@ -1721,7 +1762,7 @@ def build_auto_apps(published, previous_auto, state, today, icons=None):
                         if app.get("beta"):
                             app["beta"]["releaseNotes"] = app["beta"].get("releaseNotes", "")[:AUTO_MAX_NOTES]
                     settled = int(today)
-                except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
+                except PASSING as error:
                     print("%s: %s" % (full_name, error), file=sys.stderr)
                     app = current
         listed = bool(app) and recent_enough(app, today)
@@ -1858,6 +1899,14 @@ def parse_time(text):
 def published_at(release):
     """The time a release was published, in seconds since the epoch, or None."""
     return parse_time(release.get("published_at"))
+
+
+def awaits_files(release, now):
+    """Whether a release may still be given its APK: it has none, and was published within
+    RELEASE_SETTLE_HOURS of now."""
+    published = published_at(release)
+    return (not apk_assets(release) and published is not None
+            and 0 <= now - published < RELEASE_SETTLE_HOURS * 3600)
 
 
 def architectures(file_name):
@@ -2042,7 +2091,7 @@ def app_metadata(repo, previous=None, read=None):
         return None
     try:
         metadata = read(repo, stamp_of(pushed_at))
-    except (urllib.error.URLError, OSError, ValueError) as error:
+    except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as error:
         print("%s: metadata not read: %s" % (repo["full_name"], error), file=sys.stderr)
         if known is None:
             return None
@@ -2102,6 +2151,11 @@ def build_app(repo, previous_apks, not_before=None, with_prerelease=True, list_r
     stable_info = release_info(stable, previous_apks, icons) if stable else None
     beta_info = release_info(prerelease, previous_apks, icons) if prerelease else None
     if stable_info is None and beta_info is None:
+        # Nothing to list: unless the release is only waiting for its files, in which case
+        # the repository keeps the entry it had, as over any passing trouble.
+        for waited in (stable, prerelease):
+            if waited is not None and awaits_files(waited, time.time()):
+                raise NotReady("the files of %s are not there yet" % waited.get("tag_name"))
         return None
 
     app = {
@@ -2206,7 +2260,19 @@ def main():
 
     apps = []
     failed = 0
-    found, complete = discover()
+    try:
+        found, complete = discover()
+    except PASSING as error:
+        # A search that cannot be made is one that found nothing: what was published stays.
+        print("the search failed: %s" % error, file=sys.stderr)
+        found, complete = [], False
+    kept_unasked = []
+    if found and complete:
+        # The search now and then leaves a repository out of an answer it calls complete. An
+        # app is dropped only once GitHub says, asked about the repository itself, that it is
+        # gone or no longer carries the topic.
+        still, kept_unasked = left_out(previous_apps, found)
+        found = found + still
     for repo in found:
         if not listable(repo):
             continue
@@ -2215,7 +2281,7 @@ def main():
         try:
             app = build_app(repo, known_apks(previous), icons=icons,
                             metadata_of=functools.partial(app_metadata, previous=previous))
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as error:
+        except PASSING as error:
             # Keep what was known rather than dropping an app over a passing error.
             print("%s: %s" % (full_name, error), file=sys.stderr)
             failed += 1
@@ -2236,6 +2302,7 @@ def main():
         print("the search %s; %d previously published apps kept"
               % ("was incomplete" if found else "found nothing", len(kept)), file=sys.stderr)
         apps.extend(kept)
+    apps.extend(previous_apps[name] for name in kept_unasked)
 
     apps.sort(key=lambda app: app["fullName"].lower())
 
