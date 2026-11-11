@@ -543,6 +543,7 @@ class GitLab:
             return None
         return {
             "full_name": "%s:%s" % (GITLAB, repo["path_with_namespace"]),
+            "forge_name": repo["path_with_namespace"],
             "project_id": repo["id"],
             "html_url": repo["web_url"],
             "description": repo.get("description") or "",

@@ -586,6 +586,30 @@ class MetadataTest(unittest.TestCase):
             self.assertEqual(build_forge.GitLab.metadata({"project_id": 12, "forge_name": "group/sub/app",
                                                           "default_branch": "main"}, None), {})
 
+    def test_examined_gitlab_project_has_its_metadata_read_by_its_path(self):
+        # The files are addressed by the project's path, which its description has to carry
+        # to where the metadata is read: without it every project with a default branch
+        # failed to be examined at all.
+        listed = [{"path": path, "type": "blob"} for path in TREE if path.startswith("fastlane/")]
+
+        def gitlab(path):
+            if "/repository/tree" in path:
+                return listed
+            if "/releases" in path:
+                return [gitlab_release([link(7, "app.apk", "https://gitlab.com/group/sub/app/-/package_files/5/download")])]
+            return dict(PROJECT, license={"key": "mit"}, default_branch="main")
+
+        with mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
+                mock.patch.object(build_forge, "remote_file", return_value=(4321, "one")), \
+                mock.patch.object(build_index, "raw_text", return_value="Chat for everyone"), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 3, "1.0", "Example", None, 21)):
+            apps = build_forge.build_list([PROJECT], {}, NOW, True, build_forge.GitLab)
+        self.assertEqual([app["fullName"] for app in apps], ["gitlab:group/sub/app"])
+        raw = "https://gitlab.com/group/sub/app/-/raw/main/fastlane/metadata/android/"
+        self.assertEqual(apps[0]["metadata"]["en"]["description"],
+                         raw + "en-US/full_description.txt?at=20260920100000")
+
     def test_places_tell_the_default_branch(self):
         self.assertEqual(build_forge.as_repo(dict(REPO, default_branch="develop"), "MIT")["default_branch"], "develop")
         with mock.patch.object(build_forge, "gitlab", return_value=dict(PROJECT, default_branch="trunk",
