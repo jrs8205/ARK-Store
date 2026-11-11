@@ -106,9 +106,15 @@ class UpdateCheckWorkerTest {
     @Test
     fun rootIsAskedOnlyWhenAnUpdateMayBeInstalledUnasked() {
         val app = testApp(fullName = "alice/app", versionCode = 2)
-        assertFalse(asksRoot(enabled = false, toTry = listOf(app)))
-        assertFalse(asksRoot(enabled = true, toTry = emptyList()))
-        assertTrue(asksRoot(enabled = true, toTry = listOf(app)))
+        val on = AutoUpdate(enabled = true, unmeteredOnly = true, chargingOnly = true)
+        assertFalse(asksRoot(on.copy(enabled = false), listOf(app), unmetered = true, charging = true))
+        assertFalse(asksRoot(on, emptyList(), unmetered = true, charging = true))
+        assertTrue(asksRoot(on, listOf(app), unmetered = true, charging = true))
+        // Nor when the network or the charger would stop the install anyway: asking makes
+        // some root apps show a note, every four hours, for nothing.
+        assertFalse(asksRoot(on, listOf(app), unmetered = false, charging = true))
+        assertFalse(asksRoot(on, listOf(app), unmetered = true, charging = false))
+        assertTrue(asksRoot(on.copy(unmeteredOnly = false, chargingOnly = false), listOf(app), unmetered = false, charging = false))
     }
 
     @Test
@@ -194,5 +200,18 @@ class UpdateCheckWorkerTest {
         assertFalse(failureLasts(FailReason.NO_ROOT))
         assertTrue(failureLasts(FailReason.INVALID_APK))
         assertTrue(failureLasts(null))
+        // Root that is refused ends the run: the next install would be refused as well.
+        assertTrue(endsRun(FailReason.NO_ROOT))
+        assertFalse(endsRun(FailReason.INVALID_APK))
+    }
+
+    @Test
+    fun aDownloadThatFailedIsTriedAgainAtTheNextRun() {
+        // A network that dropped or a server that did not answer says nothing of the version.
+        assertFalse(failureLasts(FailReason.DOWNLOAD))
+        // The run goes on to the next app: whether the network is still there is asked before each.
+        assertFalse(endsRun(FailReason.DOWNLOAD))
+        assertTrue(failureLasts(FailReason.SIGNATURE_MISMATCH))
+        assertTrue(failureLasts(FailReason.INSTALL))
     }
 }

@@ -73,12 +73,20 @@ internal fun newToAnnounce(waiting: Set<String>, announced: Set<String>): Boolea
 internal fun toAnnounce(updates: List<StoreApp>, settled: Set<String>): List<StoreApp> =
     updates.filter { it.fullName !in settled }
 
-/** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
 /**
- * Whether the background check asks the root app at all: only when unasked updates are turned on
- * and there is an update [toTry]. Asking makes some root apps show a note every time.
+ * Whether the background check asks the root app at all: only when there is an update [toTry]
+ * and the [settings] would let it be installed unasked now, on a network that is [unmetered]
+ * or not and [charging] or not, were root given. Asking makes some root apps show a note
+ * every time.
  */
-internal fun asksRoot(enabled: Boolean, toTry: List<StoreApp>): Boolean = enabled && toTry.isNotEmpty()
+internal fun asksRoot(settings: AutoUpdate, toTry: List<StoreApp>, unmetered: Boolean, charging: Boolean): Boolean =
+    toTry.isNotEmpty() && settings.allows(root = true, unmetered, charging)
+
+/**
+ * Whether an unasked install that failed for [reason] ends the run: when root was turned off
+ * or refused, which the next install would meet as well.
+ */
+internal fun endsRun(reason: FailReason?): Boolean = reason == FailReason.NO_ROOT
 
 /**
  * Whether a run's unasked installs may go on: as the [settings] say, with root given when the
@@ -98,11 +106,14 @@ internal fun unaskedAllowed(
 
 /**
  * Whether an unasked install that failed for [reason] is left alone until a newer version: not
- * when root was turned off or refused, which says nothing of the version and which the user
- * may change.
+ * when root was turned off or refused, which the user may change, nor when the download
+ * failed, as a network that dropped or a server that did not answer does now and then. Neither
+ * says anything of the version.
  */
-internal fun failureLasts(reason: FailReason?): Boolean = reason != FailReason.NO_ROOT
+internal fun failureLasts(reason: FailReason?): Boolean =
+    reason != FailReason.NO_ROOT && reason != FailReason.DOWNLOAD
 
+/** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
     updates.filter { announcement(it) !in failed }
 
@@ -181,9 +192,10 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
      * Installs, without asking, the updates among [found] that the settings allow now and
      * that the store itself installed, through root, one after the other, as long as the time
      * a run [started] at is given lasts. Returns the full names of those installed. One that
-     * failed is announced like any other update,
-     * and not tried unasked again until a newer version is offered; its failure is not
-     * left for the user to find on a screen, as they did not ask for the install.
+     * failed is announced like any other update, and not tried unasked again until a newer
+     * version is offered, unless it was only the download that failed ([failureLasts]); its
+     * failure is not left for the user to find on a screen, as they did not ask for the
+     * install.
      */
     private suspend fun installUnasked(
         found: List<Pair<StoreApp, InstalledVersion>>,
@@ -195,7 +207,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         val updates = found.map { it.first }
         val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
         val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
-        if (!asksRoot(settings.enabled, toTry(owned, failed))) return emptySet()
+        if (!asksRoot(settings, toTry(owned, failed), unmetered(context), charging(context))) return emptySet()
         // Asked once a run: the root app may ask the user the first time, and the answer holds
         // for the run. A refusal later on, in the middle of an install, ends the run, and the
         // update is tried again on the next. Refusals are counted from before the question, so
@@ -239,8 +251,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                     InstallManager.dismissFailure(app.fullName)
                     // Why it failed comes with the attempt's outcome: the state shown may have
                     // been dismissed, or taken by a new attempt, by now.
-                    if (!failureLasts(done.reason)) break
-                    failed += announcement(app)
+                    if (endsRun(done.reason)) break
+                    if (failureLasts(done.reason)) failed += announcement(app)
                 }
                 Outcome.CANCELLED -> break
                 null -> giveUp()
