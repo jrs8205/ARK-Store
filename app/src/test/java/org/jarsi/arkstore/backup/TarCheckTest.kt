@@ -292,12 +292,62 @@ class TarCheckTest {
         refused(tar(Item(root, content = "x".toByteArray())))
     }
 
-    private fun fixChecksum(bytes: ByteArray): ByteArray {
-        val header = bytes.copyOf(512)
+    private fun fixChecksum(bytes: ByteArray, at: Int = 0): ByteArray {
+        val header = bytes.copyOfRange(at, at + 512)
         " ".repeat(8).toByteArray().copyInto(header, 148)
         val sum = header.sumOf { it.toInt() and 0xff }
         (String.format("%06o", sum) + "\u0000 ").toByteArray().copyInto(header, 148)
-        return header + bytes.copyOfRange(512, bytes.size)
+        return bytes.copyOfRange(0, at) + header + bytes.copyOfRange(at + 512, bytes.size)
+    }
+
+    @Test
+    fun aSizeOrANameOneTarReadsAsNothingIsRefused() {
+        // What would be hidden: a header that the check takes for a file's content, and so
+        // does not look at, while tar reads it as a header.
+        val hidden = tar(Item("$root/out", '2', link = "/data/adb"), end = false)
+
+        // A size that begins with a NUL: one tar skips the NUL and reads the digits, another
+        // stops at it and reads nothing, and then reads the content as headers.
+        val nulFirst = tar(Item("$root/x", content = hidden))
+        nulFirst[124] = 0
+        String.format("%010o", hidden.size).toByteArray().copyInto(nulFirst, 125)
+        nulFirst[135] = 0
+        refused(fixChecksum(nulFirst))
+        // Likewise after spaces, which every tar skips.
+        val spaceThenNul = nulFirst.copyOf()
+        spaceThenNul[124] = ' '.code.toByte()
+        spaceThenNul[125] = 0
+        String.format("%09o", hidden.size).toByteArray().copyInto(spaceThenNul, 126)
+        refused(fixChecksum(spaceThenNul))
+        // Spaces before the digits are read the same by every tar, and so is no size at all.
+        val spaced = tar(Item("$root/x", content = ByteArray(10)))
+        ("  " + String.format("%09o", 10)).toByteArray().copyInto(spaced, 124)
+        spaced[135] = 0
+        pass(fixChecksum(spaced))
+        val none = tar(Item("$root/x"))
+        for (i in 124 until 136) none[i] = 0
+        pass(fixChecksum(none))
+        // Something else than a digit in the number is no number to any tar.
+        val letters = tar(Item("$root/x", content = ByteArray(10)))
+        letters[130] = 'x'.code.toByte()
+        refused(fixChecksum(letters))
+
+        // A header with no name of its own after a long name: one tar gives it the long name,
+        // another takes it for an empty block and gives the name to what comes next, which
+        // is this entry's content.
+        val long = "$root/" + "a".repeat(120)
+        val nameless = tar(
+            Item("././@LongLink", 'L', content = (long + "\u0000").toByteArray()),
+            Item("placeholder", content = hidden)
+        )
+        for (i in 1024 until 1124) nameless[i] = 0
+        refused(fixChecksum(nameless, at = 1024))
+        // The same long name before a header that has a name is read as it always was.
+        pass(tar(Item("././@LongLink", 'L', content = (long + "\u0000").toByteArray()), Item("$root/short", content = ByteArray(10))))
+        // A long name's own header, or one of a pax header, without a name is no better.
+        val namelessLong = tar(Item("././@LongLink", 'L', content = (long + "\u0000").toByteArray()), Item("$root/short"))
+        for (i in 0 until 100) namelessLong[i] = 0
+        refused(fixChecksum(namelessLong))
     }
 
     @Test

@@ -97,6 +97,10 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
             return
         }
         zeroBlocks = 0
+        // A block with something in it but no name is a header to one tar and an empty block
+        // to another (toybox goes by the name alone), which then reads what this one is
+        // followed by, a file's content as this check sees it, as the next header.
+        if (header[NAME] == 0.toByte()) throw IOException("The archive has a header without a name")
         if (!checksumHolds()) throw IOException("Not a tar header")
         // Without the magic a header is of the oldest kind, which tar reads as a file
         // whatever its type says; with it, the type is read.
@@ -296,20 +300,30 @@ class TarCheck(private val input: InputStream, private val root: String) : Input
         return octal(SIZE, 12)
     }
 
+    /**
+     * The number in the [length] bytes at [at], in octal, as every tar reads it: after any
+     * spaces, the digits up to a space, a NUL or the end of the field. A field with no digit
+     * where they should begin is nothing, as long as there is none further on either: one
+     * tar stops at a NUL there (toybox) and reads nothing, another skips it and reads the
+     * digits after it, and a size read two ways hides the headers between the two readings
+     * from this check.
+     */
     private fun octal(at: Int, length: Int): Long {
+        val end = at + length
+        fun blank(i: Int) = header[i] == 0.toByte() || header[i] == ' '.code.toByte()
+        var i = at
+        while (i < end && header[i] == ' '.code.toByte()) i++
+        val first = i
         var value = 0L
-        var seen = false
-        for (i in at until at + length) {
-            val c = header[i].toInt().toChar()
-            when {
-                c in '0'..'7' -> {
-                    value = value * 8 + (c - '0')
-                    seen = true
-                }
-                c == ' ' || c == '\u0000' -> if (seen) break
-                else -> throw IOException("Not an octal number in a tar header")
-            }
+        while (i < end && header[i].toInt().toChar() in '0'..'7') {
+            value = value * 8 + (header[i].toInt().toChar() - '0')
+            i++
         }
+        if (i == first) {
+            for (j in i until end) if (!blank(j)) throw IOException("Not an octal number in a tar header")
+            return 0
+        }
+        if (i < end && !blank(i)) throw IOException("Not an octal number in a tar header")
         return value
     }
 
