@@ -12,6 +12,24 @@ import org.junit.Test
 
 class InstallStatesTest {
 
+    @Test
+    fun downloadsLeftFromAnEarlierRunOfTheAppAreCleared() {
+        // The store's own update through root ends the process before the downloaded file
+        // is deleted, and so does anything else that ends it in the middle of a download.
+        val dir = java.nio.file.Files.createTempDirectory("downloads").toFile()
+        try {
+            java.io.File(dir, "3-0123456789abcdef.apk").writeText("left behind")
+            java.io.File(dir, "restore-2").apply { mkdirs() }.resolve("base.apk").writeText("left behind")
+            clearDownloads(dir)
+            assertTrue(dir.list().isNullOrEmpty())
+            // Nothing there to clear is nothing to do.
+            clearDownloads(java.io.File(dir, "never-made"))
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+
     private val repo = "alice/app"
     private val failed = mapOf(repo to InstallState.Failed(FailReason.DOWNLOAD))
     private val downloading = mapOf(repo to InstallState.Downloading(0.5f))

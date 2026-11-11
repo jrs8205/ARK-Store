@@ -77,6 +77,16 @@ internal suspend fun rootFor(self: Boolean, enabled: () -> Boolean, waitForOther
     return enabled()
 }
 
+/**
+ * Clears [dir], where downloads are kept until they are installed or saved, of what an earlier
+ * run of the app left there. A download is deleted when it is settled, which a process that
+ * ended first never got to: the store's own update through root ends it every time. Called as
+ * the app starts, before anything can be downloading.
+ */
+internal fun clearDownloads(dir: File) {
+    dir.listFiles()?.forEach { it.deleteRecursively() }
+}
+
 /** Whether [state] is one of an install on its way, as opposed to none or a failed one. */
 internal fun InstallState?.isOnItsWay(): Boolean =
     this is InstallState.Queued || this is InstallState.Downloading || this is InstallState.Installing
