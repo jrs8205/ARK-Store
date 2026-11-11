@@ -1,6 +1,7 @@
 package org.jarsi.arkstore.backup
 
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
 
@@ -30,6 +31,9 @@ internal object DataArchives {
         @Throws(IOException::class)
         fun openWrite(id: String): OutputStream
 
+        @Throws(IOException::class)
+        fun openRead(id: String): InputStream
+
         fun delete(id: String): Boolean
 
         /** Whether the folder can give [id] another name. */
@@ -55,7 +59,8 @@ internal object DataArchives {
      * A folder that cannot rename a document, or takes none under the name an archive has
      * until it is whole, is written over the old archives where they lie, as there is no other
      * way into it. A failure then, or one while the new archives take their places, leaves
-     * nothing that is the data of one moment, and nothing for the entry to name.
+     * nothing that is the data of one moment, and nothing for the entry to name. An archive
+     * the folder will not rename after saying it could is copied to its name.
      */
     suspend fun replace(
         folder: Folder,
@@ -103,7 +108,15 @@ internal object DataArchives {
                     folder.find(written.name)?.let {
                         if (!folder.delete(it)) throw IOException("An old data file could not be removed: ${written.name}")
                     }
-                    folder.rename(written.id, written.name)
+                    try {
+                        folder.rename(written.id, written.name)
+                    } catch (e: IOException) {
+                        // The folder will not rename after all: the archive, which is whole, is
+                        // copied to its name instead.
+                        val named = folder.create(written.name)
+                        folder.openRead(written.id).use { input -> folder.openWrite(named).use { input.copyTo(it) } }
+                        folder.delete(written.id)
+                    }
                     BackupData(written.name, written.size)
                 },
                 null

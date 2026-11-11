@@ -1006,6 +1006,8 @@ object BackupManager {
 
             override fun openWrite(id: String): OutputStream = docs.openWrite(id)
 
+            override fun openRead(id: String): InputStream = docs.openRead(id)
+
             override fun delete(id: String): Boolean =
                 docs.delete(id).also { gone -> if (gone) byName.values.removeAll { it.id == id } }
 

@@ -1,7 +1,9 @@
 package org.jarsi.arkstore.backup
 
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.io.OutputStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
@@ -31,6 +33,9 @@ class DataArchivesTest {
         /** What the next rename does instead of renaming, once. */
         var onRename: (() -> Unit)? = null
 
+        /** Whether the folder has stopped taking anything new. */
+        var full = false
+
         fun put(name: String, text: String) {
             files["id${next++}"] = File(name, text.toByteArray())
         }
@@ -41,6 +46,7 @@ class DataArchivesTest {
         override fun find(name: String): String? = files.entries.firstOrNull { it.value.name == name }?.key
 
         override fun create(name: String): String {
+            if (full) throw IOException("The folder is full")
             if (find(name) != null) throw IOException("$name is there already")
             if (!takesParts && name == DataArchives.partName(name.removeSuffix(".part"))) {
                 throw IOException("The folder named the new document otherwise")
@@ -58,6 +64,9 @@ class DataArchivesTest {
                 }
             }
         }
+
+        override fun openRead(id: String): InputStream =
+            ByteArrayInputStream((files[id] ?: throw IOException("No such document")).bytes)
 
         override fun delete(id: String): Boolean = files.remove(id) != null
 
@@ -175,9 +184,22 @@ class DataArchivesTest {
     }
 
     @Test
-    fun archiveThatDoesNotTakeItsNameIsAFailureWithNothingLeftBeside() = runBlocking {
+    fun archiveTheFolderWillNotRenameAfterAllIsCopiedToItsName() = runBlocking {
         val folder = Folder().apply { put(user, "old user") }
         folder.onRename = { throw IOException("The folder named it otherwise") }
+        val result = DataArchives.replace(folder, listOf(user, device), emptyList(), writing(user to "new user", device to "new device"))
+        assertNull(result.failure)
+        assertEquals(listOf(BackupData(user, 8), BackupData(device, 10)), result.archives)
+        assertEquals(mapOf(user to "new user", device to "new device"), folder.contents())
+    }
+
+    @Test
+    fun archiveThatCannotBePutUnderItsNameIsAFailureWithNothingLeftBeside() = runBlocking {
+        val folder = Folder().apply { put(user, "old user") }
+        folder.onRename = {
+            folder.full = true
+            throw IOException("The folder named it otherwise")
+        }
         val result = DataArchives.replace(folder, listOf(user), listOf(BackupData(user, 8)), writing(user to "new user"))
         assertTrue(result.failure is IOException)
         assertEquals(emptyList<BackupData>(), result.archives)
