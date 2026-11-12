@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.11.1
+
+- An installed app that is also in F-Droid or IzzyOnDroid, signed there with the developer's
+  own key, no longer falls back to the catalogue's older version when its repository has
+  changed since the index was built: the newer release on GitHub is offered
+- GitHub is asked about the accounts of installed apps at most every half hour, and the last
+  requests of the hour are kept for what you ask for yourself. Running out of them is no
+  longer shown as a failure when the list itself has loaded
+- A backup with app data writes the new data beside the old and puts it in place only when
+  it is whole, so a run that fails leaves the last backup's data as it was. Data a restore
+  would refuse is not saved as a backup
+- The store's own update through root waits for a backup or a restore under way, and an
+  automatic update whose download failed is tried again
+- Whether root was given, and where the saved files are, stay out of Android's own backups
+  and device transfers
+- No Uninstall on the row of an app whose package name another app holds
+- A missing launcher activity or file picker no longer closes the store, downloads left by
+  an earlier run are cleared at start, and the list is not worked out again at every step of
+  a download
+
 ## 1.11.0
 
 - Play Protect has blocked recent ARK-Store builds that ask for permission to install apps,
