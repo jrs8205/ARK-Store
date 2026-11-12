@@ -51,6 +51,11 @@ MAX_LICENSE = 256 * 1024
 # than GitHub and their repositories have fewer stars, so less is asked of them here.
 FOUND_QUERIES = ("android", "android-app")
 FOUND_MIN_STARS = 5
+# The time the lists may take between them. The step of the workflow that runs this is stopped
+# at twelve minutes with nothing written, and the store's own index, built before this, is
+# published only after it.
+BUDGET_SECONDS = 6 * 60
+clock = time.monotonic
 
 LICENSE_FILE = re.compile(r"^(licen[cs]e|copying|unlicense)(\.(md|txt|rst))?$", re.IGNORECASE)
 # How a license is known: by its terms, not by its name, which any text can mention. Each
@@ -649,22 +654,43 @@ def examine(repo, previous, today, found, place=Codeberg, icons=None):
     return app
 
 
-def build_list(repos, previous, today, found, place=Codeberg, icons=None):
+def shares(started, places, budget=BUDGET_SECONDS):
+    """When the time of each of so many places is up, on the clock that read started at the
+    beginning. The budget is split evenly, and a place that ends early leaves the rest of its
+    share to those after it."""
+    return [started + budget * number / places for number in range(1, places + 1)]
+
+
+def build_list(repos, previous, today, found, place=Codeberg, icons=None, until=None):
+    """The entries of repos. Once the clock reads until, what is left is not examined: the
+    list is written with what there was time for, and an entry examined now is fresh for the
+    runs after this one, which get further."""
     apps = []
+    left = 0
     for repo in repos:
         key = "%s:%s" % (place.source, place.name(repo))
         before = previous.get(key)
-        try:
-            app = examine(repo, before, today, found, place, icons)
-        except Exception as error:  # pylint: disable=broad-except
-            # Keep what was known rather than dropping an app over a passing error. An app
-            # found by searching is kept only as long as its release is recent, as always.
-            print("%s: %r" % (key, error), file=sys.stderr)
+        app = None
+        examined = False
+        if until is None or clock() < until:
+            try:
+                app = examine(repo, before, today, found, place, icons)
+                examined = True
+            except Exception as error:  # pylint: disable=broad-except
+                print("%s: %r" % (key, error), file=sys.stderr)
+        else:
+            left += 1
+        if not examined:
+            # Keep what was known rather than dropping an app over a passing error or for
+            # want of time. An app found by searching is kept only as long as its release is
+            # recent, as always.
             app = before
             if found and app and not build_index.recent_enough(app, today):
                 app = None
         if app:
             apps.append(app)
+    if left:
+        print("%s: out of time, %d of %d left as they were" % (place.source, left, len(repos)), file=sys.stderr)
     apps.sort(key=lambda app: app["fullName"].lower())
     return apps
 
@@ -673,25 +699,28 @@ def load(path, keys):
     return build_index.load_previous(path, keys) or {}
 
 
-def published_apps(place, previous, today, icons=None):
+def published_apps(place, previous, today, icons=None, until=None):
     """(names, apps): the repositories of one place that carry the store topic, by name, and
-    their entries. When the place cannot be searched, its previous entries stand."""
+    their entries. When the place cannot be searched, its previous entries stand. until is
+    when the place's time is up, see build_list."""
     prefix = place.source + ":"
     try:
         repos = [
             repo for repo in place.search(build_index.TOPIC, None)
             if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])
         ]
-        return {place.name(repo) for repo in repos}, build_list(repos, previous, today, False, place, icons)
+        return ({place.name(repo) for repo in repos},
+                build_list(repos, previous, today, False, place, icons, until=until))
     except Exception as error:  # pylint: disable=broad-except
         print("%s: published apps unavailable: %r" % (place.source, error), file=sys.stderr)
         return set(), [app for name, app in previous.items() if name.startswith(prefix)]
 
 
-def found_apps(place, taken, previous, today, icons=None):
+def found_apps(place, taken, previous, today, icons=None, until=None):
     """The apps found by searching one place, leaving out the repositories in taken, which
     their developers have published. When the place cannot be searched, the previous list
-    stands as far as its releases are still recent."""
+    stands as far as its releases are still recent. until is when the place's time is up,
+    see build_list."""
     try:
         since = today - build_index.AUTO_PUSHED_DAYS * 86400
         candidates = {}
@@ -707,7 +736,7 @@ def found_apps(place, taken, previous, today, icons=None):
             and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
         ]
         repos.sort(key=lambda repo: -place.stars(repo))
-        return build_list(repos, previous, today, True, place, icons)
+        return build_list(repos, previous, today, True, place, icons, until=until)
     except Exception as error:  # pylint: disable=broad-except
         print("%s: search unavailable: %r" % (place.source, error), file=sys.stderr)
         published = {"%s:%s" % (place.source, name) for name in taken}
@@ -734,11 +763,11 @@ def main():
         icons = build_index.IconStore(arguments.icons_dir, arguments.icons_url)
 
     published = []
-    for place in PLACES:
-        taken, apps = published_apps(place, previous_published, today, icons)
+    for place, until in zip(PLACES, shares(clock(), len(PLACES))):
+        taken, apps = published_apps(place, previous_published, today, icons, until=until)
         published += apps
         name = place.source + ".json"
-        found = found_apps(place, taken, load(os.path.join(before, name), ("apps",)), today, icons)
+        found = found_apps(place, taken, load(os.path.join(before, name), ("apps",)), today, icons, until=until)
         write_json(os.path.join(arguments.output_dir, name), {
             "version": 1,
             "source": place.source,

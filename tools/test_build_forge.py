@@ -1,10 +1,13 @@
 """Tests for the builder of the Codeberg lists. Run with: python3 -m unittest discover tools"""
 
+import contextlib
 import hashlib
 import http.client
 import io
 import os
 import re
+import sys
+import tempfile
 import unittest
 import urllib.error
 import urllib.request
@@ -696,3 +699,79 @@ class ExamineMetadataTest(unittest.TestCase):
             app = build_forge.examine(dict(REPO, default_branch="main"), previous, NOW, False)
         read.assert_not_called()
         self.assertEqual(app["metadata"], metadata)
+
+
+class TimeTakenTest(unittest.TestCase):
+    """The lists have so much time between them. A place that would take longer is examined as
+    far as its time goes, and the rest keep the entries they had."""
+    RECENT = BuildListTest.RECENT
+    OLD = BuildListTest.OLD
+    OTHER = dict(REPO, full_name="owner/other")
+
+    def test_what_is_left_when_the_time_is_up_keeps_its_entry_without_being_asked_about(self):
+        with mock.patch.object(build_forge, "examine", side_effect=AssertionError("asked")), \
+                mock.patch.object(build_forge, "clock", return_value=500.0), \
+                contextlib.redirect_stderr(io.StringIO()) as said:
+            previous = {"codeberg:owner/app": self.RECENT}
+            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=True, until=500.0), [self.RECENT])
+            # As after an error, a found app stays only as long as its release is recent.
+            previous = {"codeberg:owner/app": self.OLD}
+            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=True, until=500.0), [])
+            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=False, until=500.0), [self.OLD])
+        self.assertIn("codeberg: out of time, 1 of 1 left as they were", said.getvalue())
+
+    def test_repositories_are_examined_until_the_time_is_up(self):
+        examined = {"fullName": "codeberg:owner/app", "tag": "new"}
+        kept = dict(self.RECENT, fullName="codeberg:owner/other")
+        previous = {"codeberg:owner/app": self.RECENT, "codeberg:owner/other": kept}
+        with mock.patch.object(build_forge, "examine", return_value=examined) as examine, \
+                mock.patch.object(build_forge, "clock", side_effect=[10.0, 20.0]), \
+                contextlib.redirect_stderr(io.StringIO()):
+            apps = build_forge.build_list([REPO, self.OTHER], previous, NOW, found=True, until=15.0)
+        self.assertEqual(examine.call_count, 1)
+        self.assertEqual(apps, [examined, kept])
+
+    def test_without_a_limit_every_repository_is_examined(self):
+        examined = {"fullName": "codeberg:owner/app"}
+        with mock.patch.object(build_forge, "examine", return_value=examined) as examine, \
+                mock.patch.object(build_forge, "clock", side_effect=AssertionError("no clock is read")):
+            build_forge.build_list([REPO, self.OTHER], {}, NOW, found=True)
+        self.assertEqual(examine.call_count, 2)
+
+    def test_limit_goes_with_both_lists_of_a_place(self):
+        with mock.patch.object(build_forge, "search", return_value=[]), \
+                mock.patch.object(build_forge, "build_list", return_value=[]) as build_list:
+            build_forge.published_apps(build_forge.Codeberg, {}, NOW, until=7.0)
+            build_forge.found_apps(build_forge.Codeberg, set(), {}, NOW, until=7.0)
+        self.assertEqual([call.kwargs.get("until") for call in build_list.call_args_list], [7.0, 7.0])
+
+    def test_each_place_has_its_share_and_what_an_earlier_one_left_over(self):
+        self.assertEqual(build_forge.shares(100.0, 2, budget=360), [280.0, 460.0])
+        self.assertEqual(build_forge.shares(0.0, 1, budget=360), [360.0])
+        # The step of the workflow that runs this is stopped at twelve minutes, with nothing written.
+        self.assertLessEqual(build_forge.BUDGET_SECONDS, 8 * 60)
+
+    def test_every_list_is_written_and_each_place_is_told_its_time(self):
+        asked = []
+
+        def published(place, previous, today, icons=None, until=None):
+            asked.append((place.source, "published", until))
+            return set(), []
+
+        def found(place, taken, previous, today, icons=None, until=None):
+            asked.append((place.source, "found", until))
+            return []
+
+        with tempfile.TemporaryDirectory() as folder:
+            arguments = ["build_forge.py", "--previous-dir", folder, "--output-dir", os.path.join(folder, "out")]
+            with mock.patch.object(build_forge, "published_apps", side_effect=published), \
+                    mock.patch.object(build_forge, "found_apps", side_effect=found), \
+                    mock.patch.object(build_forge, "clock", return_value=1000.0), \
+                    mock.patch.object(sys, "argv", arguments), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                build_forge.main()
+            written = sorted(os.listdir(os.path.join(folder, "out")))
+        self.assertEqual(written, ["codeberg.json", "forge.json", "gitlab.json"])
+        first, second = build_forge.shares(1000.0, 2)
+        self.assertEqual(asked, [("codeberg", "published", first), ("codeberg", "found", first),
+                                 ("gitlab", "published", second), ("gitlab", "found", second)])
