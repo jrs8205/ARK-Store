@@ -1285,6 +1285,87 @@ class RefusalTest(unittest.TestCase):
         self.assertFalse(listing.stopped)
 
 
+class MetadataRefusedTest(unittest.TestCase):
+    """The metadata is an extra, read last. A place that refuses the builder at that point has
+    already told the release: the entry is made, with the metadata it had, and the place is
+    left alone after it."""
+    KNOWN = {"en": {"summary": "Chat for everyone", "screenshots": []}}
+
+    def setUp(self):
+        self.asked = []
+
+    def listing(self, place, repos, urlopen, previous=None):
+        with mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_forge, "remote_file", return_value=(4321, "one")), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 3, "1.0", "Example", None, 21)), \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(place, True, repos, previous or {}, NOW)
+            listing.work()
+        return listing
+
+    def codeberg(self, code):
+        def urlopen(request, timeout=None):
+            self.asked.append(request.full_url)
+            if "/git/trees/" in request.full_url:
+                raise urllib.error.HTTPError(request.full_url, code, "No", {}, None)
+            return io.BytesIO(json.dumps(RELEASES).encode())
+        return urlopen
+
+    def gitlab(self, code):
+        def urlopen(request, timeout=None):
+            self.asked.append(request.full_url)
+            if "/repository/tree" in request.full_url:
+                raise urllib.error.HTTPError(request.full_url, code, "No", {}, None)
+            if "/releases" in request.full_url:
+                return io.BytesIO(json.dumps([gitlab_release([link(7, "app.apk", GitLabTest.APK)])]).encode())
+            return io.BytesIO(json.dumps(dict(PROJECT, license={"key": "mit"}, default_branch="main")).encode())
+        return urlopen
+
+    def test_release_is_listed_though_the_place_refuses_when_asked_for_the_metadata(self):
+        behind = dict(REPO, full_name="owner/behind", stars_count=1, default_branch="main")
+        project = dict(PROJECT, id=13, path_with_namespace="group/behind", star_count=1)
+        for place, repos, urlopen, name in (
+                (build_forge.Codeberg, [dict(REPO, default_branch="main"), behind], self.codeberg, "codeberg:owner/app"),
+                (build_forge.GitLab, [PROJECT, project], self.gitlab, "gitlab:group/sub/app")):
+            for code in (401, 429):
+                self.asked = []
+                listing = self.listing(place, repos, urlopen(code))
+                apps = listing.entries()
+                self.assertEqual([app["fullName"] for app in apps], [name])
+                self.assertEqual((apps[0]["tag"], "metadata" in apps[0]), ("v1", False))
+                # Nothing is held against the repository, and nothing more is asked of the place.
+                self.assertEqual((listing.records(), listing.stopped, listing.left()), ({}, True, 1))
+                self.assertFalse([url for url in self.asked if "behind" in url or "/13" in url])
+
+    def test_metadata_known_before_stands_with_its_old_marks(self):
+        first = self.listing(build_forge.Codeberg, [dict(REPO, default_branch="main")], self.codeberg(500))
+        known = dict(first.entries()[0], metadata=self.KNOWN, metadataAt="2026-09-19T10:00:00Z",
+                     metadataReader=build_index.METADATA_READER, examinedAt=NOW - 90000)
+        self.asked = []
+        again = self.listing(build_forge.Codeberg, [dict(REPO, default_branch="main")], self.codeberg(429),
+                             previous={"codeberg:owner/app": known})
+        app = again.entries()[0]
+        self.assertEqual((app["metadata"], app["metadataAt"]), (self.KNOWN, "2026-09-19T10:00:00Z"))
+        self.assertEqual((app["examinedAt"], again.stopped), (NOW, True))
+
+    def test_other_trouble_with_the_metadata_does_not_stop_the_place(self):
+        self.asked = []
+        behind = dict(REPO, full_name="owner/behind", stars_count=1, default_branch="main")
+        listing = self.listing(build_forge.Codeberg, [dict(REPO, default_branch="main"), behind], self.codeberg(500))
+        self.assertEqual((len(listing.entries()), listing.stopped, listing.left()), (2, False, 0))
+
+    def test_examination_alone_makes_the_entry_too(self):
+        self.asked = []
+        with mock.patch.object(urllib.request, "urlopen", side_effect=self.codeberg(429)), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 3, "1.0", "Example")), \
+                contextlib.redirect_stderr(io.StringIO()):
+            app = build_forge.examine(dict(REPO, default_branch="main"), None, NOW, True)
+        self.assertEqual((app["fullName"], "metadata" in app), ("codeberg:owner/app", False))
+
+
 class MoveTest(unittest.TestCase):
     """An app on its way from one list to the other stays where it was until the move has been
     made: a repository given the store topic leaves the found only for the published, and the

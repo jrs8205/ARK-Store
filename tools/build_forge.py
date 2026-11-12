@@ -742,7 +742,7 @@ def fresh(previous, pushed_at, today):
         and today - previous.get("examinedAt", 0) < build_index.AUTO_RECHECK_HOURS * 3600
 
 
-def examine(repo, previous, today, found, place=Codeberg, icons=None, apks=None):
+def examine(repo, previous, today, found, place=Codeberg, icons=None, apks=None, refusals=None):
     """The entry of one repository, or None when it has nothing to list. previous is its
     entry from the last run: one that is still fresh is kept without asking again, apart from
     the stars and topics, which the search has just told. icons, an IconStore, is where the
@@ -750,7 +750,20 @@ def examine(repo, previous, today, found, place=Codeberg, icons=None, apks=None)
 
     apks, by asset id, holds the files of the repository's releases read by an examination
     that did not get to its end. They are not read again, and every file read now is added,
-    so that the caller has them should this examination not get to its end either."""
+    so that the caller has them should this examination not get to its end either.
+
+    The metadata is an extra, read last. When the place refuses the builder then, the
+    release has been read and the entry is made, with the metadata it had before, as after any
+    failure to read it. The refusal is added to refusals, for the caller to leave the place
+    alone after this."""
+    def metadata(described, stamp):
+        try:
+            return place.metadata(described, stamp)
+        except Refused as error:
+            if refusals is not None:
+                refusals.append(error)
+            raise OSError("the place refused, %s %s" % error.args) from error
+
     if fresh(previous, place.pushed_at(repo), today):
         app = dict(previous, stars=place.stars(repo), topics=repo.get("topics") or [])
     else:
@@ -765,7 +778,7 @@ def examine(repo, previous, today, found, place=Codeberg, icons=None, apks=None)
             described, known,
             not_before=today - build_index.AUTO_RELEASE_DAYS * 86400 if found else None,
             with_prerelease=not found, list_releases=place.list_releases, icons=icons,
-            metadata_of=lambda repo: build_index.app_metadata(repo, previous, read=place.metadata),
+            metadata_of=lambda repo: build_index.app_metadata(repo, previous, read=metadata),
         )
         if app is None:
             return None
@@ -933,6 +946,9 @@ class Listing:
         """Examines the repositories that wait, until none is left or less than LEAST_SECONDS
         is left before the clock reads until. No request begins after that, see limited.
 
+        A place that refuses the builder itself is left alone for the rest of the run, see
+        REFUSALS.
+
         An examination the time runs out on is cut short, which is not held against the
         repository as a failure. It goes behind those that wait, so that more time goes to
         them first, and behind those of the next run, so that one repository that needs more
@@ -951,8 +967,9 @@ class Listing:
                 record = {"pushedAt": self.place.pushed_at(repo), "at": int(self.today),
                           "failures": known.get("failures", 0)}
                 apks = {apk["id"]: apk for apk in self.tried.get(name, {}).get("apks", [])}
+                refusals = []
                 try:
-                    app = examine(repo, before, self.today, self.found, self.place, self.icons, apks)
+                    app = examine(repo, before, self.today, self.found, self.place, self.icons, apks, refusals)
                 except Exception as error:  # pylint: disable=broad-except
                     read = [apk for key, apk in apks.items() if key not in build_index.known_apks(before)]
                     if read:
@@ -985,6 +1002,13 @@ class Listing:
                     self.tried[name] = dict(record, failures=0)
                 else:
                     self.tried.pop(name, None)
+                if refusals:
+                    # Met while the metadata was read: the entry stands, and the place is
+                    # asked nothing more.
+                    print("%s: %r, the place is left alone for this run" % (self.key(name), refusals[0]),
+                          file=sys.stderr)
+                    self.stopped = True
+                    break
 
     def left(self):
         """How many repositories still wait to be examined."""
