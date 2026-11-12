@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import http.client
 import io
+import json
 import os
 import re
 import sys
@@ -520,8 +521,12 @@ class BuildListTest(unittest.TestCase):
     OLD = {"fullName": "codeberg:owner/app", "publishedAt": "2025-01-01T00:00:00Z"}
 
     def build_list(self, previous, found, error=urllib.error.URLError("down")):
-        with mock.patch.object(build_forge, "examine", side_effect=error):
-            return build_forge.build_list([REPO], {"codeberg:owner/app": previous}, NOW, found=found)
+        with mock.patch.object(build_forge, "examine", side_effect=error), \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(build_forge.Codeberg, found, [REPO],
+                                          {"codeberg:owner/app": previous}, NOW)
+            listing.work()
+            return listing.entries()
 
     def test_failed_lookup_keeps_the_previous_entry(self):
         self.assertEqual(self.build_list(self.RECENT, found=True), [self.RECENT])
@@ -535,15 +540,17 @@ class BuildListTest(unittest.TestCase):
         self.assertEqual(self.build_list(self.OLD, found=False), [self.OLD])
 
     def test_place_that_cannot_be_searched_keeps_its_lists(self):
-        published = {"codeberg:owner/app": self.OLD, "gitlab:group/app": {"fullName": "gitlab:group/app"}}
-        found = {"codeberg:owner/app": self.RECENT, "codeberg:owner/taken": dict(self.RECENT),
+        taken = dict(self.OLD, fullName="codeberg:owner/taken")
+        published = {"codeberg:owner/taken": taken, "gitlab:group/app": {"fullName": "gitlab:group/app"}}
+        found = {"codeberg:owner/app": self.RECENT,
+                 "codeberg:owner/taken": dict(self.RECENT, fullName="codeberg:owner/taken"),
                  "codeberg:owner/old": self.OLD}
-        with mock.patch.object(build_forge, "search", side_effect=http.client.IncompleteRead(b"")):
-            self.assertEqual(build_forge.published_apps(build_forge.Codeberg, published, NOW),
-                             (set(), [self.OLD]))
-            # What its developer has published in the meantime is no longer among the found.
-            self.assertEqual(build_forge.found_apps(build_forge.Codeberg, {"owner/taken"}, found, NOW),
-                             [self.RECENT])
+        with mock.patch.object(build_forge, "search", side_effect=http.client.IncompleteRead(b"")), \
+                contextlib.redirect_stderr(io.StringIO()):
+            turn = build_forge.Turn(build_forge.Codeberg, published, found, {}, NOW)
+            turn.work()
+        # What its developer has published in the meantime is no longer among the found.
+        self.assertEqual(turn.lists(), ([taken], [self.RECENT]))
 
     def test_unusable_repositories_are_told_apart(self):
         self.assertTrue(build_forge.usable(REPO))
@@ -656,7 +663,9 @@ class MetadataTest(unittest.TestCase):
                 mock.patch.object(build_index, "raw_text", return_value="Chat for everyone"), \
                 mock.patch.object(build_index, "read_manifest",
                                   return_value=("org.example", 3, "1.0", "Example", None, 21)):
-            apps = build_forge.build_list([PROJECT], {}, NOW, True, build_forge.GitLab)
+            listing = build_forge.Listing(build_forge.GitLab, True, [PROJECT], {}, NOW)
+            listing.work()
+            apps = listing.entries()
         self.assertEqual([app["fullName"] for app in apps], ["gitlab:group/sub/app"])
         raw = "https://gitlab.com/group/sub/app/-/raw/main/fastlane/metadata/android/"
         self.assertEqual(apps[0]["metadata"]["en"]["description"],
@@ -709,41 +718,39 @@ class TimeTakenTest(unittest.TestCase):
     OTHER = dict(REPO, full_name="owner/other")
 
     def test_what_is_left_when_the_time_is_up_keeps_its_entry_without_being_asked_about(self):
-        with mock.patch.object(build_forge, "examine", side_effect=AssertionError("asked")), \
-                mock.patch.object(build_forge, "clock", return_value=500.0), \
-                contextlib.redirect_stderr(io.StringIO()) as said:
-            previous = {"codeberg:owner/app": self.RECENT}
-            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=True, until=500.0), [self.RECENT])
+        with mock.patch.object(build_forge, "examine", side_effect=AssertionError("asked")) as examine, \
+                mock.patch.object(build_forge, "clock", return_value=500.0):
             # As after an error, a found app stays only as long as its release is recent.
-            previous = {"codeberg:owner/app": self.OLD}
-            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=True, until=500.0), [])
-            self.assertEqual(build_forge.build_list([REPO], previous, NOW, found=False, until=500.0), [self.OLD])
-        self.assertIn("codeberg: out of time, 1 of 1 left as they were", said.getvalue())
+            for entry, found, kept in ((self.RECENT, True, [self.RECENT]), (self.OLD, True, []),
+                                       (self.OLD, False, [self.OLD])):
+                listing = build_forge.Listing(build_forge.Codeberg, found, [REPO], {"codeberg:owner/app": entry}, NOW)
+                listing.work(500.0)
+                self.assertEqual((listing.entries(), listing.left(), listing.records()), (kept, 1, {}))
+        examine.assert_not_called()
 
     def test_repositories_are_examined_until_the_time_is_up(self):
         examined = {"fullName": "codeberg:owner/app", "tag": "new"}
         kept = dict(self.RECENT, fullName="codeberg:owner/other")
         previous = {"codeberg:owner/app": self.RECENT, "codeberg:owner/other": kept}
         with mock.patch.object(build_forge, "examine", return_value=examined) as examine, \
-                mock.patch.object(build_forge, "clock", side_effect=[10.0, 20.0]), \
-                contextlib.redirect_stderr(io.StringIO()):
-            apps = build_forge.build_list([REPO, self.OTHER], previous, NOW, found=True, until=15.0)
+                mock.patch.object(build_forge, "clock", side_effect=[10.0, 20.0]):
+            listing = build_forge.Listing(build_forge.Codeberg, True, [REPO, self.OTHER], previous, NOW)
+            listing.work(15.0)
         self.assertEqual(examine.call_count, 1)
-        self.assertEqual(apps, [examined, kept])
+        self.assertEqual(listing.entries(), [examined, kept])
 
     def test_without_a_limit_every_repository_is_examined(self):
         examined = {"fullName": "codeberg:owner/app"}
         with mock.patch.object(build_forge, "examine", return_value=examined) as examine, \
                 mock.patch.object(build_forge, "clock", side_effect=AssertionError("no clock is read")):
-            build_forge.build_list([REPO, self.OTHER], {}, NOW, found=True)
+            build_forge.Listing(build_forge.Codeberg, True, [REPO, self.OTHER], {}, NOW).work()
         self.assertEqual(examine.call_count, 2)
 
     def test_limit_goes_with_both_lists_of_a_place(self):
         with mock.patch.object(build_forge, "search", return_value=[]), \
-                mock.patch.object(build_forge, "build_list", return_value=[]) as build_list:
-            build_forge.published_apps(build_forge.Codeberg, {}, NOW, until=7.0)
-            build_forge.found_apps(build_forge.Codeberg, set(), {}, NOW, until=7.0)
-        self.assertEqual([call.kwargs.get("until") for call in build_list.call_args_list], [7.0, 7.0])
+                mock.patch.object(build_forge.Listing, "work") as work:
+            build_forge.Turn(build_forge.Codeberg, {}, {}, {}, NOW).work(7.0)
+        self.assertEqual([call.args for call in work.call_args_list], [(7.0,), (7.0,)])
 
     def test_each_place_has_its_share_and_what_an_earlier_one_left_over(self):
         self.assertEqual(build_forge.shares(100.0, 2, budget=360), [280.0, 460.0])
@@ -751,27 +758,495 @@ class TimeTakenTest(unittest.TestCase):
         # The step of the workflow that runs this is stopped at twelve minutes, with nothing written.
         self.assertLessEqual(build_forge.BUDGET_SECONDS, 8 * 60)
 
-    def test_every_list_is_written_and_each_place_is_told_its_time(self):
-        asked = []
+    def test_place_tells_how_much_it_left_for_want_of_time(self):
+        with mock.patch.object(build_forge, "search", return_value=[REPO, self.OTHER]), \
+                mock.patch.object(build_forge, "examine", side_effect=AssertionError("asked")), \
+                mock.patch.object(build_forge, "clock", return_value=500.0), \
+                contextlib.redirect_stderr(io.StringIO()) as said, \
+                contextlib.redirect_stdout(io.StringIO()) as told:
+            turn = build_forge.Turn(build_forge.Codeberg, {}, {}, {}, NOW, until=500.0)
+            turn.work(500.0)
+            turn.tell()
+        self.assertTrue(turn.unfinished())
+        self.assertIn("codeberg: out of time, 2 of 2 left as they were", said.getvalue())
+        self.assertIn("codeberg: 0 published, 0 found", told.getvalue())
 
-        def published(place, previous, today, icons=None, until=None):
-            asked.append((place.source, "published", until))
-            return set(), []
 
-        def found(place, taken, previous, today, icons=None, until=None):
-            asked.append((place.source, "found", until))
+class Clock:
+    """A clock that reads what the test makes of it."""
+
+    def __init__(self, at=0.0):
+        self.at = at
+
+    def __call__(self):
+        return self.at
+
+    def take(self, seconds):
+        self.at += seconds
+
+
+def codeberg(name, stars=7, **more):
+    return dict(REPO, full_name=name, html_url="https://codeberg.org/" + name, stars_count=stars, **more)
+
+
+def record(at=NOW, failures=0, pushed="2026-09-20T10:00:00Z"):
+    return {"pushedAt": pushed, "at": at, "failures": failures}
+
+
+class TriedTest(unittest.TestCase):
+    """A repository that gave nothing to list, or that could not be read, is remembered in the
+    file of its place. The runs after do not spend their time on it again, and so get to the
+    repositories behind it."""
+    RECENT = BuildListTest.RECENT
+
+    def listing(self, repos, examine, tried=None, previous=None, today=NOW, found=True, until=None, **more):
+        with mock.patch.object(build_forge, "examine", side_effect=examine) as asked, \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(build_forge.Codeberg, found, repos, previous or {}, today,
+                                          tried=tried, **more)
+            listing.work(until)
+        self.asked = [call.args[0]["full_name"] for call in asked.call_args_list]
+        return listing
+
+    def test_what_gave_nothing_is_not_asked_about_again_while_it_stands(self):
+        first = self.listing([REPO], [None])
+        self.assertEqual(first.records(), {"owner/app": record()})
+        again = self.listing([REPO], [None], tried=first.records(), today=NOW + 3600)
+        self.assertEqual((self.asked, again.entries(), again.left()), ([], [], 0))
+        self.assertEqual(again.records(), first.records())
+
+    def test_a_push_or_a_day_gone_by_has_it_looked_at_again(self):
+        pushed = dict(REPO, updated_at="2026-09-21T12:00:00+02:00")
+        self.listing([pushed], [None], tried={"owner/app": record()}, today=NOW + 3600)
+        self.assertEqual(self.asked, ["owner/app"])
+        day = build_index.AUTO_RECHECK_HOURS * 3600
+        self.listing([REPO], [None], tried={"owner/app": record()}, today=NOW + day - 1)
+        self.assertEqual(self.asked, [])
+        again = self.listing([REPO], [None], tried={"owner/app": record()}, today=NOW + day)
+        self.assertEqual(self.asked, ["owner/app"])
+        self.assertEqual(again.records(), {"owner/app": record(at=NOW + day)})
+
+    def test_what_could_not_be_read_waits_longer_after_each_failure(self):
+        previous = {"codeberg:owner/app": self.RECENT}
+        slow = TimeoutError("slow")
+        first = self.listing([REPO], slow, previous=previous)
+        self.assertEqual(first.records(), {"owner/app": record(failures=1)})
+        # The entry it had stands meanwhile, and the first failure is tried again by the next run.
+        self.assertEqual(first.entries(), [self.RECENT])
+        second = self.listing([REPO], slow, tried=first.records(), previous=previous, today=NOW + 1800)
+        self.assertEqual(self.asked, ["owner/app"])
+        self.assertEqual(second.records(), {"owner/app": record(at=NOW + 1800, failures=2)})
+        # The second waits an hour.
+        resting = self.listing([REPO], slow, tried=second.records(), previous=previous, today=NOW + 1800 + 3599)
+        self.assertEqual((self.asked, resting.entries(), resting.left()), ([], [self.RECENT], 0))
+        self.assertEqual(resting.records(), second.records())
+        self.listing([REPO], slow, tried=second.records(), previous=previous, today=NOW + 1800 + 3600)
+        self.assertEqual(self.asked, ["owner/app"])
+        # And none waits longer than a day, however often it has failed.
+        often = {"owner/app": record(failures=40)}
+        self.listing([REPO], slow, tried=often, previous=previous, today=NOW + 24 * 3600 - 1)
+        self.assertEqual(self.asked, [])
+        self.listing([REPO], slow, tried=often, previous=previous, today=NOW + 24 * 3600)
+        self.assertEqual(self.asked, ["owner/app"])
+        self.assertEqual([build_forge.retry_seconds(count) // 3600 for count in range(1, 9)],
+                         [0, 1, 2, 4, 8, 16, 24, 24])
+
+    def test_what_is_listed_again_is_forgotten(self):
+        listing = self.listing([REPO], [self.RECENT], tried={"owner/app": record(at=NOW - 90000, failures=3)})
+        self.assertEqual((listing.entries(), listing.records()), ([self.RECENT], {}))
+
+    def test_the_longest_waiting_go_first(self):
+        repos = [codeberg("a/tried", 90), codeberg("b/new", 50), codeberg("c/listed", 10), codeberg("d/new", 60)]
+        tried = {"a/tried": record(at=NOW - 90000)}
+        previous = {"codeberg:c/listed": dict(self.RECENT, fullName="codeberg:c/listed", examinedAt=NOW - 200000)}
+        self.listing(repos, [None] * 4, tried=tried, previous=previous)
+        # Those never looked at by their stars, then the others by how long ago they were.
+        self.assertEqual(self.asked, ["d/new", "b/new", "c/listed", "a/tried"])
+
+    def test_time_running_out_is_no_failure(self):
+        repos = [codeberg("a/one", 9), codeberg("b/two", 8), codeberg("c/three", 7)]
+        clock = Clock()
+
+        def examine(*asked):
+            clock.take(100)
+
+        with mock.patch.object(build_forge, "clock", clock):
+            listing = self.listing(repos, examine, until=150.0)
+        self.assertEqual((self.asked, listing.left()), (["a/one", "b/two"], 1))
+        self.assertEqual(sorted(listing.records()), ["a/one", "b/two"])
+        # Nor is a request that was not let begin, or one that failed as the time ran out.
+        previous = {"codeberg:owner/app": self.RECENT}
+        listing = self.listing([REPO], build_forge.OutOfTime(), previous=previous)
+        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 1, {}))
+
+        def cut_short(*asked):
+            clock.take(28)
+            raise TimeoutError("slow")
+
+        clock.at = 100.0
+        with mock.patch.object(build_forge, "clock", clock):
+            listing = self.listing([REPO], cut_short, previous=previous, until=130.0)
+        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 1, {}))
+
+    def test_place_that_says_too_many_requests_is_left_alone_for_the_run(self):
+        refusal = urllib.error.HTTPError("https://codeberg.org/api/v1/x", 429, "Too Many Requests", {}, None)
+        previous = {"codeberg:owner/app": self.RECENT}
+        listing = self.listing([REPO, TimeTakenTest.OTHER], refusal, previous=previous)
+        self.assertEqual(self.asked, ["owner/app"])
+        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 2, {}))
+        self.assertTrue(listing.stopped)
+        listing.work()
+        self.assertEqual(listing.left(), 2)
+
+    def test_what_one_list_gave_up_on_the_other_still_looks_at(self):
+        topic = dict(REPO, topics=["android", build_index.TOPIC])
+        with mock.patch.object(build_forge, "search", return_value=[topic]), \
+                mock.patch.object(build_forge, "examine", return_value=self.RECENT) as examine:
+            turn = build_forge.Turn(build_forge.Codeberg, {}, {}, {"found": {"owner/app": record()}}, NOW + 60)
+            turn.work()
+        self.assertEqual(examine.call_count, 1)
+        self.assertEqual(turn.lists(), ([self.RECENT], []))
+
+    def test_what_the_search_no_longer_gives_is_forgotten_only_when_the_search_was_whole(self):
+        tried = {"owner/app": record(), "gone/away": record()}
+        whole = self.listing([REPO], [None], tried=tried, today=NOW + 60)
+        self.assertEqual(sorted(whole.records()), ["owner/app"])
+        part = self.listing([REPO], [None], tried=tried, today=NOW + 60, seen={"owner/app"}, whole=False)
+        self.assertEqual(sorted(part.records()), ["gone/away", "owner/app"])
+
+    def test_odd_or_old_records_are_not_read(self):
+        old = NOW - build_forge.TRIED_KEPT_DAYS * 86400 - 1
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "codeberg.json")
+            self.assertEqual(build_forge.load_tried(path, NOW), {"published": {}, "found": {}})
+            for written in ("[]", "{", '{"tried": []}', '{"tried": {"found": [], "published": "x"}}'):
+                with open(path, "w", encoding="utf-8") as file:
+                    file.write(written)
+                self.assertEqual(build_forge.load_tried(path, NOW), {"published": {}, "found": {}})
+            build_index.write_json(path, {"apps": [], "tried": {"published": {"p/ok": record(failures=2)}, "found": {
+                "a/ok": record(), "b/text": "x", "c/no-time": {"failures": 0}, "d/odd-time": record(at="soon"),
+                "e/odd-count": record(failures=-1), "f/old": record(at=old), "g/true": record(failures=True),
+                "h/odd-push": record(pushed=7), "i/ahead": record(at=NOW + 60),
+            }}})
+            self.assertEqual(build_forge.load_tried(path, NOW),
+                             {"published": {"p/ok": record(failures=2)}, "found": {"a/ok": record()}})
+
+    def heavy_run(self, answer, tried, today):
+        """A run of a place whose seven most starred repositories each take 28 seconds to give
+        answer, with one that has an app behind them."""
+        clock = Clock()
+        repos = [codeberg("heavy/%d" % number, 100 - number) for number in range(7)] + [codeberg("owner/app", 5)]
+
+        def detect_license(name):
+            if not name.startswith("heavy/"):
+                return "MIT"
+            clock.take(28)
+            return answer()
+
+        with mock.patch.object(build_forge, "clock", clock), \
+                mock.patch.object(build_forge, "search", return_value=repos), \
+                mock.patch.object(build_forge, "detect_license", side_effect=detect_license), \
+                mock.patch.object(build_forge, "forge", return_value=RELEASES), \
+                mock.patch.object(build_index, "read_manifest", return_value=("org.example", 3, "1.0", "Example")), \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.found_listing(build_forge.Codeberg, set(), {}, tried, today)
+            listing.work(180.0)
+        return listing
+
+    def test_app_behind_repositories_that_give_nothing_is_reached_by_the_next_run(self):
+        first = self.heavy_run(lambda: None, {}, NOW)
+        self.assertEqual((first.entries(), len(first.records())), ([], 7))
+        second = self.heavy_run(lambda: None, first.records(), NOW + 1800)
+        self.assertEqual([app["fullName"] for app in second.entries()], ["codeberg:owner/app"])
+
+    def test_app_behind_repositories_that_time_out_is_reached_by_the_next_run(self):
+        def slow():
+            raise TimeoutError("slow")
+
+        first = self.heavy_run(slow, {}, NOW)
+        self.assertEqual(first.entries(), [])
+        second = self.heavy_run(slow, first.records(), NOW + 1800)
+        self.assertEqual([app["fullName"] for app in second.entries()], ["codeberg:owner/app"])
+
+
+class DeadlineTest(unittest.TestCase):
+    """The time of a place binds its requests too: none begins once it is up, and one that has
+    begun waits for the server no longer than what is left."""
+
+    def test_request_waits_as_long_as_there_is_time_left(self):
+        clock = Clock(100.0)
+        with mock.patch.object(build_forge, "clock", clock):
+            self.assertEqual(build_forge.time_left(), 30)
+            with build_forge.limited(200.0):
+                self.assertEqual(build_forge.time_left(), 30)
+                clock.at = 188.0
+                self.assertEqual(build_forge.time_left(), 12.0)
+                clock.at = 196.0
+                with self.assertRaises(build_forge.OutOfTime):
+                    build_forge.time_left()
+                with build_forge.limited(None):
+                    self.assertEqual(build_forge.time_left(), 30)
+                with self.assertRaises(build_forge.OutOfTime):
+                    build_forge.time_left()
+            self.assertEqual(build_forge.time_left(), 30)
+
+    def waits(self, at):
+        """How long each kind of request of a place waits when the clock reads at and the
+        place's time is up at 100."""
+        seen = []
+
+        def urlopen(request, timeout=None):
+            seen.append(timeout)
+            raise urllib.error.URLError("no answer")
+
+        asks = (lambda: build_forge.forge("/repos/search"), lambda: build_forge.gitlab("/projects"),
+                lambda: build_forge.remote_file("https://gitlab.com/group/app/-/package_files/5/download"),
+                lambda: build_index.read_range("https://codeberg.org/app.apk", 0, 4),
+                lambda: build_index.raw_text("https://codeberg.org/owner/app/raw/branch/main/a.txt"))
+        with mock.patch.object(build_forge, "clock", Clock(at)), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                build_forge.limited(100.0):
+            for ask in asks:
+                with self.assertRaises(urllib.error.URLError):
+                    ask()
+        return seen
+
+    def test_every_request_of_a_place_is_bound_by_its_time(self):
+        self.assertEqual(self.waits(0.0), [30] * 5)
+        self.assertEqual(self.waits(80.0), [20.0] * 5)
+        with self.assertRaises(build_forge.OutOfTime):
+            self.waits(97.0)
+        # Outside a place's turn the index builder's requests wait as they always did.
+        self.assertEqual(build_index.request_seconds(), 30)
+
+    def pages(self, search, page, until):
+        clock = Clock()
+
+        def urlopen(request, timeout=None):
+            clock.take(28)
+            return io.BytesIO(page)
+
+        with mock.patch.object(build_forge, "clock", clock), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                build_forge.limited(until):
+            return search()
+
+    def test_search_stops_between_its_pages_and_says_it_is_not_whole(self):
+        full = json.dumps({"data": [codeberg("owner/app%d" % number) for number in range(build_forge.PAGE_SIZE)]})
+        found = self.pages(lambda: build_forge.search("android"), full.encode(), 60.0)
+        self.assertEqual((len(found), found.whole), (2 * build_forge.PAGE_SIZE, False))
+        last = json.dumps({"data": [REPO]}).encode()
+        found = self.pages(lambda: build_forge.search("android"), last, 60.0)
+        self.assertEqual((len(found), found.whole), (1, True))
+        projects = json.dumps([PROJECT] * build_forge.GITLAB_PAGE_SIZE).encode()
+        found = self.pages(lambda: build_forge.GitLab.search("android", None), projects, 60.0)
+        self.assertEqual((len(found), found.whole), (2 * build_forge.GITLAB_PAGE_SIZE, False))
+        found = self.pages(lambda: build_forge.GitLab.search("android", None), b"[]", None)
+        self.assertEqual((len(found), found.whole), (0, True))
+
+    def test_what_a_search_cut_short_did_not_get_to_stands_as_it_was(self):
+        part = build_forge.Found([REPO])
+        part.whole = False
+        examined = dict(BuildListTest.RECENT, tag="new")
+        unseen = dict(BuildListTest.RECENT, fullName="codeberg:owner/unseen")
+        old = dict(BuildListTest.OLD, fullName="codeberg:owner/old")
+        published = {"codeberg:owner/published": {"fullName": "codeberg:owner/published"}}
+        found = {"codeberg:owner/app": BuildListTest.RECENT, "codeberg:owner/unseen": unseen,
+                 "codeberg:owner/old": old}
+        tried = {"found": {"gone/away": record()}}
+        for searched, lists, remembered in (
+                (part, ([published["codeberg:owner/published"]], [examined, unseen]), ["gone/away"]),
+                ([REPO], ([], [examined]), [])):
+            with mock.patch.object(build_forge, "search", return_value=searched), \
+                    mock.patch.object(build_forge, "examine", return_value=examined), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                turn = build_forge.Turn(build_forge.Codeberg, published, found, tried, NOW + 60)
+                turn.work()
+            self.assertEqual(turn.lists(), lists)
+            self.assertEqual(sorted(turn.tried()["found"]), remembered)
+
+    def test_searches_have_only_a_part_of_the_time_of_their_place(self):
+        limits = []
+
+        def search(query):
+            limits.append(build_forge.time_up)
             return []
 
-        with tempfile.TemporaryDirectory() as folder:
-            arguments = ["build_forge.py", "--previous-dir", folder, "--output-dir", os.path.join(folder, "out")]
-            with mock.patch.object(build_forge, "published_apps", side_effect=published), \
-                    mock.patch.object(build_forge, "found_apps", side_effect=found), \
-                    mock.patch.object(build_forge, "clock", return_value=1000.0), \
-                    mock.patch.object(sys, "argv", arguments), \
-                    contextlib.redirect_stdout(io.StringIO()):
-                build_forge.main()
-            written = sorted(os.listdir(os.path.join(folder, "out")))
-        self.assertEqual(written, ["codeberg.json", "forge.json", "gitlab.json"])
+        with mock.patch.object(build_forge, "search", side_effect=search), \
+                mock.patch.object(build_forge, "clock", Clock(100.0)):
+            build_forge.Turn(build_forge.Codeberg, {}, {}, {}, NOW, until=280.0)
+        self.assertEqual(limits, [100.0 + 180.0 * build_forge.SEARCH_SHARE] * 3)
+        self.assertIsNone(build_forge.time_up)
+
+
+class MoveTest(unittest.TestCase):
+    """An app on its way from one list to the other stays where it was until the move has been
+    made: a repository given the store topic leaves the found only for the published, and the
+    other way round."""
+    KNOWN = BuildListTest.RECENT
+    TOPIC = dict(REPO, topics=["android", build_index.TOPIC])
+
+    def turn(self, published, found, topic_repos, other_repos, examine, until=None, at=0.0):
+        def search(query):
+            return topic_repos if query == build_index.TOPIC else other_repos
+
+        self.clock = Clock(at)
+        for patch in (mock.patch.object(build_forge, "search", side_effect=search),
+                      mock.patch.object(build_forge, "examine", side_effect=examine),
+                      mock.patch.object(build_forge, "clock", self.clock),
+                      contextlib.redirect_stderr(io.StringIO())):
+            patch.__enter__()
+            self.addCleanup(patch.__exit__, None, None, None)
+        turn = build_forge.Turn(build_forge.Codeberg, published, found, {}, NOW, until=until)
+        turn.work(until)
+        return turn
+
+    def test_app_given_the_store_topic_stays_among_the_found_until_it_is_examined(self):
+        slow = codeberg("owner/slow", 9, topics=[build_index.TOPIC])
+
+        def examine(repo, *rest):
+            if repo["full_name"] == "owner/slow":
+                self.clock.take(196)
+            return {"fullName": "codeberg:" + repo["full_name"], "publishedAt": "2026-09-01T08:00:00Z"}
+
+        turn = self.turn({}, {"codeberg:owner/app": self.KNOWN}, [slow, self.TOPIC], [slow, self.TOPIC], examine,
+                         until=180.0)
+        published, found = turn.lists()
+        self.assertEqual([app["fullName"] for app in published], ["codeberg:owner/slow"])
+        self.assertEqual(found, [self.KNOWN])
+        self.assertTrue(turn.unfinished())
+        # With time for it, the move is made.
+        turn.work()
+        published, found = turn.lists()
+        self.assertEqual([app["fullName"] for app in published], ["codeberg:owner/app", "codeberg:owner/slow"])
+        self.assertEqual(found, [])
+
+    def test_app_that_could_not_be_read_as_published_stays_among_the_found_too(self):
+        turn = self.turn({}, {"codeberg:owner/app": self.KNOWN}, [self.TOPIC], [self.TOPIC],
+                         urllib.error.URLError("down"))
+        self.assertEqual(turn.lists(), ([], [self.KNOWN]))
+
+    def test_app_with_nothing_to_publish_leaves_the_found_as_before(self):
+        turn = self.turn({}, {"codeberg:owner/app": self.KNOWN}, [self.TOPIC], [self.TOPIC], [None])
+        self.assertEqual(turn.lists(), ([], []))
+
+    def test_app_that_lost_the_store_topic_stays_published_until_it_is_examined(self):
+        found = dict(self.KNOWN, tag="found")
+        turn = self.turn({"codeberg:owner/app": self.KNOWN}, {}, [], [REPO], [found], until=500.0, at=500.0)
+        self.assertEqual(turn.lists(), ([self.KNOWN], []))
+        turn.work()
+        self.assertEqual(turn.lists(), ([], [found]))
+
+    def test_app_that_lost_the_store_topic_does_not_stay_published_over_a_failure(self):
+        # Its developer has withdrawn it: as before, it is listed again once it can be read.
+        turn = self.turn({"codeberg:owner/app": self.KNOWN}, {}, [], [REPO], urllib.error.URLError("down"))
+        self.assertEqual(turn.lists(), ([], []))
+
+    def test_app_whose_repository_is_no_longer_found_leaves_the_published(self):
+        turn = self.turn({"codeberg:owner/app": self.KNOWN}, {}, [], [], AssertionError("asked"))
+        self.assertEqual(turn.lists(), ([], []))
+
+
+class RunTest(unittest.TestCase):
+    """The run as a whole: every place has its turn, what one leaves of its time goes to the
+    others, and the files are written with what is remembered."""
+
+    def run_main(self, previous, output):
+        arguments = ["build_forge.py", "--previous-dir", previous, "--output-dir", output]
+        with mock.patch.object(sys, "argv", arguments), \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            build_forge.main()
+        files = {}
+        for name in sorted(os.listdir(output)):
+            with open(os.path.join(output, name), encoding="utf-8") as file:
+                files[name] = json.load(file)
+        return files
+
+    def test_each_place_is_told_its_time_and_gets_what_another_left(self):
+        turns = []
+
+        class Turn:
+            def __init__(self, place, published, found, tried, today, icons=None, until=None):
+                self.source = place.source
+                self.asked = [("searched", until)]
+                turns.append(self)
+
+            def work(self, until=None):
+                self.asked.append(("examined", until))
+
+            def unfinished(self):
+                return self.source == "codeberg"
+
+            def lists(self):
+                return [], []
+
+            def tried(self):
+                return {"published": {}, "found": {}}
+
+            def tell(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(build_forge, "Turn", Turn), \
+                mock.patch.object(build_forge, "clock", return_value=1000.0):
+            files = self.run_main(folder, os.path.join(folder, "out"))
+        self.assertEqual(sorted(files), ["codeberg.json", "forge.json", "gitlab.json"])
         first, second = build_forge.shares(1000.0, 2)
-        self.assertEqual(asked, [("codeberg", "published", first), ("codeberg", "found", first),
-                                 ("gitlab", "published", second), ("gitlab", "found", second)])
+        self.assertEqual([(turn.source, turn.asked) for turn in turns], [
+            ("codeberg", [("searched", first), ("examined", first), ("examined", second)]),
+            ("gitlab", [("searched", second), ("examined", second)]),
+        ])
+
+    def test_what_is_remembered_is_written_and_read_by_the_next_run(self):
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch("time.time", return_value=float(NOW)), \
+                mock.patch.object(build_forge, "search", return_value=[REPO]), \
+                mock.patch.object(build_forge.GitLab, "search", return_value=[]), \
+                mock.patch.object(build_forge, "examine", return_value=None) as examine:
+            first = self.run_main(os.path.join(folder, "none"), os.path.join(folder, "one"))
+            self.assertEqual(examine.call_count, 1)
+            second = self.run_main(os.path.join(folder, "one"), os.path.join(folder, "two"))
+            self.assertEqual(examine.call_count, 1)
+        for files in (first, second):
+            self.assertEqual(sorted(files), ["codeberg.json", "forge.json", "gitlab.json"])
+            self.assertEqual(files["codeberg.json"]["tried"], {"published": {}, "found": {"owner/app": record()}})
+            self.assertEqual(files["gitlab.json"]["tried"], {"published": {}, "found": {}})
+            # The app reads the lists of apps; what is remembered is beside them, not among them.
+            self.assertEqual([files[name]["apps"] for name in sorted(files)], [[], [], []])
+            self.assertNotIn("tried", files["forge.json"])
+
+    def test_slow_search_of_one_place_leaves_the_other_its_time(self):
+        clock = Clock()
+        forks = [codeberg("fork/%d" % number, fork=True) for number in range(build_forge.PAGE_SIZE)]
+        page = json.dumps({"data": forks}).encode()
+        began = []
+
+        def urlopen(request, timeout=None):
+            self.assertIn("https://codeberg.org/api/v1/repos/search?", request.full_url)
+            if "q=%s&" % build_index.TOPIC in request.full_url:
+                return io.BytesIO(b'{"data":[]}')
+            clock.take(28)
+            return io.BytesIO(page)
+
+        def gitlab(path):
+            began.append(clock.at)
+            if path.startswith("/projects?"):
+                return [PROJECT] if "topic=android&" in path else []
+            if "/releases" in path:
+                return [gitlab_release([link(7, "app.apk", GitLabTest.APK)])]
+            return dict(PROJECT, license={"key": "mit"})
+
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch("time.time", return_value=float(NOW)), \
+                mock.patch.object(build_forge, "clock", clock), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
+                mock.patch.object(build_forge, "remote_file", return_value=(4321, "one")), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 3, "1.0", "Example", None, 21)):
+            files = self.run_main(folder, os.path.join(folder, "out"))
+        self.assertEqual([app["fullName"] for app in files["gitlab.json"]["apps"]], ["gitlab:group/sub/app"])
+        self.assertEqual(files["codeberg.json"]["apps"], [])
+        # Codeberg's searches were stopped within its own time, long before the time of both was up.
+        self.assertLess(began[0], build_forge.BUDGET_SECONDS / 2)
+        self.assertLess(clock.at, build_forge.BUDGET_SECONDS)

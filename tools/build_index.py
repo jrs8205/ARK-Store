@@ -289,6 +289,13 @@ def graphql(query):
         return json.load(response)
 
 
+def request_seconds():
+    """How long a request for a part of a file, or for a small file of text, may wait for the
+    server. A builder that has only so much time for a place puts its own measure here for as
+    long as it reads that place, see build_forge.limited."""
+    return 30
+
+
 def read_range(url, start, length):
     request = urllib.request.Request(
         url,
@@ -298,7 +305,7 @@ def read_range(url, start, length):
             "User-Agent": USER_AGENT,
         },
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=request_seconds()) as response:
         # A server that takes no notice of the range sends the whole file, which is not read.
         data = response.read(length + 1) if response.status == 206 else b""
     if len(data) != length:
@@ -2003,7 +2010,7 @@ def summary_text(text):
 def raw_text(address):
     """The text of a small file at address, read as UTF-8 as far as MAX_TEXT_BYTES."""
     request = urllib.request.Request(address, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=request_seconds()) as response:
         return response.read(MAX_TEXT_BYTES).decode("utf-8", "replace")
 
 

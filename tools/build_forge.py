@@ -16,11 +16,18 @@ These lists are an extra beside the store's own index, which is built first and 
 in the same run. Nothing that goes wrong here may cost that its update, so whatever cannot
 be read keeps the entry it had.
 
+The places have only so much time between them, and no request begins once a place's time
+is up. What a run does not get to keeps its entry and waits for the next run, which begins
+with what has waited longest. A repository that gave nothing to list, or that could not be
+read, is remembered in the file of its place under "tried", beside the apps, so that the
+runs after do not spend their time on it again.
+
 Only the standard library is used.
 """
 
 import argparse
 import calendar
+import contextlib
 import hashlib
 import json
 import os
@@ -55,7 +62,67 @@ FOUND_MIN_STARS = 5
 # at twelve minutes with nothing written, and the store's own index, built before this, is
 # published only after it.
 BUDGET_SECONDS = 6 * 60
+# The part of a place's time its searches may take. The rest is for examining what they gave:
+# a place that answers slowly is then searched as far as that goes, and what the search did
+# not get to stands as it was.
+SEARCH_SHARE = 0.5
+# How long a request may wait for the server, and how much of a place's time has to be left
+# for a request to begin at all.
+REQUEST_SECONDS = 30
+LEAST_SECONDS = 5
+# How many hours a repository that could not be read waits for its next try, by how many
+# tries in a row have failed: the next run tries once more, and after that the wait doubles
+# up to a day. One that times out run after run would otherwise take its half minute of
+# every run.
+RETRY_HOURS = (0, 1, 2, 4, 8, 16, 24)
+# The answers by which a place refuses the builder itself, not the one repository asked
+# about: the token is not accepted, or too much has been asked. The place is then left alone
+# for the rest of the run.
+REFUSALS = (401, 429)
+# How long what is remembered of a repository is kept when the searches no longer get to it.
+TRIED_KEPT_DAYS = 7
 clock = time.monotonic
+
+
+class OutOfTime(Exception):
+    """The time of the place being read is up. Whatever was being asked says nothing about
+    the repository, which waits for another run."""
+
+
+# The reading of the clock at which the place being read has to stop, or None when nothing
+# limits it. See limited.
+time_up = None
+
+
+def time_left():
+    """How many seconds a request that begins now may wait for the server: REQUEST_SECONDS,
+    or what is left of the place's time when that is less. With less than LEAST_SECONDS left
+    no request begins, and OutOfTime is raised."""
+    if time_up is None:
+        return REQUEST_SECONDS
+    left = time_up - clock()
+    if left < LEAST_SECONDS:
+        raise OutOfTime()
+    return min(REQUEST_SECONDS, left)
+
+
+@contextlib.contextmanager
+def limited(until):
+    """While this lasts, every request made for a place is bound by time_left, with the clock
+    reading until as the end of its time: the requests of this builder, and those the index
+    builder makes when it reads an APK or a short description for it. None is no limit.
+
+    What is bound is when a request may begin and how long it waits for the server each time
+    it waits. A server that goes on sending an answer slowly, piece by piece, is not cut off;
+    against that there is the limit of the workflow's step, and the files are written before
+    any place gets a second turn."""
+    global time_up  # pylint: disable=global-statement
+    before = time_up, build_index.request_seconds
+    time_up, build_index.request_seconds = until, time_left
+    try:
+        yield
+    finally:
+        time_up, build_index.request_seconds = before
 
 LICENSE_FILE = re.compile(r"^(licen[cs]e|copying|unlicense)(\.(md|txt|rst))?$", re.IGNORECASE)
 # How a license is known: by its terms, not by its name, which any text can mention. Each
@@ -188,7 +255,7 @@ def with_token(request, variable, header, prefix=""):
 def forge(path, raw=False, limit=None):
     request = urllib.request.Request(HOST + "/api/v1" + path, headers={"User-Agent": USER_AGENT})
     with_token(request, "CODEBERG_TOKEN", "Authorization", "token ")
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=time_left()) as response:
         if raw:
             return response.read(limit)
         return json.load(response)
@@ -295,12 +362,23 @@ def detect_license(name):
     return identify_license(data.decode("utf-8", "replace"))
 
 
+class Found(list):
+    """The repositories a search gave. whole tells whether the search got to its end: when the
+    time of its place ran out between its pages it did not, and the repositories it did not
+    get to are then not known to be gone."""
+    whole = True
+
+
 def search(query):
     """The repositories that have query among their topics, most starred first."""
-    found = []
+    found = Found()
     for page in range(1, MAX_PAGES + 1):
-        result = forge("/repos/search?q=%s&topic=true&sort=stars&order=desc&limit=%d&page=%d"
-                       % (urllib.parse.quote(query), PAGE_SIZE, page))
+        try:
+            result = forge("/repos/search?q=%s&topic=true&sort=stars&order=desc&limit=%d&page=%d"
+                           % (urllib.parse.quote(query), PAGE_SIZE, page))
+        except OutOfTime:
+            found.whole = False
+            break
         items = result.get("data") or []
         found.extend(items)
         if len(items) < PAGE_SIZE:
@@ -449,7 +527,7 @@ class Codeberg:
 def gitlab(path):
     request = urllib.request.Request(GITLAB_HOST + "/api/v4" + path, headers={"User-Agent": USER_AGENT})
     with_token(request, "GITLAB_TOKEN", "PRIVATE-TOKEN")
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=time_left()) as response:
         return json.load(response)
 
 
@@ -461,7 +539,7 @@ def remote_file(url):
     request = urllib.request.Request(url, headers={
         "Range": "bytes=0-0", "Accept-Encoding": "identity", "User-Agent": USER_AGENT,
     })
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with urllib.request.urlopen(request, timeout=time_left()) as response:
         total = (response.headers.get("Content-Range") or "").rpartition("/")[2]
         if response.status != 206 or not total.isdigit():
             raise OSError("size not told")
@@ -528,12 +606,16 @@ class GitLab:
 
     @staticmethod
     def search(query, since):
-        found = []
+        found = Found()
         activity = "&last_activity_after=" + urllib.parse.quote(since) if since else ""
         for page in range(1, MAX_PAGES + 1):
-            items = gitlab("/projects?topic=%s&order_by=star_count&sort=desc&archived=false"
-                           "&visibility=public&per_page=%d&page=%d%s"
-                           % (urllib.parse.quote(query), GITLAB_PAGE_SIZE, page, activity))
+            try:
+                items = gitlab("/projects?topic=%s&order_by=star_count&sort=desc&archived=false"
+                               "&visibility=public&per_page=%d&page=%d%s"
+                               % (urllib.parse.quote(query), GITLAB_PAGE_SIZE, page, activity))
+            except OutOfTime:
+                found.whole = False
+                break
             found.extend(items)
             if len(items) < GITLAB_PAGE_SIZE:
                 break
@@ -622,14 +704,20 @@ class GitLab:
 PLACES = (Codeberg, GitLab)
 
 
+def fresh(previous, pushed_at, today):
+    """Whether previous, the entry a repository had after the last run, stands without asking
+    again: the repository has not been pushed to since, and it was examined within
+    AUTO_RECHECK_HOURS."""
+    return bool(previous) and previous.get("pushedAt") == pushed_at \
+        and today - previous.get("examinedAt", 0) < build_index.AUTO_RECHECK_HOURS * 3600
+
+
 def examine(repo, previous, today, found, place=Codeberg, icons=None):
     """The entry of one repository, or None when it has nothing to list. previous is its
     entry from the last run: one that is still fresh is kept without asking again, apart from
     the stars and topics, which the search has just told. icons, an IconStore, is where the
     icons of the apps are kept."""
-    pushed_at = place.pushed_at(repo)
-    if previous and previous.get("pushedAt") == pushed_at \
-            and today - previous.get("examinedAt", 0) < build_index.AUTO_RECHECK_HOURS * 3600:
+    if fresh(previous, place.pushed_at(repo), today):
         app = dict(previous, stars=place.stars(repo), topics=repo.get("topics") or [])
     else:
         described = place.describe(repo)
@@ -661,90 +749,332 @@ def shares(started, places, budget=BUDGET_SECONDS):
     return [started + budget * number / places for number in range(1, places + 1)]
 
 
-def build_list(repos, previous, today, found, place=Codeberg, icons=None, until=None):
-    """The entries of repos. Once the clock reads until, what is left is not examined: the
-    list is written with what there was time for, and an entry examined now is fresh for the
-    runs after this one, which get further."""
-    apps = []
-    left = 0
-    for repo in repos:
-        key = "%s:%s" % (place.source, place.name(repo))
-        before = previous.get(key)
-        app = None
-        examined = False
-        if until is None or clock() < until:
-            try:
-                app = examine(repo, before, today, found, place, icons)
-                examined = True
-            except Exception as error:  # pylint: disable=broad-except
-                print("%s: %r" % (key, error), file=sys.stderr)
-        else:
-            left += 1
-        if not examined:
-            # Keep what was known rather than dropping an app over a passing error or for
-            # want of time. An app found by searching is kept only as long as its release is
-            # recent, as always.
-            app = before
-            if found and app and not build_index.recent_enough(app, today):
-                app = None
-        if app:
-            apps.append(app)
-    if left:
-        print("%s: out of time, %d of %d left as they were" % (place.source, left, len(repos)), file=sys.stderr)
-    apps.sort(key=lambda app: app["fullName"].lower())
-    return apps
+def retry_seconds(failures):
+    """How long a repository waits for its next try after so many tries in a row have failed,
+    see RETRY_HOURS."""
+    return RETRY_HOURS[min(failures, len(RETRY_HOURS)) - 1] * 3600
+
+
+def load_tried(path, today):
+    """What the file at path, written by an earlier run, remembers of the repositories of its
+    place: {"published": ..., "found": ...}, one for each list, by the name of the repository;
+    see Listing for what is remembered. Anything not written the way this builder writes it
+    is left out, and so is what is older than TRIED_KEPT_DAYS. A missing or unreadable file
+    remembers nothing, and everything is then examined as if for the first time."""
+    tried = {"published": {}, "found": {}}
+    try:
+        with open(path, encoding="utf-8") as file:
+            loaded = json.load(file)
+    except (OSError, ValueError):
+        return tried
+    written = loaded.get("tried") if isinstance(loaded, dict) else None
+    for kind, records in tried.items():
+        given = written.get(kind) if isinstance(written, dict) else None
+        for name, record in (given.items() if isinstance(given, dict) else ()):
+            if not isinstance(record, dict):
+                continue
+            pushed_at, at, failures = record.get("pushedAt"), record.get("at"), record.get("failures")
+            if isinstance(pushed_at, str) and type(at) in (int, float) and type(failures) is int \
+                    and failures >= 0 and 0 <= today - at <= TRIED_KEPT_DAYS * 86400:
+                records[name] = {"pushedAt": pushed_at, "at": at, "failures": failures}
+    return tried
+
+
+class Listing:
+    """One list of one place in the making: the repositories its search gave, and what the
+    run knows of each so far.
+
+    previous holds the entries of the last run, by "place:name". tried holds what the last run
+    remembered of the repositories that are not in the list, by name: "pushedAt", the push the
+    repository had when it was last looked at, "at", when that was, and "failures", how many
+    tries in a row have failed, 0 after an examination that found nothing to list. Without
+    this an examination that gives no entry would be made anew in every run, and when the
+    time of the place is short the runs would never get past the same repositories.
+
+    A repository is settled, with an entry or with None for nothing to list, when its entry
+    is fresh (see fresh), when it gave nothing at its last examination, has not been pushed to
+    since and that is at most AUTO_RECHECK_HOURS ago, or when it is examined now. One that
+    failed keeps the entry it had and waits before it is tried again, see RETRY_HOURS. The
+    rest wait to be examined, see work, and keep the entry they had meanwhile. An app found
+    by searching is kept that way only as long as its release is recent, as always.
+
+    seen holds the names the search gave, and whole tells whether the search got to its end.
+    When it did not, the entries and the memory of the repositories it did not get to stand
+    as they were."""
+
+    def __init__(self, place, found, repos, previous, today, tried=None, icons=None, seen=None, whole=True):
+        self.place = place
+        self.found = found
+        self.previous = previous
+        self.today = today
+        self.icons = icons
+        self.whole = whole
+        self.total = len(repos)
+        # Set when the place refused the builder itself: nothing more is asked in this run.
+        self.stopped = False
+        self.names = [place.name(repo) for repo in repos]
+        self.seen = set(self.names) if seen is None else seen
+        self.settled = {}
+        self.tried = {}
+        self.waiting = []
+        tried = tried or {}
+        for order, repo in enumerate(repos):
+            name = self.names[order]
+            before = previous.get(self.key(name))
+            known = tried.get(name)
+            pushed_at = place.pushed_at(repo)
+            if known and known["failures"]:
+                if today - known["at"] < retry_seconds(known["failures"]):
+                    self.tried[name] = known
+                    continue
+            elif known and known["pushedAt"] == pushed_at \
+                    and today - known["at"] < build_index.AUTO_RECHECK_HOURS * 3600:
+                self.tried[name] = known
+                self.settled[name] = None
+                continue
+            elif fresh(before, pushed_at, today):
+                # No request is made for a fresh entry.
+                self.settled[name] = examine(repo, before, today, found, place, icons)
+                continue
+            if known:
+                self.tried[name] = known
+            last = known["at"] if known else (before or {}).get("examinedAt", 0)
+            self.waiting.append((last, -place.stars(repo), order, repo))
+        # The longest waiting first, and those never looked at before all others, by their
+        # stars: every repository has its turn, whatever becomes of those before it.
+        self.waiting.sort(key=lambda item: item[:3])
+        if not whole:
+            for name, known in tried.items():
+                if name not in self.seen:
+                    self.tried[name] = known
+
+    def key(self, name):
+        return "%s:%s" % (self.place.source, name)
+
+    def standing(self, name):
+        """The entry a repository had after the last run, as far as it may stand without the
+        repository having been examined."""
+        app = self.previous.get(self.key(name))
+        if self.found and app and not build_index.recent_enough(app, self.today):
+            return None
+        return app
+
+    def work(self, until=None):
+        """Examines the repositories that wait, until none is left or the clock reads until.
+        No request begins after that, see limited. What an examination was doing when the
+        time ran out is not held against the repository: it waits for another run, as do
+        those the run did not get to."""
+        if self.stopped:
+            return
+        with limited(until):
+            while self.waiting:
+                if until is not None and clock() >= until:
+                    break
+                repo = self.waiting[0][3]
+                name = self.place.name(repo)
+                record = {"pushedAt": self.place.pushed_at(repo), "at": int(self.today), "failures": 0}
+                try:
+                    app = examine(repo, self.previous.get(self.key(name)), self.today, self.found,
+                                  self.place, self.icons)
+                except OutOfTime:
+                    break
+                except Exception as error:  # pylint: disable=broad-except
+                    if isinstance(error, urllib.error.HTTPError) and error.code in REFUSALS:
+                        print("%s: %r, the place is left alone for this run" % (self.key(name), error),
+                              file=sys.stderr)
+                        self.stopped = True
+                        break
+                    if until is not None and until - clock() < LEAST_SECONDS:
+                        break
+                    # Keep what was known rather than dropping an app over a passing error.
+                    print("%s: %r" % (self.key(name), error), file=sys.stderr)
+                    record["failures"] = self.tried.get(name, {}).get("failures", 0) + 1
+                    self.tried[name] = record
+                    del self.waiting[0]
+                    continue
+                del self.waiting[0]
+                self.settled[name] = app
+                if app is None:
+                    self.tried[name] = record
+                else:
+                    self.tried.pop(name, None)
+
+    def left(self):
+        """How many repositories still wait to be examined."""
+        return len(self.waiting)
+
+    def unsettled(self):
+        """The names of the repositories whose entry this run does not know: those that wait
+        and those that failed."""
+        return [name for name in self.names if name not in self.settled]
+
+    def put_off(self):
+        """The names of the repositories that still wait to be examined."""
+        return [self.place.name(item[3]) for item in self.waiting]
+
+    def entries(self):
+        """The list as it stands, see the class."""
+        apps = [app for app in self.settled.values() if app]
+        apps += [app for app in map(self.standing, self.unsettled()) if app]
+        if not self.whole:
+            prefix = self.key("")
+            names = [key[len(prefix):] for key in self.previous if key.startswith(prefix)]
+            apps += [app for app in map(self.standing, (name for name in names if name not in self.seen)) if app]
+        return sorted(apps, key=lambda app: app["fullName"].lower())
+
+    def records(self):
+        """What to remember for the next run, see the class."""
+        return dict(self.tried)
+
+
+def searched(place, query, since, what):
+    """What a search of place gave, as a Found. A search that fails gave nothing and is not
+    whole: the place could not be searched, and what it did not tell stands as it was."""
+    try:
+        given = place.search(query, since)
+    except Exception as error:  # pylint: disable=broad-except
+        print("%s: %s unavailable: %r" % (place.source, what, error), file=sys.stderr)
+        given = Found()
+        given.whole = False
+        return given
+    if not getattr(given, "whole", True):
+        print("%s: out of time in the %s, what it did not get to stands as it was"
+              % (place.source, what), file=sys.stderr)
+    return given
+
+
+def published_listing(place, previous, tried, today, icons=None):
+    """The list of the repositories of one place that carry the store topic. previous holds
+    the published entries of the last run, of every place; tried, see Listing."""
+    prefix = place.source + ":"
+    given = searched(place, build_index.TOPIC, None, "published apps")
+    repos = [repo for repo in given if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])]
+    mine = {key: app for key, app in previous.items() if key.startswith(prefix)}
+    return Listing(place, False, repos, mine, today, tried, icons,
+                   seen={place.name(repo) for repo in given}, whole=getattr(given, "whole", True))
+
+
+def found_listing(place, taken, previous, tried, today, icons=None):
+    """The list of the apps found by searching one place, leaving out the repositories in
+    taken, which their developers have published. previous holds the entries of the place's
+    own file from the last run; tried, see Listing."""
+    since = today - build_index.AUTO_PUSHED_DAYS * 86400
+    candidates = {}
+    whole = True
+    for query in FOUND_QUERIES:
+        given = searched(place, query, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(since)), "search")
+        whole = whole and getattr(given, "whole", True)
+        for repo in given:
+            candidates.setdefault(place.name(repo), repo)
+    repos = [
+        repo for name, repo in candidates.items()
+        if place.usable(repo)
+        and name not in taken
+        and build_index.TOPIC not in (repo.get("topics") or [])
+        and place.stars(repo) >= FOUND_MIN_STARS
+        and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
+    ]
+    return Listing(place, True, repos, previous, today, tried, icons, seen=set(candidates) | set(taken), whole=whole)
+
+
+class Turn:
+    """The turn of one place: its two lists in the making, the published and the found.
+
+    The searches are made at once and may take SEARCH_SHARE of the time up to until. The
+    examinations are made by work, which can be called again with more time: what the
+    searches gave is kept, and only what still waits is examined."""
+
+    def __init__(self, place, published, found, tried, today, icons=None, until=None):
+        self.place = place
+        limit = None
+        if until is not None:
+            now = clock()
+            limit = now + (until - now) * SEARCH_SHARE
+        with limited(limit):
+            self.published = published_listing(place, published, tried.get("published") or {}, today, icons)
+            # A published app the search did not get to is still its developer's to list.
+            taken = set(self.published.names)
+            taken.update(app["fullName"][len(place.source) + 1:] for app in self.published.entries())
+            self.found = found_listing(place, taken, found, tried.get("found") or {}, today, icons)
+
+    def work(self, until=None):
+        """Examines what waits in both lists, the published first, until the clock reads
+        until; see Listing.work."""
+        for listing in (self.published, self.found):
+            listing.work(until)
+            if listing.stopped:
+                self.published.stopped = self.found.stopped = True
+
+    def unfinished(self):
+        """Whether more time would let more be examined."""
+        return not self.found.stopped and self.published.left() + self.found.left() > 0
+
+    def lists(self):
+        """(published, found): the entries of the two lists as they stand.
+
+        A repository given the store topic leaves the found for the published, and one that
+        lost the topic goes the other way. An examination put off for want of time would
+        leave such an app in neither list, so it stays in the one it was in until the
+        examination for the other has been made. An app on its way to the published stays
+        among the found also when that examination fails. One whose developer took the topic
+        off does not stay published over a failure: it has been withdrawn, and is listed
+        again when it can be read."""
+        published, found = self.published.entries(), self.found.entries()
+        listed = {app["fullName"] for app in published + found}
+        for names, there, apps in ((self.published.unsettled(), self.found, found),
+                                   (self.found.put_off(), self.published, published)):
+            for name in names:
+                app = there.standing(name)
+                if app and app["fullName"] not in listed:
+                    apps.append(app)
+                    listed.add(app["fullName"])
+        for apps in (published, found):
+            apps.sort(key=lambda app: app["fullName"].lower())
+        return published, found
+
+    def tried(self):
+        """What the place's file is to remember for the next run, see load_tried."""
+        return {"published": self.published.records(), "found": self.found.records()}
+
+    def tell(self):
+        """Says how the turn went."""
+        left = self.published.left() + self.found.left()
+        if left:
+            why = "refused" if self.found.stopped else "out of time"
+            print("%s: %s, %d of %d left as they were"
+                  % (self.place.source, why, left, self.published.total + self.found.total), file=sys.stderr)
+        published, found = self.lists()
+        remembered = len(self.published.records()) + len(self.found.records())
+        print("%s: %d published, %d found, %d remembered for giving nothing or failing"
+              % (self.place.source, len(published), len(found), remembered))
 
 
 def load(path, keys):
     return build_index.load_previous(path, keys) or {}
 
 
-def published_apps(place, previous, today, icons=None, until=None):
-    """(names, apps): the repositories of one place that carry the store topic, by name, and
-    their entries. When the place cannot be searched, its previous entries stand. until is
-    when the place's time is up, see build_list."""
-    prefix = place.source + ":"
-    try:
-        repos = [
-            repo for repo in place.search(build_index.TOPIC, None)
-            if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])
-        ]
-        return ({place.name(repo) for repo in repos},
-                build_list(repos, previous, today, False, place, icons, until=until))
-    except Exception as error:  # pylint: disable=broad-except
-        print("%s: published apps unavailable: %r" % (place.source, error), file=sys.stderr)
-        return set(), [app for name, app in previous.items() if name.startswith(prefix)]
-
-
-def found_apps(place, taken, previous, today, icons=None, until=None):
-    """The apps found by searching one place, leaving out the repositories in taken, which
-    their developers have published. When the place cannot be searched, the previous list
-    stands as far as its releases are still recent. until is when the place's time is up,
-    see build_list."""
-    try:
-        since = today - build_index.AUTO_PUSHED_DAYS * 86400
-        candidates = {}
-        for query in FOUND_QUERIES:
-            for repo in place.search(query, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(since))):
-                candidates.setdefault(place.name(repo), repo)
-        repos = [
-            repo for name, repo in candidates.items()
-            if place.usable(repo)
-            and name not in taken
-            and build_index.TOPIC not in (repo.get("topics") or [])
-            and place.stars(repo) >= FOUND_MIN_STARS
-            and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
-        ]
-        repos.sort(key=lambda repo: -place.stars(repo))
-        return build_list(repos, previous, today, True, place, icons, until=until)
-    except Exception as error:  # pylint: disable=broad-except
-        print("%s: search unavailable: %r" % (place.source, error), file=sys.stderr)
-        published = {"%s:%s" % (place.source, name) for name in taken}
-        found = [
-            app for name, app in previous.items()
-            if name not in published and build_index.recent_enough(app, today)
-        ]
-        return sorted(found, key=lambda app: app["fullName"].lower())
+def write(output_dir, turns, generated_at):
+    """Writes the file of each place and the file of the published apps of them all, with
+    what the turns have made of them so far."""
+    published = []
+    for place, turn in zip(PLACES, turns):
+        apps, found = turn.lists()
+        published += apps
+        write_json(os.path.join(output_dir, place.source + ".json"), {
+            "version": 1,
+            "source": place.source,
+            "generatedAt": generated_at,
+            "apps": found,
+            # Beside the apps, not among them: the app reads "apps" and nothing else.
+            "tried": turn.tried(),
+        }, ensure_ascii=False)
+    published.sort(key=lambda app: app["fullName"].lower())
+    write_json(os.path.join(output_dir, "forge.json"), {
+        "version": 1,
+        "generatedAt": generated_at,
+        "apps": [app for app in published if not app.get("betaOnly")],
+        "betaApps": [app for app in published if app.get("betaOnly")],
+    }, ensure_ascii=False)
 
 
 def main():
@@ -762,27 +1092,26 @@ def main():
     if arguments.icons_dir and arguments.icons_url:
         icons = build_index.IconStore(arguments.icons_dir, arguments.icons_url)
 
-    published = []
-    for place, until in zip(PLACES, shares(clock(), len(PLACES))):
-        taken, apps = published_apps(place, previous_published, today, icons, until=until)
-        published += apps
-        name = place.source + ".json"
-        found = found_apps(place, taken, load(os.path.join(before, name), ("apps",)), today, icons, until=until)
-        write_json(os.path.join(arguments.output_dir, name), {
-            "version": 1,
-            "source": place.source,
-            "generatedAt": generated_at,
-            "apps": found,
-        }, ensure_ascii=False)
-        print("%s: %d published, %d found" % (place.source, len(apps), len(found)))
-
-    published.sort(key=lambda app: app["fullName"].lower())
-    write_json(os.path.join(arguments.output_dir, "forge.json"), {
-        "version": 1,
-        "generatedAt": generated_at,
-        "apps": [app for app in published if not app.get("betaOnly")],
-        "betaApps": [app for app in published if app.get("betaOnly")],
-    }, ensure_ascii=False)
+    ends = shares(clock(), len(PLACES))
+    turns = []
+    for place, until in zip(PLACES, ends):
+        path = os.path.join(before, place.source + ".json")
+        turn = Turn(place, previous_published, load(path, ("apps",)), load_tried(path, today), today, icons,
+                    until=until)
+        turn.work(until)
+        turns.append(turn)
+    # Written as soon as every place has had its turn, so that the files are there whatever
+    # becomes of the rest.
+    write(arguments.output_dir, turns, generated_at)
+    # What a place left of its time goes to those that ran out of theirs. The searches are
+    # not made again.
+    again = [turn for turn in turns if turn.unfinished()]
+    for turn in again:
+        turn.work(ends[-1])
+    if again:
+        write(arguments.output_dir, turns, generated_at)
+    for turn in turns:
+        turn.tell()
 
 
 if __name__ == "__main__":
