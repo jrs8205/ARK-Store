@@ -552,6 +552,31 @@ class BuildListTest(unittest.TestCase):
         # What its developer has published in the meantime is no longer among the found.
         self.assertEqual(turn.lists(), ([taken], [self.RECENT]))
 
+    def test_odd_answers_of_a_search_cost_only_themselves(self):
+        odd = ["text", None, {"no": "name"}, dict(REPO, full_name="odd/stars", stars_count=None)]
+        with mock.patch.object(build_forge, "search", return_value=[REPO] + odd), \
+                mock.patch.object(build_forge, "examine", return_value=self.RECENT) as examine:
+            turn = build_forge.Turn(build_forge.Codeberg, {}, {}, {}, NOW)
+            turn.work()
+        self.assertEqual((turn.lists(), examine.call_count), (([], [self.RECENT]), 1))
+
+    def test_list_that_cannot_be_made_keeps_what_it_had(self):
+        with mock.patch.object(build_forge, "search", return_value=[dict(REPO, topics=5)]), \
+                mock.patch.object(build_forge, "examine", side_effect=AssertionError("asked")) as examine, \
+                contextlib.redirect_stderr(io.StringIO()):
+            turn = build_forge.Turn(build_forge.Codeberg, {}, {"codeberg:owner/app": self.RECENT}, {}, NOW)
+            turn.work()
+        self.assertEqual((turn.lists(), examine.call_count), (([], [self.RECENT]), 0))
+
+    def test_odd_entry_of_the_last_run_costs_only_an_examination(self):
+        odd = dict(self.RECENT, pushedAt="2026-09-20T10:00:00Z", examinedAt="lately")
+        examined = dict(self.RECENT, tag="new")
+        with mock.patch.object(build_forge, "examine", return_value=examined), \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(build_forge.Codeberg, True, [REPO], {"codeberg:owner/app": odd}, NOW)
+            listing.work()
+        self.assertEqual(listing.entries(), [examined])
+
     def test_unusable_repositories_are_told_apart(self):
         self.assertTrue(build_forge.usable(REPO))
         for flag in ("private", "fork", "archived", "mirror", "empty"):
@@ -789,8 +814,23 @@ def codeberg(name, stars=7, **more):
     return dict(REPO, full_name=name, html_url="https://codeberg.org/" + name, stars_count=stars, **more)
 
 
-def record(at=NOW, failures=0, pushed="2026-09-20T10:00:00Z"):
-    return {"pushedAt": pushed, "at": at, "failures": failures}
+def record(at=NOW, failures=0, pushed="2026-09-20T10:00:00Z", cut=0):
+    made = {"pushedAt": pushed, "at": at, "failures": failures}
+    if cut:
+        made["cut"] = cut
+    return made
+
+
+def transport(clock, seconds, answer):
+    """A urlopen that answers after so many seconds and, like a real one, gives up when it is
+    given less time than that."""
+    def urlopen(request, timeout=None):
+        if timeout is not None and timeout < seconds:
+            clock.take(timeout)
+            raise TimeoutError("The read operation timed out")
+        clock.take(seconds)
+        return answer(request)
+    return urlopen
 
 
 class TriedTest(unittest.TestCase):
@@ -873,11 +913,14 @@ class TriedTest(unittest.TestCase):
         with mock.patch.object(build_forge, "clock", clock):
             listing = self.listing(repos, examine, until=150.0)
         self.assertEqual((self.asked, listing.left()), (["a/one", "b/two"], 1))
+        # Of what the run did not get to nothing is remembered.
         self.assertEqual(sorted(listing.records()), ["a/one", "b/two"])
-        # Nor is a request that was not let begin, or one that failed as the time ran out.
+        # An examination the time ran out on is remembered as cut short: no failure, and no
+        # finding either, so the entry stands. So is one that failed as the time ran out.
         previous = {"codeberg:owner/app": self.RECENT}
         listing = self.listing([REPO], build_forge.OutOfTime(), previous=previous)
-        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 1, {}))
+        self.assertEqual((listing.entries(), listing.left()), ([self.RECENT], 1))
+        self.assertEqual(listing.records(), {"owner/app": record(cut=1)})
 
         def cut_short(*asked):
             clock.take(28)
@@ -886,14 +929,70 @@ class TriedTest(unittest.TestCase):
         clock.at = 100.0
         with mock.patch.object(build_forge, "clock", clock):
             listing = self.listing([REPO], cut_short, previous=previous, until=130.0)
-        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 1, {}))
+        self.assertEqual((listing.entries(), listing.left()), ([self.RECENT], 1))
+        self.assertEqual(listing.records(), {"owner/app": record(cut=1)})
 
-    def test_place_that_says_too_many_requests_is_left_alone_for_the_run(self):
-        refusal = urllib.error.HTTPError("https://codeberg.org/api/v1/x", 429, "Too Many Requests", {}, None)
+    def test_what_was_cut_short_goes_behind_the_others_and_waits_longer_each_time(self):
+        heavy = codeberg("heavy/app", 50)
+        stands = dict(self.RECENT, fullName="codeberg:heavy/app")
+        previous = {"codeberg:heavy/app": stands}
+        first = self.listing([heavy, REPO], build_forge.OutOfTime(), previous=previous)
+        self.assertEqual(self.asked, ["heavy/app"])
+        self.assertEqual(first.records(), {"heavy/app": record(cut=1)})
+        # More time in the same run goes to the others first, and only then to it again.
+        with mock.patch.object(build_forge, "examine", side_effect=[self.RECENT, build_forge.OutOfTime()]) as asked:
+            first.work()
+        self.assertEqual([call.args[0]["full_name"] for call in asked.call_args_list], ["owner/app", "heavy/app"])
+        # However often the time runs out on it in one run, that counts once.
+        self.assertEqual(first.records(), {"heavy/app": record(cut=1)})
+        self.assertEqual(first.entries(), [stands, self.RECENT])
+        # The next run begins with what has never been looked at.
+        fresh = codeberg("new/app", 5)
+        second = self.listing([heavy, fresh], [None, build_forge.OutOfTime()], tried=first.records(),
+                              previous=previous, today=NOW + 1800)
+        self.assertEqual(self.asked, ["new/app", "heavy/app"])
+        self.assertEqual(second.records()["heavy/app"], record(at=NOW + 1800, cut=2))
+        # Cut short twice in a row, it waits an hour, with the entry it had.
+        resting = self.listing([heavy], [None], tried=second.records(), previous=previous, today=NOW + 1800 + 3599)
+        self.assertEqual((self.asked, resting.entries(), resting.left()), ([], [stands], 0))
+        self.listing([heavy], [stands], tried=second.records(), previous=previous, today=NOW + 1800 + 3600)
+        self.assertEqual(self.asked, ["heavy/app"])
+
+    def three_files(self, read_manifest, tried=None):
+        """A listing of a repository whose release has three files, examined for real."""
+        files = [dict(RELEASES[0]["assets"][0], id=number, name="app-%d.apk" % number) for number in (1, 2, 3)]
+        with mock.patch.object(build_forge, "forge", return_value=[dict(RELEASES[0], assets=files)]), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_index, "read_manifest", side_effect=read_manifest) as read, \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(build_forge.Codeberg, True, [REPO], {}, NOW, tried=tried)
+            listing.work()
+        return listing, read.call_count
+
+    def test_what_an_examination_had_read_is_not_read_again(self):
+        manifest = ("org.example", 3, "1.0", "Example")
+        for trouble in (build_forge.OutOfTime(), TimeoutError("slow")):
+            first, read = self.three_files([manifest, manifest, trouble])
+            self.assertEqual((first.entries(), read), ([], 3))
+            remembered = json.loads(json.dumps(first.records()))
+            self.assertEqual([apk["id"] for apk in remembered["owner/app"]["apks"]], [1, 2])
+            second, read = self.three_files([manifest], tried=remembered)
+            self.assertEqual(read, 1)
+            self.assertEqual([apk["id"] for apk in second.entries()[0]["apks"]], [1, 2, 3])
+            self.assertEqual(second.records(), {})
+
+    def test_place_that_refuses_the_builder_is_left_alone_for_the_run(self):
         previous = {"codeberg:owner/app": self.RECENT}
-        listing = self.listing([REPO, TimeTakenTest.OTHER], refusal, previous=previous)
+        listing = self.listing([REPO, TimeTakenTest.OTHER], build_forge.Refused(429, "Too Many Requests"),
+                               previous=previous)
         self.assertEqual(self.asked, ["owner/app"])
-        self.assertEqual((listing.entries(), listing.left(), listing.records()), ([self.RECENT], 2, {}))
+        self.assertEqual((listing.entries(), listing.left()), ([self.RECENT], 2))
+        # No failure of the repository. It only goes behind the others, so that it is not the
+        # one asked about first in every run, and it waits no longer for that.
+        self.assertEqual(listing.records(), {"owner/app": record(cut=1)})
+        again = self.listing([REPO], build_forge.Refused(429, "Too Many Requests"), tried=listing.records(),
+                             previous=previous, today=NOW + 1800)
+        self.assertEqual((self.asked, again.records()), (["owner/app"], {"owner/app": record(at=NOW + 1800, cut=1)}))
         self.assertTrue(listing.stopped)
         listing.work()
         self.assertEqual(listing.left(), 2)
@@ -916,6 +1015,8 @@ class TriedTest(unittest.TestCase):
 
     def test_odd_or_old_records_are_not_read(self):
         old = NOW - build_forge.TRIED_KEPT_DAYS * 86400 - 1
+        read = {"id": 4, "name": "a.apk", "packageName": "org.example", "versionCode": 3, "versionName": "1.0",
+                "label": "Example", "signer": None, "minSdk": 21}
         with tempfile.TemporaryDirectory() as folder:
             path = os.path.join(folder, "codeberg.json")
             self.assertEqual(build_forge.load_tried(path, NOW), {"published": {}, "found": {}})
@@ -926,10 +1027,15 @@ class TriedTest(unittest.TestCase):
             build_index.write_json(path, {"apps": [], "tried": {"published": {"p/ok": record(failures=2)}, "found": {
                 "a/ok": record(), "b/text": "x", "c/no-time": {"failures": 0}, "d/odd-time": record(at="soon"),
                 "e/odd-count": record(failures=-1), "f/old": record(at=old), "g/true": record(failures=True),
-                "h/odd-push": record(pushed=7), "i/ahead": record(at=NOW + 60),
+                "h/odd-push": record(pushed=7), "i/ahead": record(at=NOW + 60), "j/cut": record(cut=2),
+                "k/odd-cut": dict(record(), cut="x"), "l/no-cut": dict(record(), cut=-1),
+                "m/files": dict(record(failures=1), apks=[read]),
+                "n/odd-files": dict(record(), apks=[4]), "o/no-id": dict(record(), apks=[dict(read, id="4")]),
+                "q/half-file": dict(record(), apks=[{"id": 4, "name": "a.apk"}]),
             }}})
-            self.assertEqual(build_forge.load_tried(path, NOW),
-                             {"published": {"p/ok": record(failures=2)}, "found": {"a/ok": record()}})
+            self.assertEqual(build_forge.load_tried(path, NOW), {"published": {"p/ok": record(failures=2)}, "found": {
+                "a/ok": record(), "j/cut": record(cut=2), "m/files": dict(record(failures=1), apks=[read]),
+            }})
 
     def heavy_run(self, answer, tried, today):
         """A run of a place whose seven most starred repositories each take 28 seconds to give
@@ -940,6 +1046,10 @@ class TriedTest(unittest.TestCase):
         def detect_license(name):
             if not name.startswith("heavy/"):
                 return "MIT"
+            wait = build_forge.time_left()
+            if wait < 28:
+                clock.take(wait)
+                raise TimeoutError("The read operation timed out")
             clock.take(28)
             return answer()
 
@@ -956,6 +1066,8 @@ class TriedTest(unittest.TestCase):
     def test_app_behind_repositories_that_give_nothing_is_reached_by_the_next_run(self):
         first = self.heavy_run(lambda: None, {}, NOW)
         self.assertEqual((first.entries(), len(first.records())), ([], 7))
+        # Six gave nothing; the seventh had twelve seconds and was cut short.
+        self.assertEqual(first.records()["heavy/6"], record(cut=1))
         second = self.heavy_run(lambda: None, first.records(), NOW + 1800)
         self.assertEqual([app["fullName"] for app in second.entries()], ["codeberg:owner/app"])
 
@@ -1021,13 +1133,9 @@ class DeadlineTest(unittest.TestCase):
 
     def pages(self, search, page, until):
         clock = Clock()
-
-        def urlopen(request, timeout=None):
-            clock.take(28)
-            return io.BytesIO(page)
-
         with mock.patch.object(build_forge, "clock", clock), \
-                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(urllib.request, "urlopen",
+                                  side_effect=transport(clock, 28, lambda request: io.BytesIO(page))), \
                 build_forge.limited(until):
             return search()
 
@@ -1043,6 +1151,47 @@ class DeadlineTest(unittest.TestCase):
         self.assertEqual((len(found), found.whole), (2 * build_forge.GITLAB_PAGE_SIZE, False))
         found = self.pages(lambda: build_forge.GitLab.search("android", None), b"[]", None)
         self.assertEqual((len(found), found.whole), (0, True))
+        # A page asked for with little time left may not come in that time. The pages before
+        # it are kept all the same.
+        found = self.pages(lambda: build_forge.search("android"), full.encode(), 62.0)
+        self.assertEqual((len(found), found.whole), (2 * build_forge.PAGE_SIZE, False))
+        found = self.pages(lambda: build_forge.GitLab.search("android", None), projects, 62.0)
+        self.assertEqual((len(found), found.whole), (2 * build_forge.GITLAB_PAGE_SIZE, False))
+        # A search whose first page does not come has failed.
+        with self.assertRaises(TimeoutError):
+            self.pages(lambda: build_forge.search("android"), full.encode(), 20.0)
+
+    def test_repositories_of_the_pages_read_before_one_timed_out_are_examined(self):
+        clock = Clock()
+
+        def page(request):
+            number = int(re.search(r"[?&]page=(\d+)", request.full_url).group(1))
+            count = build_forge.PAGE_SIZE if number < 4 else 1
+            return io.BytesIO(json.dumps({"data": [
+                codeberg("owner/page%d-%d" % (number, place)) for place in range(count)]}).encode())
+
+        slow = transport(clock, 28, page)
+
+        def urlopen(request, timeout=None):
+            if "q=android&" not in request.full_url:
+                return io.BytesIO(b'{"data":[]}')
+            return slow(request, timeout)
+
+        def examine(repo, *rest):
+            return {"fullName": "codeberg:" + repo["full_name"], "publishedAt": "2026-09-01T08:00:00Z"}
+
+        unseen = dict(BuildListTest.RECENT, fullName="codeberg:owner/unseen")
+        with mock.patch.object(build_forge, "clock", clock), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(build_forge, "examine", side_effect=examine), \
+                contextlib.redirect_stderr(io.StringIO()):
+            turn = build_forge.Turn(build_forge.Codeberg, {}, {"codeberg:owner/unseen": unseen}, {}, NOW, until=180.0)
+            turn.work(180.0)
+        found = turn.lists()[1]
+        # Three pages came in 28 seconds each; the fourth had six seconds and did not.
+        self.assertEqual(clock.at, 90.0)
+        self.assertEqual(len(found), 3 * build_forge.PAGE_SIZE + 1)
+        self.assertIn(unseen, found)
 
     def test_what_a_search_cut_short_did_not_get_to_stands_as_it_was(self):
         part = build_forge.Found([REPO])
@@ -1077,6 +1226,63 @@ class DeadlineTest(unittest.TestCase):
             build_forge.Turn(build_forge.Codeberg, {}, {}, {}, NOW, until=280.0)
         self.assertEqual(limits, [100.0 + 180.0 * build_forge.SEARCH_SHARE] * 3)
         self.assertIsNone(build_forge.time_up)
+
+
+class RefusalTest(unittest.TestCase):
+    """A place refusing the builder itself, because its token is not accepted or too much has
+    been asked, is told apart from a file that cannot be had: only the place's own API says
+    the first."""
+
+    def answer(self, code, ask):
+        error = urllib.error.HTTPError("https://example.org/x", code, "No", {}, None)
+        with mock.patch.object(urllib.request, "urlopen", side_effect=error):
+            ask()
+
+    def test_only_an_answer_of_the_places_own_api_is_a_refusal(self):
+        for ask in (lambda: build_forge.forge("/repos/search"), lambda: build_forge.gitlab("/projects")):
+            for code in (401, 429):
+                with self.assertRaises(build_forge.Refused):
+                    self.answer(code, ask)
+            for code in (403, 404, 500):
+                with self.assertRaises(urllib.error.HTTPError):
+                    self.answer(code, ask)
+        for ask in (lambda: build_forge.remote_file("https://gitlab.com/group/app/-/package_files/5/download"),
+                    lambda: build_index.read_range("https://codeberg.org/app.apk", 0, 4),
+                    lambda: build_index.raw_text("https://codeberg.org/owner/app/raw/branch/main/a.txt")):
+            for code in (401, 429):
+                with self.assertRaises(urllib.error.HTTPError):
+                    self.answer(code, ask)
+
+    def test_file_that_asks_for_a_login_is_its_repositorys_failure_alone(self):
+        locked = "https://gitlab.com/api/v4/projects/999/packages/generic/app/1/app.apk"
+        bad = dict(PROJECT, id=1, path_with_namespace="group/bad", web_url="https://gitlab.com/group/bad",
+                   star_count=9)
+        good = dict(PROJECT, id=2, path_with_namespace="group/good", web_url="https://gitlab.com/group/good")
+        links = {1: link(7, "app.apk", locked), 2: link(8, "app.apk", GitLabTest.APK)}
+        sized = mock.MagicMock()
+        sized.__enter__.return_value = mock.Mock(status=206, headers={"Content-Range": "bytes 0-0/9", "ETag": "x"})
+
+        def gitlab(path):
+            project = int(re.match(r"/projects/(\d+)", path).group(1))
+            if "/releases" in path:
+                return [gitlab_release([links[project]])]
+            return dict(bad if project == 1 else good, license={"key": "mit"})
+
+        def urlopen(request, timeout=None):
+            if request.full_url == locked:
+                raise urllib.error.HTTPError(locked, 401, "Unauthorized", {}, None)
+            return sized
+
+        with mock.patch.object(build_forge, "gitlab", side_effect=gitlab), \
+                mock.patch.object(urllib.request, "urlopen", side_effect=urlopen), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 3, "1.0", "Example", None, 21)), \
+                contextlib.redirect_stderr(io.StringIO()):
+            listing = build_forge.Listing(build_forge.GitLab, True, [bad, good], {}, NOW)
+            listing.work()
+        self.assertEqual([app["fullName"] for app in listing.entries()], ["gitlab:group/good"])
+        self.assertEqual(listing.records(), {"group/bad": record(failures=1, pushed="2026-09-20T10:00:00Z")})
+        self.assertFalse(listing.stopped)
 
 
 class MoveTest(unittest.TestCase):
@@ -1221,12 +1427,13 @@ class RunTest(unittest.TestCase):
         page = json.dumps({"data": forks}).encode()
         began = []
 
+        slow = transport(clock, 28, lambda request: io.BytesIO(page))
+
         def urlopen(request, timeout=None):
             self.assertIn("https://codeberg.org/api/v1/repos/search?", request.full_url)
             if "q=%s&" % build_index.TOPIC in request.full_url:
                 return io.BytesIO(b'{"data":[]}')
-            clock.take(28)
-            return io.BytesIO(page)
+            return slow(request, timeout)
 
         def gitlab(path):
             began.append(clock.at)
@@ -1250,3 +1457,47 @@ class RunTest(unittest.TestCase):
         # Codeberg's searches were stopped within its own time, long before the time of both was up.
         self.assertLess(began[0], build_forge.BUDGET_SECONDS / 2)
         self.assertLess(clock.at, build_forge.BUDGET_SECONDS)
+
+    def test_repository_too_slow_for_one_turn_does_not_keep_the_others_waiting(self):
+        head = codeberg("owner/head", 50)
+        address = "https://codeberg.org/owner/head/releases/download/v1/head-%d.apk"
+        files = [{"id": number, "name": "head-%d.apk" % number, "size": 100, "download_count": 0,
+                  "browser_download_url": address % number} for number in range(1, 8)]
+        releases = {"owner/head": [dict(RELEASES[0], assets=files)], "owner/app": RELEASES}
+        clock = Clock()
+        read = []
+
+        def forge(path, raw=False, limit=None):
+            return releases[path.split("/repos/")[1].split("/releases")[0]]
+
+        def read_manifest(url, size, labels=None, icons=None):
+            if "/owner/head/" not in url:
+                return "org.example", 3, "1.0", "Example"
+            read.append(int(url.rsplit("-", 1)[1].split(".")[0]))
+            wait = build_index.request_seconds()
+            if wait < 28:
+                clock.take(wait)
+                raise TimeoutError("The read operation timed out")
+            clock.take(28)
+            return "org.head", 3, "1.0", "Head"
+
+        runs = []
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(build_forge, "clock", clock), \
+                mock.patch.object(build_forge, "search", return_value=[head, REPO]), \
+                mock.patch.object(build_forge.GitLab, "search", return_value=[]), \
+                mock.patch.object(build_forge, "detect_license", return_value="MIT"), \
+                mock.patch.object(build_forge, "forge", side_effect=forge), \
+                mock.patch.object(build_index, "read_manifest", side_effect=read_manifest):
+            for run in range(2):
+                clock.at = 0.0
+                del read[:]
+                with mock.patch("time.time", return_value=float(NOW + 1800 * run)):
+                    written = self.run_main(os.path.join(folder, str(run)), os.path.join(folder, str(run + 1)))
+                runs.append(([app["fullName"] for app in written["codeberg.json"]["apps"]], list(read), clock.at,
+                             written["codeberg.json"]["tried"]["found"]))
+        # Six files are read in the first turn and the seventh is cut short. The time GitLab
+        # left goes to the repository behind first, and then to the seventh file alone.
+        both = ["codeberg:owner/app", "codeberg:owner/head"]
+        self.assertEqual(runs[0], (both, [1, 2, 3, 4, 5, 6, 7, 7], 208.0, {}))
+        self.assertEqual(runs[1], (both, [], 0.0, {}))

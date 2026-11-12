@@ -1825,7 +1825,11 @@ def apk_assets(release):
 
 def release_info(release, previous_apks, icons=None):
     """Describes one release and its usable APKs, or returns None when it has none. With
-    icons, an IconStore, each file tells how its app's icon is published."""
+    icons, an IconStore, each file tells how its app's icon is published.
+
+    previous_apks holds the files described before, by asset id, and each file described now
+    is added to it: a caller whose examination is stopped partway has there what was read,
+    and need not read it again."""
     apks = []
     labels = {}
     for asset in apk_assets(release):
@@ -1882,6 +1886,7 @@ def release_info(release, previous_apks, icons=None):
             # See IconStore.get; None for an app whose icon could not be kept.
             apk["icon"] = icon
         apks.append(apk)
+        previous_apks[asset["id"]] = apk
         labels[manifest[0]] = manifest[3]
     if not apks:
         return None

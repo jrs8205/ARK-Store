@@ -75,18 +75,28 @@ LEAST_SECONDS = 5
 # up to a day. One that times out run after run would otherwise take its half minute of
 # every run.
 RETRY_HOURS = (0, 1, 2, 4, 8, 16, 24)
-# The answers by which a place refuses the builder itself, not the one repository asked
-# about: the token is not accepted, or too much has been asked. The place is then left alone
-# for the rest of the run.
+# The answers by which a place's own API refuses the builder itself, not the one thing asked
+# for: the token is not accepted, or too much has been asked. The place is then left alone
+# for the rest of the run. The same answers to a request for a file are about that file: a
+# release link may lead to a file that asks for a login.
 REFUSALS = (401, 429)
 # How long what is remembered of a repository is kept when the searches no longer get to it.
 TRIED_KEPT_DAYS = 7
+# How many files read by an examination that did not get to its end are remembered at most,
+# and what a remembered file has to tell for it to be taken for read: all that is used of a
+# file that is not read again.
+TRIED_MAX_APKS = 100
+APK_FIELDS = ("packageName", "versionCode", "versionName", "label", "signer", "minSdk")
 clock = time.monotonic
 
 
 class OutOfTime(Exception):
     """The time of the place being read is up. Whatever was being asked says nothing about
     the repository, which waits for another run."""
+
+
+class Refused(Exception):
+    """The API of the place being read refused the builder itself, see REFUSALS."""
 
 
 # The reading of the clock at which the place being read has to stop, or None when nothing
@@ -252,10 +262,21 @@ def with_token(request, variable, header, prefix=""):
     return request
 
 
+def answer_of(request):
+    """The answer to a request to a place's own API, within the time the place has left. An
+    answer that refuses the builder itself is raised as Refused."""
+    try:
+        return urllib.request.urlopen(request, timeout=time_left())
+    except urllib.error.HTTPError as error:
+        if error.code in REFUSALS:
+            raise Refused(error.code, error.reason) from error
+        raise
+
+
 def forge(path, raw=False, limit=None):
     request = urllib.request.Request(HOST + "/api/v1" + path, headers={"User-Agent": USER_AGENT})
     with_token(request, "CODEBERG_TOKEN", "Authorization", "token ")
-    with urllib.request.urlopen(request, timeout=time_left()) as response:
+    with answer_of(request) as response:
         if raw:
             return response.read(limit)
         return json.load(response)
@@ -363,27 +384,45 @@ def detect_license(name):
 
 
 class Found(list):
-    """The repositories a search gave. whole tells whether the search got to its end: when the
-    time of its place ran out between its pages it did not, and the repositories it did not
-    get to are then not known to be gone."""
+    """The repositories a search gave. whole tells whether the search got to its end; when it
+    did not, the repositories it did not get to are not known to be gone. See paged."""
     whole = True
+    cut = None
+
+
+def paged(size, read):
+    """What a search gave, read page by page as far as MAX_PAGES: read gives the items of the
+    page of a number, and a page with fewer than size items is the last.
+
+    The search is not whole when the time of its place runs out between its pages, and also
+    when a page cannot be read after others have been: asked for with little time left, a
+    page may simply not come in that time. The pages read are kept either way, so that what
+    they hold can be examined; cut tells what stopped the search. A search whose first page
+    cannot be read has failed."""
+    found = Found()
+    for page in range(1, MAX_PAGES + 1):
+        try:
+            items = read(page)
+        except OutOfTime:
+            found.whole = False
+            break
+        except Exception as error:  # pylint: disable=broad-except
+            if not found:
+                raise
+            found.whole = False
+            found.cut = error
+            break
+        found.extend(items)
+        if len(items) < size:
+            break
+    return found
 
 
 def search(query):
     """The repositories that have query among their topics, most starred first."""
-    found = Found()
-    for page in range(1, MAX_PAGES + 1):
-        try:
-            result = forge("/repos/search?q=%s&topic=true&sort=stars&order=desc&limit=%d&page=%d"
-                           % (urllib.parse.quote(query), PAGE_SIZE, page))
-        except OutOfTime:
-            found.whole = False
-            break
-        items = result.get("data") or []
-        found.extend(items)
-        if len(items) < PAGE_SIZE:
-            break
-    return found
+    return paged(PAGE_SIZE, lambda page: forge(
+        "/repos/search?q=%s&topic=true&sort=stars&order=desc&limit=%d&page=%d"
+        % (urllib.parse.quote(query), PAGE_SIZE, page)).get("data") or [])
 
 
 def usable(repo):
@@ -527,7 +566,7 @@ class Codeberg:
 def gitlab(path):
     request = urllib.request.Request(GITLAB_HOST + "/api/v4" + path, headers={"User-Agent": USER_AGENT})
     with_token(request, "GITLAB_TOKEN", "PRIVATE-TOKEN")
-    with urllib.request.urlopen(request, timeout=time_left()) as response:
+    with answer_of(request) as response:
         return json.load(response)
 
 
@@ -606,20 +645,11 @@ class GitLab:
 
     @staticmethod
     def search(query, since):
-        found = Found()
         activity = "&last_activity_after=" + urllib.parse.quote(since) if since else ""
-        for page in range(1, MAX_PAGES + 1):
-            try:
-                items = gitlab("/projects?topic=%s&order_by=star_count&sort=desc&archived=false"
-                               "&visibility=public&per_page=%d&page=%d%s"
-                               % (urllib.parse.quote(query), GITLAB_PAGE_SIZE, page, activity))
-            except OutOfTime:
-                found.whole = False
-                break
-            found.extend(items)
-            if len(items) < GITLAB_PAGE_SIZE:
-                break
-        return found
+        return paged(GITLAB_PAGE_SIZE, lambda page: gitlab(
+            "/projects?topic=%s&order_by=star_count&sort=desc&archived=false"
+            "&visibility=public&per_page=%d&page=%d%s"
+            % (urllib.parse.quote(query), GITLAB_PAGE_SIZE, page, activity)))
 
     @staticmethod
     def usable(repo):
@@ -712,19 +742,27 @@ def fresh(previous, pushed_at, today):
         and today - previous.get("examinedAt", 0) < build_index.AUTO_RECHECK_HOURS * 3600
 
 
-def examine(repo, previous, today, found, place=Codeberg, icons=None):
+def examine(repo, previous, today, found, place=Codeberg, icons=None, apks=None):
     """The entry of one repository, or None when it has nothing to list. previous is its
     entry from the last run: one that is still fresh is kept without asking again, apart from
     the stars and topics, which the search has just told. icons, an IconStore, is where the
-    icons of the apps are kept."""
+    icons of the apps are kept.
+
+    apks, by asset id, holds the files of the repository's releases read by an examination
+    that did not get to its end. They are not read again, and every file read now is added,
+    so that the caller has them should this examination not get to its end either."""
     if fresh(previous, place.pushed_at(repo), today):
         app = dict(previous, stars=place.stars(repo), topics=repo.get("topics") or [])
     else:
         described = place.describe(repo)
         if described is None:
             return None
+        known = build_index.known_apks(previous)
+        if apks is not None:
+            apks.update(known)
+            known = apks
         app = build_index.build_app(
-            described, build_index.known_apks(previous),
+            described, known,
             not_before=today - build_index.AUTO_RELEASE_DAYS * 86400 if found else None,
             with_prerelease=not found, list_releases=place.list_releases, icons=icons,
             metadata_of=lambda repo: build_index.app_metadata(repo, previous, read=place.metadata),
@@ -749,10 +787,15 @@ def shares(started, places, budget=BUDGET_SECONDS):
     return [started + budget * number / places for number in range(1, places + 1)]
 
 
-def retry_seconds(failures):
-    """How long a repository waits for its next try after so many tries in a row have failed,
-    see RETRY_HOURS."""
-    return RETRY_HOURS[min(failures, len(RETRY_HOURS)) - 1] * 3600
+def retry_seconds(tries):
+    """How long a repository waits for its next try after so many tries in a row did not get
+    to their end, see RETRY_HOURS."""
+    return RETRY_HOURS[min(tries, len(RETRY_HOURS)) - 1] * 3600
+
+
+def count(value):
+    """Whether value is a number of times: a whole number, not negative."""
+    return type(value) is int and value >= 0
 
 
 def load_tried(path, today):
@@ -773,10 +816,18 @@ def load_tried(path, today):
         for name, record in (given.items() if isinstance(given, dict) else ()):
             if not isinstance(record, dict):
                 continue
-            pushed_at, at, failures = record.get("pushedAt"), record.get("at"), record.get("failures")
-            if isinstance(pushed_at, str) and type(at) in (int, float) and type(failures) is int \
-                    and failures >= 0 and 0 <= today - at <= TRIED_KEPT_DAYS * 86400:
-                records[name] = {"pushedAt": pushed_at, "at": at, "failures": failures}
+            pushed_at, at = record.get("pushedAt"), record.get("at")
+            cut, apks = record.get("cut", 0), record.get("apks", [])
+            if isinstance(pushed_at, str) and type(at) in (int, float) and count(record.get("failures")) \
+                    and count(cut) and 0 <= today - at <= TRIED_KEPT_DAYS * 86400 \
+                    and isinstance(apks, list) and len(apks) <= TRIED_MAX_APKS \
+                    and all(isinstance(apk, dict) and count(apk.get("id"))
+                            and all(field in apk for field in APK_FIELDS) for apk in apks):
+                records[name] = {"pushedAt": pushed_at, "at": at, "failures": record["failures"]}
+                if cut:
+                    records[name]["cut"] = cut
+                if apks:
+                    records[name]["apks"] = apks
     return tried
 
 
@@ -785,18 +836,21 @@ class Listing:
     run knows of each so far.
 
     previous holds the entries of the last run, by "place:name". tried holds what the last run
-    remembered of the repositories that are not in the list, by name: "pushedAt", the push the
-    repository had when it was last looked at, "at", when that was, and "failures", how many
-    tries in a row have failed, 0 after an examination that found nothing to list. Without
-    this an examination that gives no entry would be made anew in every run, and when the
-    time of the place is short the runs would never get past the same repositories.
+    remembered of the repositories that are not in the list as they should be, by name:
+    "pushedAt", the push the repository had when it was last looked at, "at", when that was,
+    "failures", how many examinations in a row have failed, "cut", how many in a row the time
+    ran out on, and "apks", the files such an examination had read before it stopped. With
+    neither failures nor cut, the last examination found nothing to list. Without this an
+    examination that gives no entry would be made anew in every run, and when the time of the
+    place is short the runs would never get past the same repositories.
 
     A repository is settled, with an entry or with None for nothing to list, when its entry
     is fresh (see fresh), when it gave nothing at its last examination, has not been pushed to
-    since and that is at most AUTO_RECHECK_HOURS ago, or when it is examined now. One that
-    failed keeps the entry it had and waits before it is tried again, see RETRY_HOURS. The
-    rest wait to be examined, see work, and keep the entry they had meanwhile. An app found
-    by searching is kept that way only as long as its release is recent, as always.
+    since and that is at most AUTO_RECHECK_HOURS ago, or when it is examined now. One whose
+    examination failed or was cut short keeps the entry it had and waits before it is tried
+    again, see RETRY_HOURS. The rest wait to be examined, see work, and keep the entry they
+    had meanwhile. An app found by searching is kept that way only as long as its release is
+    recent, as always.
 
     seen holds the names the search gave, and whole tells whether the search got to its end.
     When it did not, the entries and the memory of the repositories it did not get to stand
@@ -814,39 +868,55 @@ class Listing:
         self.stopped = False
         self.names = [place.name(repo) for repo in repos]
         self.seen = set(self.names) if seen is None else seen
+        self.known = tried or {}
         self.settled = {}
         self.tried = {}
         self.waiting = []
-        tried = tried or {}
+        # The names of those the time ran out on, in this run or the ones before, and that
+        # are not settled since.
+        self.cut = set()
         for order, repo in enumerate(repos):
             name = self.names[order]
-            before = previous.get(self.key(name))
-            known = tried.get(name)
-            pushed_at = place.pushed_at(repo)
-            if known and known["failures"]:
-                if today - known["at"] < retry_seconds(known["failures"]):
-                    self.tried[name] = known
-                    continue
-            elif known and known["pushedAt"] == pushed_at \
-                    and today - known["at"] < build_index.AUTO_RECHECK_HOURS * 3600:
-                self.tried[name] = known
-                self.settled[name] = None
-                continue
-            elif fresh(before, pushed_at, today):
-                # No request is made for a fresh entry.
-                self.settled[name] = examine(repo, before, today, found, place, icons)
-                continue
-            if known:
-                self.tried[name] = known
-            last = known["at"] if known else (before or {}).get("examinedAt", 0)
-            self.waiting.append((last, -place.stars(repo), order, repo))
+            try:
+                last = self.sorted_out(name, repo)
+            except Exception as error:  # pylint: disable=broad-except
+                # Something odd in what an earlier run wrote: the repository is examined.
+                print("%s: %r" % (self.key(name), error), file=sys.stderr)
+                last = 0
+            if last is not None:
+                self.waiting.append((last, -place.stars(repo), order, repo))
         # The longest waiting first, and those never looked at before all others, by their
         # stars: every repository has its turn, whatever becomes of those before it.
         self.waiting.sort(key=lambda item: item[:3])
         if not whole:
-            for name, known in tried.items():
+            for name, known in self.known.items():
                 if name not in self.seen:
                     self.tried[name] = known
+
+    def sorted_out(self, name, repo):
+        """Settles the repository, or lets it rest, as far as that takes no request, and
+        returns None; or returns when it was last looked at, 0 for never, when it has to be
+        examined."""
+        before = self.previous.get(self.key(name))
+        known = self.known.get(name)
+        pushed_at = self.place.pushed_at(repo)
+        if known:
+            self.tried[name] = known
+        tries = max(known["failures"], known.get("cut", 0)) if known else 0
+        if tries:
+            if not known["failures"]:
+                self.cut.add(name)
+            if self.today - known["at"] < retry_seconds(tries):
+                return None
+        elif known and known["pushedAt"] == pushed_at \
+                and self.today - known["at"] < build_index.AUTO_RECHECK_HOURS * 3600:
+            self.settled[name] = None
+            return None
+        elif fresh(before, pushed_at, self.today):
+            # No request is made for a fresh entry.
+            self.settled[name] = examine(repo, before, self.today, self.found, self.place, self.icons)
+            return None
+        return known["at"] if known else (before or {}).get("examinedAt", 0)
 
     def key(self, name):
         return "%s:%s" % (self.place.source, name)
@@ -860,42 +930,59 @@ class Listing:
         return app
 
     def work(self, until=None):
-        """Examines the repositories that wait, until none is left or the clock reads until.
-        No request begins after that, see limited. What an examination was doing when the
-        time ran out is not held against the repository: it waits for another run, as do
-        those the run did not get to."""
+        """Examines the repositories that wait, until none is left or less than LEAST_SECONDS
+        is left before the clock reads until. No request begins after that, see limited.
+
+        An examination the time runs out on is cut short, which is not held against the
+        repository as a failure. It goes behind those that wait, so that more time goes to
+        them first, and behind those of the next run, so that one repository that needs more
+        time than a turn has cannot keep the others waiting. The files it had read are
+        remembered, and the next try goes on from there."""
         if self.stopped:
             return
         with limited(until):
             while self.waiting:
-                if until is not None and clock() >= until:
+                if until is not None and until - clock() < LEAST_SECONDS:
                     break
                 repo = self.waiting[0][3]
                 name = self.place.name(repo)
-                record = {"pushedAt": self.place.pushed_at(repo), "at": int(self.today), "failures": 0}
+                before = self.previous.get(self.key(name))
+                known = self.known.get(name) or {}
+                record = {"pushedAt": self.place.pushed_at(repo), "at": int(self.today),
+                          "failures": known.get("failures", 0)}
+                apks = {apk["id"]: apk for apk in self.tried.get(name, {}).get("apks", [])}
                 try:
-                    app = examine(repo, self.previous.get(self.key(name)), self.today, self.found,
-                                  self.place, self.icons)
-                except OutOfTime:
-                    break
+                    app = examine(repo, before, self.today, self.found, self.place, self.icons, apks)
                 except Exception as error:  # pylint: disable=broad-except
-                    if isinstance(error, urllib.error.HTTPError) and error.code in REFUSALS:
-                        print("%s: %r, the place is left alone for this run" % (self.key(name), error),
-                              file=sys.stderr)
-                        self.stopped = True
-                        break
-                    if until is not None and until - clock() < LEAST_SECONDS:
+                    read = [apk for key, apk in apks.items() if key not in build_index.known_apks(before)]
+                    if read:
+                        record["apks"] = read[:TRIED_MAX_APKS]
+                    refused = isinstance(error, Refused)
+                    if refused or isinstance(error, OutOfTime) \
+                            or until is not None and until - clock() < LEAST_SECONDS:
+                        # A refusal is not the repository's doing either: it is put behind the
+                        # others without having to wait longer for it.
+                        record["cut"] = max(known.get("cut", 0), 1) if refused else known.get("cut", 0) + 1
+                        self.tried[name] = record
+                        self.cut.add(name)
+                        self.waiting.append(self.waiting.pop(0))
+                        if refused:
+                            print("%s: %r, the place is left alone for this run" % (self.key(name), error),
+                                  file=sys.stderr)
+                            self.stopped = True
                         break
                     # Keep what was known rather than dropping an app over a passing error.
                     print("%s: %r" % (self.key(name), error), file=sys.stderr)
-                    record["failures"] = self.tried.get(name, {}).get("failures", 0) + 1
+                    record["failures"] += 1
                     self.tried[name] = record
+                    self.cut.discard(name)
                     del self.waiting[0]
                     continue
                 del self.waiting[0]
                 self.settled[name] = app
+                self.cut.discard(name)
                 if app is None:
-                    self.tried[name] = record
+                    self.tried[name] = dict(record, failures=0)
                 else:
                     self.tried.pop(name, None)
 
@@ -904,13 +991,15 @@ class Listing:
         return len(self.waiting)
 
     def unsettled(self):
-        """The names of the repositories whose entry this run does not know: those that wait
-        and those that failed."""
+        """The names of the repositories whose entry this run does not know: those that wait,
+        and those that failed or were cut short and wait for their next try."""
         return [name for name in self.names if name not in self.settled]
 
     def put_off(self):
-        """The names of the repositories that still wait to be examined."""
-        return [self.place.name(item[3]) for item in self.waiting]
+        """The names of the repositories that are unsettled for want of time alone: those
+        that still wait to be examined, and those the time ran out on."""
+        waiting = {self.place.name(item[3]) for item in self.waiting}
+        return [name for name in self.unsettled() if name in waiting or name in self.cut]
 
     def entries(self):
         """The list as it stands, see the class."""
@@ -927,6 +1016,14 @@ class Listing:
         return dict(self.tried)
 
 
+def sound(place, repo):
+    """Whether repo, an item of a search's answer, is a repository the lists can be made of."""
+    try:
+        return isinstance(place.name(repo), str) and place.stars(repo) >= 0 and place.pushed_at(repo) is not None
+    except Exception:  # pylint: disable=broad-except
+        return False
+
+
 def searched(place, query, since, what):
     """What a search of place gave, as a Found. A search that fails gave nothing and is not
     whole: the place could not be searched, and what it did not tell stands as it was."""
@@ -938,43 +1035,56 @@ def searched(place, query, since, what):
         given.whole = False
         return given
     if not getattr(given, "whole", True):
-        print("%s: out of time in the %s, what it did not get to stands as it was"
-              % (place.source, what), file=sys.stderr)
+        why = "out of time" if getattr(given, "cut", None) is None else "cut short by %r" % (given.cut,)
+        print("%s: %s %s, what it did not get to stands as it was" % (place.source, what, why), file=sys.stderr)
+    given[:] = [repo for repo in given if sound(place, repo)]
     return given
 
 
 def published_listing(place, previous, tried, today, icons=None):
     """The list of the repositories of one place that carry the store topic. previous holds
-    the published entries of the last run, of every place; tried, see Listing."""
+    the published entries of the last run, of every place; tried, see Listing. A list that
+    cannot be made keeps the entries it had."""
     prefix = place.source + ":"
-    given = searched(place, build_index.TOPIC, None, "published apps")
-    repos = [repo for repo in given if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])]
     mine = {key: app for key, app in previous.items() if key.startswith(prefix)}
-    return Listing(place, False, repos, mine, today, tried, icons,
-                   seen={place.name(repo) for repo in given}, whole=getattr(given, "whole", True))
+    try:
+        given = searched(place, build_index.TOPIC, None, "published apps")
+        repos = [repo for repo in given
+                 if place.usable(repo) and build_index.TOPIC in (repo.get("topics") or [])]
+        return Listing(place, False, repos, mine, today, tried, icons,
+                       seen={place.name(repo) for repo in given}, whole=getattr(given, "whole", True))
+    except Exception as error:  # pylint: disable=broad-except
+        print("%s: published apps unavailable: %r" % (place.source, error), file=sys.stderr)
+        return Listing(place, False, [], mine, today, tried, icons, seen=set(), whole=False)
 
 
 def found_listing(place, taken, previous, tried, today, icons=None):
     """The list of the apps found by searching one place, leaving out the repositories in
     taken, which their developers have published. previous holds the entries of the place's
-    own file from the last run; tried, see Listing."""
-    since = today - build_index.AUTO_PUSHED_DAYS * 86400
-    candidates = {}
-    whole = True
-    for query in FOUND_QUERIES:
-        given = searched(place, query, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(since)), "search")
-        whole = whole and getattr(given, "whole", True)
-        for repo in given:
-            candidates.setdefault(place.name(repo), repo)
-    repos = [
-        repo for name, repo in candidates.items()
-        if place.usable(repo)
-        and name not in taken
-        and build_index.TOPIC not in (repo.get("topics") or [])
-        and place.stars(repo) >= FOUND_MIN_STARS
-        and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
-    ]
-    return Listing(place, True, repos, previous, today, tried, icons, seen=set(candidates) | set(taken), whole=whole)
+    own file from the last run; tried, see Listing. A list that cannot be made keeps the
+    entries it had, as far as their releases are still recent."""
+    try:
+        since = today - build_index.AUTO_PUSHED_DAYS * 86400
+        candidates = {}
+        whole = True
+        for query in FOUND_QUERIES:
+            given = searched(place, query, time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(since)), "search")
+            whole = whole and getattr(given, "whole", True)
+            for repo in given:
+                candidates.setdefault(place.name(repo), repo)
+        repos = [
+            repo for name, repo in candidates.items()
+            if place.usable(repo)
+            and name not in taken
+            and build_index.TOPIC not in (repo.get("topics") or [])
+            and place.stars(repo) >= FOUND_MIN_STARS
+            and (build_index.parse_time(place.pushed_at(repo)) or 0) >= since
+        ]
+        return Listing(place, True, repos, previous, today, tried, icons,
+                       seen=set(candidates) | set(taken), whole=whole)
+    except Exception as error:  # pylint: disable=broad-except
+        print("%s: search unavailable: %r" % (place.source, error), file=sys.stderr)
+        return Listing(place, True, [], previous, today, tried, icons, seen=set(taken), whole=False)
 
 
 class Turn:
@@ -1045,7 +1155,7 @@ class Turn:
                   % (self.place.source, why, left, self.published.total + self.found.total), file=sys.stderr)
         published, found = self.lists()
         remembered = len(self.published.records()) + len(self.found.records())
-        print("%s: %d published, %d found, %d remembered for giving nothing or failing"
+        print("%s: %d published, %d found, %d remembered for giving nothing or not getting to the end"
               % (self.place.source, len(published), len(found), remembered))
 
 
