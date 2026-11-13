@@ -35,7 +35,7 @@ jobs:
       # moved to other code cannot change. Nothing after this needs the token of the run in
       # the repository's settings: the steps that read files other people wrote run without
       # it, and the last step is given it by name.
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           persist-credentials: false
