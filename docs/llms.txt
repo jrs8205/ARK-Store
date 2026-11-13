@@ -1,0 +1,28 @@
+# ARK-Store
+
+> ARK-Store is a free, open-source Android app store for open-source apps. It lists apps straight from their developers' releases on GitHub, Codeberg and GitLab, and from the IzzyOnDroid and F-Droid catalogues. It needs no account and runs on Android 8.0 and later.
+
+Facts worth knowing:
+
+- Licence: GPL-3.0. Package name: `org.jarsi.arkstore`. Available in 17 languages.
+- A developer publishes an app by adding the topic `arkstore` to a public repository that has an open-source licence and a release with an APK attached. There is no account, submission form, review queue or fee, and nobody reviews the apps.
+- The store downloads and checks each file and saves it in Download/ARK-Store for the user to install from the Files app. On a rooted device it installs and updates by itself. It does not ask Android for the right to install apps.
+- The details of an app tell its source, licence, version, size, the Android version it needs and the permissions it asks for.
+- The list of apps comes from the store's own index, rebuilt about every half hour. A fresh install asks GitHub for nothing.
+
+## Documentation
+
+- [README](https://github.com/jrs8205/ARK-Store/blob/main/README.md): what the store does, for users and for developers
+- [Publish your app](https://github.com/jrs8205/ARK-Store#publish-your-app): the four steps, and what differs on Codeberg and GitLab
+- [Changelog](https://github.com/jrs8205/ARK-Store/blob/main/CHANGELOG.md): what changed in each version
+
+## Download
+
+- [Latest release](https://github.com/jrs8205/ARK-Store/releases/latest): the APK
+- [SourceForge mirror](https://sourceforge.net/projects/ark-store/): every release, mirrored
+
+## Optional
+
+- [Source code](https://github.com/jrs8205/ARK-Store)
+- [Issues](https://github.com/jrs8205/ARK-Store/issues): where to report a problem
+- [Licence](https://github.com/jrs8205/ARK-Store/blob/main/LICENSE)
