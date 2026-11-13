@@ -87,6 +87,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -625,17 +626,23 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val selected = state.rows.firstOrNull { it.app.fullName == selectedRepo }
     if (selected != null) {
         StoreSheet(onDismissRequest = { selectedRepo = null }) {
-            DetailsSheet(
-                selected,
-                onInstall = { viewModel.install(selected.app) },
-                direct = direct,
-                bookmarked = Bookmarks.marked(selected.app, bookmarked),
-                onBookmarkToggle = { viewModel.toggleBookmark(selected.app) },
-                onSkipVersion = { viewModel.skipVersion(selected.app) },
-                onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
-                onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
-                held = selected.app.packageName?.let { it in updatePolicy.held } == true
-            )
+            // A link followed while the details of one app are open puts another app in their
+            // place. Keyed by the app, the details then start afresh: what they remember, such
+            // as a screenshot opened large or a removal waiting to be confirmed, belongs to
+            // the app it was opened for and is not carried over to the next one.
+            key(selected.app.fullName) {
+                DetailsSheet(
+                    selected,
+                    onInstall = { viewModel.install(selected.app) },
+                    direct = direct,
+                    bookmarked = Bookmarks.marked(selected.app, bookmarked),
+                    onBookmarkToggle = { viewModel.toggleBookmark(selected.app) },
+                    onSkipVersion = { viewModel.skipVersion(selected.app) },
+                    onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
+                    onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
+                    held = selected.app.packageName?.let { it in updatePolicy.held } == true
+                )
+            }
         }
     }
     if (showSources) {
@@ -647,17 +654,6 @@ fun StoreScreen(viewModel: StoreViewModel) {
         ) {
             SourcesSheet(viewModel)
         }
-    }
-    if (linkAstray) {
-        AlertDialog(
-            onDismissRequest = { linkAstray = false },
-            text = { Text(stringResource(R.string.link_astray, stringResource(R.string.origins_title))) },
-            confirmButton = {
-                TextButton(onClick = { linkAstray = false }) {
-                    Text(stringResource(android.R.string.ok))
-                }
-            }
-        )
     }
     }
     Screen.SETTINGS -> SettingsScreen(
@@ -698,6 +694,19 @@ fun StoreScreen(viewModel: StoreViewModel) {
     )
     }
     }
+    }
+    // Outside the pages: a link that led astray is answered on whichever page is up, the
+    // settings and the backup included, rather than when the user next returns to the store.
+    if (linkAstray) {
+        AlertDialog(
+            onDismissRequest = { linkAstray = false },
+            text = { Text(stringResource(R.string.link_astray, stringResource(R.string.origins_title))) },
+            confirmButton = {
+                TextButton(onClick = { linkAstray = false }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            }
+        )
     }
     }
     }
