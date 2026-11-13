@@ -10,6 +10,9 @@ import java.time.LocalDate
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -331,5 +334,120 @@ class ZipBackupTest {
         assertTrue(got.single().files != null)
         assertFalse(File(temp.root.parentFile, "evil.apk").exists())
         assertFalse(File(temp.root, "evil.apk").exists())
+    }
+
+    /** Cancels [job] once [limit] bytes have been read, and counts what is read after that. */
+    private class Cancelling(input: InputStream, private val limit: Long) : FilterInputStream(input) {
+        lateinit var job: Job
+        private var count = 0L
+        var cancelled = false
+        var after = 0L
+
+        override fun read(): Int = super.read().also { if (it >= 0) counted(1) }
+        override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) counted(it) }
+
+        private fun counted(n: Int) {
+            if (cancelled) after += n
+            count += n
+            if (!cancelled && count >= limit) {
+                cancelled = true
+                job.cancel()
+            }
+        }
+    }
+
+    /** Bytes that do not pack, so that the zip holds as many as the file has. */
+    private fun unpackable(size: Int) = ByteArray(size).also { java.util.Random(7).nextBytes(it) }
+
+    private val large = 4 * 1024 * 1024
+    private val soon = 256 * 1024L
+
+    @Test
+    fun aCancelIsHeededWhileAFileNotWantedIsPassedOver() {
+        val zip = rawZip(
+            "org.b.app/base.apk" to unpackable(large),
+            "org.c.app/base.apk" to content(c, c.files[0])
+        )
+        val input = Cancelling(ByteArrayInputStream(zip), 200_000)
+        val got = ArrayList<Extracted>()
+        runBlocking {
+            val job = launch(start = CoroutineStart.LAZY) {
+                ZipBackup.extract(
+                    input,
+                    listOf(c),
+                    dirFor = { File(temp.root, "restore-" + it.packageName) },
+                    onApp = { e, files, data -> got += Extracted(e, files, data) }
+                )
+            }
+            input.job = job
+            job.join()
+            assertTrue(job.isCancelled)
+        }
+        assertTrue(input.cancelled)
+        assertTrue("read ${input.after} bytes after the cancel", input.after < soon)
+        assertTrue(got.isEmpty())
+    }
+
+    @Test
+    fun aCancelIsHeededWhileTheRestOfAFileLargerThanSaidIsPassedOver() {
+        // The file is given up at the size its entry names; what is left of it is not wanted.
+        val zip = rawZip("org.b.app/base.apk" to unpackable(large))
+        val input = Cancelling(ByteArrayInputStream(zip), 200_000)
+        runBlocking {
+            val job = launch(start = CoroutineStart.LAZY) {
+                ZipBackup.extract(input, listOf(b), dirFor = { File(temp.root, "restore-" + it.packageName) }, onApp = { _, _, _ -> })
+            }
+            input.job = job
+            job.join()
+            assertTrue(job.isCancelled)
+        }
+        assertTrue("read ${input.after} bytes after the cancel", input.after < soon)
+        assertFalse(File(temp.root, "restore-org.b.app").exists())
+    }
+
+    @Test
+    fun aCancelIsHeededWhileTheHeadOfAFolderZippedByHandIsLookedFor() {
+        val zip = rawZip(
+            "org.b.app/base.apk" to unpackable(large),
+            "org.b.app/${AppBackup.ENTRY_NAME}" to b.toJson().toString().toByteArray()
+        )
+        val input = Cancelling(ByteArrayInputStream(zip), 200_000)
+        runBlocking {
+            val job = launch(start = CoroutineStart.LAZY) { ZipBackup.readHead(input) }
+            input.job = job
+            job.join()
+            assertTrue(job.isCancelled)
+        }
+        assertTrue("read ${input.after} bytes after the cancel", input.after < soon)
+    }
+
+    @Test
+    fun whatIsPassedOverUncancelledStillLeadsToTheFilesAfterIt() {
+        val zip = rawZip(
+            "org.b.app/base.apk" to unpackable(large),
+            "notes.txt" to ByteArray(100_000),
+            "org.c.app/base.apk" to content(c, c.files[0])
+        )
+        val got = extract(zip, c)
+        assertArrayEquals(content(c, c.files[0]), got.single().files!!.single().readBytes())
+    }
+
+    @Test
+    fun anAppWhoseFilesCannotBeWrittenComesBackEmptyAndLeavesNothingBehind() {
+        // As when the device has no room left: the file cannot be made or written.
+        val zip = zipOf(b, c)
+        val blocked = File(temp.root, "blocked").apply { writeText("not a folder") }
+        val got = ArrayList<Extracted>()
+        runBlocking {
+            ZipBackup.extract(
+                ByteArrayInputStream(zip),
+                listOf(b, c),
+                dirFor = { if (it.packageName == b.packageName) File(blocked, "restore") else File(temp.root, "restore-" + it.packageName) },
+                onApp = { e, files, data -> got += Extracted(e, files, data) }
+            )
+        }
+        assertEquals(listOf(b.packageName, c.packageName), got.map { it.entry.packageName })
+        assertTrue(got.all { it.files == null })
+        assertEquals(listOf("blocked"), temp.root.list()?.toList())
     }
 }

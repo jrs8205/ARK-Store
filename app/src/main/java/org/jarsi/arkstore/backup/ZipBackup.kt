@@ -159,6 +159,7 @@ object ZipBackup {
         var settings: String? = null
         var indexed: Set<String>? = null
         val zip = ZipInputStream(input)
+        val buffer = ByteArray(BUFFER_BYTES)
         while (true) {
             coroutineContext.ensureActive()
             val item = zip.nextEntry ?: break
@@ -184,6 +185,7 @@ object ZipBackup {
                 }
                 null -> Unit
             }
+            pass(zip, buffer)
         }
         return Head(entries.values.toList(), settings)
     }
@@ -230,62 +232,68 @@ object ZipBackup {
             }
         }
 
+        /** Takes [item] out when it is a file of an app wanted; what it leaves unread is passed over after it. */
+        suspend fun take(zip: ZipInputStream, item: ZipEntry) {
+            val (packageName, fileName, isData) = when (val name = parseName(item.name)) {
+                is Name.File -> Triple(name.packageName, name.fileName, false)
+                is Name.Data -> Triple(name.packageName, name.fileName, true)
+                else -> return
+            }
+            val entry = byPackage[packageName] ?: return
+            if (packageName in done) return
+            // What the entry does not name is not the app's, whatever the zip calls it.
+            val saidSize = if (isData) {
+                entry.data.firstOrNull { it.name == fileName }?.size ?: return
+            } else {
+                entry.files.firstOrNull { it.name == fileName }?.size ?: return
+            }
+            current?.let { if (it.entry.packageName != packageName) finish(it) }
+            val taking = current ?: Taking(entry, dirFor(entry).also { it.mkdirs() }).also { current = it }
+            if (isData) {
+                // The archive is the app's extra; a second of the same name is left alone.
+                if (fileName in taking.data) return
+            } else if (fileName in taking.files || taking.broken) {
+                taking.broken = true
+                return
+            }
+            val target = File(if (isData) dataDirFor(entry).also { it.mkdirs() } else taking.dir, fileName)
+            var copied = 0L
+            var told = 0L
+            var overflow = false
+            target.outputStream().use { output ->
+                while (true) {
+                    coroutineContext.ensureActive()
+                    val n = zip.read(buffer)
+                    if (n < 0) break
+                    copied += n
+                    if (saidSize != RestoreRules.UNKNOWN_SIZE && copied > saidSize) {
+                        overflow = true
+                        break
+                    }
+                    output.write(buffer, 0, n)
+                    if (copied - told >= PROGRESS_STEP_BYTES) {
+                        told = copied
+                        onBytes(total + copied)
+                    }
+                }
+            }
+            total += copied
+            onBytes(total)
+            if (overflow) {
+                if (isData) target.delete() else taking.broken = true
+                return
+            }
+            if (isData) taking.data[fileName] = target else taking.files[fileName] = target
+        }
+
         try {
             val zip = ZipInputStream(input)
             while (true) {
                 coroutineContext.ensureActive()
                 val item = zip.nextEntry ?: break
                 if (item.isDirectory) continue
-                val (packageName, fileName, isData) = when (val name = parseName(item.name)) {
-                    is Name.File -> Triple(name.packageName, name.fileName, false)
-                    is Name.Data -> Triple(name.packageName, name.fileName, true)
-                    else -> continue
-                }
-                val entry = byPackage[packageName] ?: continue
-                if (packageName in done) continue
-                // What the entry does not name is not the app's, whatever the zip calls it.
-                val saidSize = if (isData) {
-                    entry.data.firstOrNull { it.name == fileName }?.size ?: continue
-                } else {
-                    entry.files.firstOrNull { it.name == fileName }?.size ?: continue
-                }
-                current?.let { if (it.entry.packageName != packageName) finish(it) }
-                val taking = current ?: Taking(entry, dirFor(entry).also { it.mkdirs() }).also { current = it }
-                if (isData) {
-                    // The archive is the app's extra; a second of the same name is left alone.
-                    if (fileName in taking.data) continue
-                } else if (fileName in taking.files || taking.broken) {
-                    taking.broken = true
-                    continue
-                }
-                val target = File(if (isData) dataDirFor(entry).also { it.mkdirs() } else taking.dir, fileName)
-                var copied = 0L
-                var told = 0L
-                var overflow = false
-                target.outputStream().use { output ->
-                    while (true) {
-                        coroutineContext.ensureActive()
-                        val n = zip.read(buffer)
-                        if (n < 0) break
-                        copied += n
-                        if (saidSize != RestoreRules.UNKNOWN_SIZE && copied > saidSize) {
-                            overflow = true
-                            break
-                        }
-                        output.write(buffer, 0, n)
-                        if (copied - told >= PROGRESS_STEP_BYTES) {
-                            told = copied
-                            onBytes(total + copied)
-                        }
-                    }
-                }
-                total += copied
-                onBytes(total)
-                if (overflow) {
-                    if (isData) target.delete() else taking.broken = true
-                    continue
-                }
-                if (isData) taking.data[fileName] = target else taking.files[fileName] = target
+                take(zip, item)
+                pass(zip, buffer)
             }
             current?.let { finish(it) }
         } catch (e: Throwable) {
@@ -307,6 +315,18 @@ object ZipBackup {
         val files = HashMap<String, File>()
         val data = HashMap<String, File>()
         var broken = false
+    }
+
+    /**
+     * Reads what is left of the zip's current entry without keeping it, heeding a cancel as it
+     * goes. Left to the zip, which does the same on its way to the next entry, a file that is
+     * not wanted would be read to its end in one piece, however large, cancel or no cancel.
+     */
+    private suspend fun pass(zip: ZipInputStream, buffer: ByteArray) {
+        while (true) {
+            coroutineContext.ensureActive()
+            if (zip.read(buffer) < 0) break
+        }
     }
 
     /** The text of the zip's current entry, or null when it is longer than [maxBytes]. */
