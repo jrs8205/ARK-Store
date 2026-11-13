@@ -108,6 +108,8 @@
     <string name="bookmarks_chip">Lesezeichen</string>
     <string name="action_bookmark">Lesezeichen hinzufügen</string>
     <string name="action_unbookmark">Lesezeichen entfernen</string>
+    <string name="action_share">Teilen</string>
+    <string name="link_astray">Die App, zu der dieser Link führt, ist auf diesem Gerät nicht aufgeführt. Vielleicht stammt sie aus einer Quelle, die in den Einstellungen unter „%1$s“ ausgeschaltet ist.</string>
     <string name="bookmarked">Als Lesezeichen gespeichert</string>
     <string name="category_communication">Kommunikation</string>
     <string name="category_productivity">Produktivität</string>

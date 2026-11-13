@@ -120,6 +120,8 @@
     <string name="bookmarks_chip">Закладки</string>
     <string name="action_bookmark">Додати в закладки</string>
     <string name="action_unbookmark">Видалити із закладок</string>
+    <string name="action_share">Поділитися</string>
+    <string name="link_astray">Додатка, на який веде це посилання, немає у списку на цьому пристрої. Можливо, він із джерела, вимкненого в розділі «%1$s» у налаштуваннях.</string>
     <string name="bookmarked">У закладках</string>
     <string name="category_communication">Зв\'язок</string>
     <string name="category_productivity">Продуктивність</string>

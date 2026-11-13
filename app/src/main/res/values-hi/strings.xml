@@ -108,6 +108,8 @@
     <string name="bookmarks_chip">बुकमार्क</string>
     <string name="action_bookmark">बुकमार्क करें</string>
     <string name="action_unbookmark">बुकमार्क हटाएं</string>
+    <string name="action_share">शेयर करें</string>
+    <string name="link_astray">यह लिंक जिस ऐप का है, वह इस डिवाइस की सूची में नहीं है। हो सकता है कि वह किसी ऐसे स्रोत से आता हो जो सेटिंग में “%1$s” के तहत बंद है।</string>
     <string name="bookmarked">बुकमार्क किया गया</string>
     <string name="category_communication">संचार</string>
     <string name="category_productivity">उत्पादकता</string>

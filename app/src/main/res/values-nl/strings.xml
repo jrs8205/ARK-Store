@@ -108,6 +108,8 @@
     <string name="bookmarks_chip">Bladwijzers</string>
     <string name="action_bookmark">Bladwijzer toevoegen</string>
     <string name="action_unbookmark">Bladwijzer verwijderen</string>
+    <string name="action_share">Delen</string>
+    <string name="link_astray">De app waar deze link naartoe leidt, staat niet in de lijst op dit apparaat. Misschien komt de app uit een bron die is uitgeschakeld onder ‘%1$s’ in de instellingen.</string>
     <string name="bookmarked">Met bladwijzer</string>
     <string name="category_communication">Communicatie</string>
     <string name="category_productivity">Productiviteit</string>

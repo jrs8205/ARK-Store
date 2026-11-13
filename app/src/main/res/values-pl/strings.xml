@@ -120,6 +120,8 @@
     <string name="bookmarks_chip">Zakładki</string>
     <string name="action_bookmark">Dodaj do zakładek</string>
     <string name="action_unbookmark">Usuń z zakładek</string>
+    <string name="action_share">Udostępnij</string>
+    <string name="link_astray">Aplikacji, do której prowadzi ten link, nie ma na liście na tym urządzeniu. Być może pochodzi ze źródła wyłączonego w sekcji „%1$s” w ustawieniach.</string>
     <string name="bookmarked">W zakładkach</string>
     <string name="category_communication">Komunikacja</string>
     <string name="category_productivity">Produktywność</string>

@@ -26,12 +26,14 @@ import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
+import org.jarsi.arkstore.data.FollowedLink
 import org.jarsi.arkstore.data.GitHubToken
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
+import org.jarsi.arkstore.data.ShareLink
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
 import org.jarsi.arkstore.install.ApkFolder
@@ -180,7 +182,9 @@ data class StoreUiState(
     val checkedAt: Long = 0,
     val storeDownloads: Long? = null,
     val refreshing: Boolean = false,
-    val error: LoadError? = null
+    val error: LoadError? = null,
+    /** How many refreshes had finished when [rows] were listed; see [FollowedLink]. */
+    val refreshes: Int = 0
 )
 
 class StoreViewModel(application: Application) : AndroidViewModel(application) {
@@ -188,6 +192,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = CatalogRepository.get(application)
     private val refreshing = MutableStateFlow(false)
     private val error = MutableStateFlow<LoadError?>(null)
+
+    /** How many refreshes have finished, whether or not they brought anything. */
+    private val refreshes = MutableStateFlow(0)
 
     // Only touched on the main thread.
     private var refreshAgain = false
@@ -201,10 +208,16 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     val state: StateFlow<StoreUiState> = combine(
         repository.catalog,
         InstallManager.installedChanged,
-        refreshing,
+        combine(refreshing, refreshes, ::Pair),
         error,
         policy
-    ) { catalog, _, isRefreshing, loadError, skips ->
+    ) { _, _, (isRefreshing, _), loadError, skips ->
+        // Read here rather than taken as they arrive, and in this order: a refresh puts its
+        // catalogue in place before it is counted, so the catalogue read after the count is
+        // at least the one the count tells of. A link that waits for a refresh then never
+        // meets the count with the apps of before; see FollowedLink.
+        val finished = refreshes.value
+        val catalog = repository.catalog.value
         val packages = InstalledApps.snapshot(application)
         val android = CatalogRules.Android.THIS
         StoreUiState(
@@ -221,7 +234,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             checkedAt = catalog.checkedAt,
             storeDownloads = catalog.storeDownloads,
             refreshing = isRefreshing,
-            error = loadError
+            error = loadError,
+            refreshes = finished
         )
     }.flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.Eagerly, StoreUiState(refreshing = true))
@@ -246,6 +260,27 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     val bookmarked: StateFlow<Set<String>> = bookmarks.keys
 
     fun toggleBookmark(app: StoreApp) = bookmarks.toggle(app)
+
+    private val _followed = MutableStateFlow<FollowedLink?>(null)
+
+    /** The link to an app's page that was followed to the store and has not been shown yet. */
+    val followed: StateFlow<FollowedLink?> = _followed.asStateFlow()
+
+    /**
+     * A link to an app's page was followed to the store. An app that is not listed may be
+     * one the lists are too old to have, so they are refreshed, unless they are being
+     * refreshed already, and the link waits for that; see [FollowedLink].
+     */
+    fun follow(link: ShareLink) {
+        val listed = ShareLink.pick(state.value.rows.map { it.app }, link) != null
+        if (!listed && !refreshing.value) refresh()
+        _followed.value = FollowedLink(link, if (listed) refreshes.value else refreshes.value + 1)
+    }
+
+    /** The screen has shown what the followed link led to. */
+    fun followedShown() {
+        _followed.value = null
+    }
 
     fun setCatalogue(source: String, include: Boolean) {
         repository.setCatalogue(source, include)
@@ -504,6 +539,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 // A refresh renames the source of a repository that has moved.
                 _sources.update { it.copy(sources = repository.sources.list()) }
+                // Counted only now, with the catalogue already in place: whoever sees the
+                // count sees what the refresh brought with it.
+                refreshes.update { it + 1 }
                 refreshing.update { false }
             }
         }

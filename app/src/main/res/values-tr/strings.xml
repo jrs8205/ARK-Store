@@ -108,6 +108,8 @@
     <string name="bookmarks_chip">Yer işaretleri</string>
     <string name="action_bookmark">Yer işareti ekle</string>
     <string name="action_unbookmark">Yer işaretini kaldır</string>
+    <string name="action_share">Paylaş</string>
+    <string name="link_astray">Bu bağlantının götürdüğü uygulama bu cihazdaki listede yok. Ayarlarda “%1$s” bölümünde kapalı olan bir kaynaktan geliyor olabilir.</string>
     <string name="bookmarked">Yer işaretlerinde</string>
     <string name="category_communication">İletişim</string>
     <string name="category_productivity">Verimlilik</string>

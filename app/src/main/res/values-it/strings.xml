@@ -114,6 +114,8 @@
     <string name="bookmarks_chip">Preferiti</string>
     <string name="action_bookmark">Aggiungi ai preferiti</string>
     <string name="action_unbookmark">Rimuovi dai preferiti</string>
+    <string name="action_share">Condividi</string>
+    <string name="link_astray">L\'app a cui porta questo link non è in elenco su questo dispositivo. Forse proviene da una fonte disattivata in «%1$s», nelle impostazioni.</string>
     <string name="bookmarked">Nei preferiti</string>
     <string name="category_communication">Comunicazione</string>
     <string name="category_productivity">Produttività</string>

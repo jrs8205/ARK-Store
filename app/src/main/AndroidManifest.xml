@@ -37,6 +37,17 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- A link to an app's page, as sharing an app gives it out; see ShareLink. The
+                 address is the store's own, and names this app as the one that opens it. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="arkstore.jrs8205.com" />
+                <data android:path="/app" />
+                <data android:path="/app/" />
+            </intent-filter>
         </activity>
 
         <!-- Keeps downloads going after the user leaves the app. -->

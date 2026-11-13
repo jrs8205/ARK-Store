@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toDrawable
+import org.jarsi.arkstore.data.ShareLink
 import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.InstallManager
 
@@ -33,7 +34,10 @@ class MainActivity : ComponentActivity() {
                 StoreScreen(viewModel)
             }
         }
-        if (savedInstanceState == null) openFolderIfAsked(intent)
+        if (savedInstanceState == null) {
+            openFolderIfAsked(intent)
+            followLinkIfAsked(intent)
+        }
         if (savedInstanceState == null &&
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
@@ -46,6 +50,18 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         openFolderIfAsked(intent)
+        followLinkIfAsked(intent)
+    }
+
+    /**
+     * A link to an app's page was followed here, from a message or a web page; see
+     * [ShareLink]. A store brought back from the recent apps comes with the intent it was
+     * first opened by, and is not taken to the link's app a second time.
+     */
+    private fun followLinkIfAsked(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        ShareLink.parse(intent.dataString ?: return)?.let(viewModel::follow)
     }
 
     /** A notification of a saved file asks for the folder to be opened; see [openFolderIntent]. */

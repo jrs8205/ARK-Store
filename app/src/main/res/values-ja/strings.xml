@@ -102,6 +102,8 @@
     <string name="bookmarks_chip">ブックマーク</string>
     <string name="action_bookmark">ブックマークに追加</string>
     <string name="action_unbookmark">ブックマークから削除</string>
+    <string name="action_share">共有</string>
+    <string name="link_astray">このリンク先のアプリは、このデバイスのリストにありません。設定の「%1$s」でオフになっている入手元のアプリかもしれません。</string>
     <string name="bookmarked">ブックマーク済み</string>
     <string name="category_communication">コミュニケーション</string>
     <string name="category_productivity">仕事効率化</string>

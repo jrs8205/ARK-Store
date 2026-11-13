@@ -132,6 +132,8 @@
     <string name="bookmarks_chip">الإشارات المرجعية</string>
     <string name="action_bookmark">إضافة إشارة مرجعية</string>
     <string name="action_unbookmark">إزالة الإشارة المرجعية</string>
+    <string name="action_share">مشاركة</string>
+    <string name="link_astray">التطبيق الذي يقود إليه هذا الرابط غير مُدرج على هذا الجهاز. ربما يأتي من مصدر موقوف ضمن «%1$s» في الإعدادات.</string>
     <string name="bookmarked">ضمن الإشارات المرجعية</string>
     <string name="category_communication">الاتصالات</string>
     <string name="category_productivity">الإنتاجية</string>

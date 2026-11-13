@@ -120,6 +120,9 @@ following a developer who has not added it.
   than the device has stays in the list, with a note; one not installed is left out.
 - The details tell the permissions an app asks for, in the device's own words, behind a tap.
   The ones an update would add to those of the installed version are told first.
+- **Share** in the details gives out a link to the app. On a phone with ARK-Store the link
+  opens the app's page in the store; anywhere else it opens a page that tells where the app
+  and the store are found.
 - Stars and download counts from GitHub.
 - Screenshots and a longer description in the details, when the developer publishes them,
   whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.

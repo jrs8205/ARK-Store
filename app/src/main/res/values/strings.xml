@@ -108,6 +108,8 @@
     <string name="bookmarks_chip">Bookmarks</string>
     <string name="action_bookmark">Bookmark</string>
     <string name="action_unbookmark">Remove bookmark</string>
+    <string name="action_share">Share</string>
+    <string name="link_astray">The app this link leads to is not listed on this device. It may come from a place that is turned off under “%1$s” in the settings.</string>
     <string name="bookmarked">Bookmarked</string>
     <string name="category_communication">Communication</string>
     <string name="category_productivity">Productivity</string>

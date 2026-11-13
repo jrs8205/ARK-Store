@@ -114,6 +114,8 @@
     <string name="bookmarks_chip">Marcadores</string>
     <string name="action_bookmark">Añadir a marcadores</string>
     <string name="action_unbookmark">Quitar de marcadores</string>
+    <string name="action_share">Compartir</string>
+    <string name="link_astray">La aplicación a la que lleva este enlace no figura en la lista de este dispositivo. Puede que venga de un origen desactivado en «%1$s», en los ajustes.</string>
     <string name="bookmarked">En marcadores</string>
     <string name="category_communication">Comunicación</string>
     <string name="category_productivity">Productividad</string>

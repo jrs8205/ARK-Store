@@ -102,6 +102,8 @@
     <string name="bookmarks_chip">收藏</string>
     <string name="action_bookmark">收藏</string>
     <string name="action_unbookmark">取消收藏</string>
+    <string name="action_share">分享</string>
+    <string name="link_astray">此链接指向的应用不在此设备的列表中。它可能来自在设置的“%1$s”中已关闭的来源。</string>
     <string name="bookmarked">已收藏</string>
     <string name="category_communication">通讯</string>
     <string name="category_productivity">效率</string>

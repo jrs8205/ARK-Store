@@ -120,6 +120,8 @@
     <string name="bookmarks_chip">Закладки</string>
     <string name="action_bookmark">Добавить в закладки</string>
     <string name="action_unbookmark">Удалить из закладок</string>
+    <string name="action_share">Поделиться</string>
+    <string name="link_astray">Приложения, на которое ведёт эта ссылка, нет в списке на этом устройстве. Возможно, оно из источника, отключённого в разделе «%1$s» в настройках.</string>
     <string name="bookmarked">В закладках</string>
     <string name="category_communication">Связь</string>
     <string name="category_productivity">Работа</string>

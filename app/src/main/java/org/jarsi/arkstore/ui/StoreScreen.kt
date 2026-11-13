@@ -159,6 +159,8 @@ import org.jarsi.arkstore.data.Backup
 import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
+import org.jarsi.arkstore.data.FollowedLink
+import org.jarsi.arkstore.data.ShareLink
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.ApkFolder
 import org.jarsi.arkstore.install.FailReason
@@ -185,6 +187,26 @@ fun StoreScreen(viewModel: StoreViewModel) {
     var selectedRepo by rememberSaveable { mutableStateOf<String?>(null) }
     var showSources by rememberSaveable { mutableStateOf(false) }
     var screen by rememberSaveable { mutableStateOf(Screen.STORE) }
+    // A link to an app's page was followed to the store: its app is shown as soon as it is
+    // listed, and told to be missing only once the lists are as fresh as they get.
+    val followed by viewModel.followed.collectAsStateWithLifecycle()
+    var linkAstray by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(followed, state.rows, state.refreshes) {
+        when (val led = followed?.leadsTo(state.rows.map { it.app }, state.refreshes)) {
+            is FollowedLink.Led.To -> {
+                screen = Screen.STORE
+                showSources = false
+                linkAstray = false
+                selectedRepo = led.app.fullName
+                viewModel.followedShown()
+            }
+            FollowedLink.Led.Astray -> {
+                linkAstray = true
+                viewModel.followedShown()
+            }
+            FollowedLink.Led.Nowhere, null -> Unit
+        }
+    }
     val backupViewModel: BackupViewModel = viewModel()
     var query by rememberSaveable { mutableStateOf("") }
     var category by rememberSaveable { mutableStateOf<String?>(null) }
@@ -625,6 +647,17 @@ fun StoreScreen(viewModel: StoreViewModel) {
         ) {
             SourcesSheet(viewModel)
         }
+    }
+    if (linkAstray) {
+        AlertDialog(
+            onDismissRequest = { linkAstray = false },
+            text = { Text(stringResource(R.string.link_astray, stringResource(R.string.origins_title))) },
+            confirmButton = {
+                TextButton(onClick = { linkAstray = false }) {
+                    Text(stringResource(android.R.string.ok))
+                }
+            }
+        )
     }
     }
     Screen.SETTINGS -> SettingsScreen(
@@ -1313,6 +1346,18 @@ private fun DetailsSheet(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(if (bookmarked) R.string.action_unbookmark else R.string.action_bookmark))
+            }
+            // An app whose name a link cannot carry has no link to give out.
+            ShareLink.of(app)?.let { link ->
+                TextButton(onClick = { share(context, app.title, link) }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_share),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.action_share))
+                }
             }
             // Not for another app under this name: that would be the other app's removal.
             row.removable?.let { UninstallButton(it, app.title) }
@@ -2137,6 +2182,19 @@ private fun formatDateTime(millis: Long): String? = if (millis <= 0) null else r
 
 internal fun openUrl(context: Context, url: String) {
     runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) }
+}
+
+/**
+ * Hands [link], which leads to the page of the app called [title], to whichever app the
+ * user picks to send it with.
+ */
+private fun share(context: Context, title: String, link: ShareLink) {
+    val send = Intent(Intent.ACTION_SEND)
+        .setType("text/plain")
+        .putExtra(Intent.EXTRA_TEXT, link.address)
+        .putExtra(Intent.EXTRA_SUBJECT, title)
+        .putExtra(Intent.EXTRA_TITLE, title)
+    runCatching { context.startActivity(Intent.createChooser(send, null)) }
 }
 
 /**

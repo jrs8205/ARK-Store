@@ -103,6 +103,8 @@
     <string name="bookmarks_chip">Kirjanmerkit</string>
     <string name="action_bookmark">Lisää kirjanmerkki</string>
     <string name="action_unbookmark">Poista kirjanmerkki</string>
+    <string name="action_share">Jaa</string>
+    <string name="link_astray">Linkin sovellusta ei löydy tämän laitteen sovelluslistasta. Se voi tulla paikasta, joka on kytketty pois asetusten kohdassa ”%1$s”.</string>
     <string name="bookmarked">Kirjanmerkitty</string>
     <string name="category_communication">Viestintä</string>
     <string name="category_productivity">Tuottavuus</string>

@@ -114,6 +114,8 @@
     <string name="bookmarks_chip">Favoris</string>
     <string name="action_bookmark">Ajouter aux favoris</string>
     <string name="action_unbookmark">Retirer des favoris</string>
+    <string name="action_share">Partager</string>
+    <string name="link_astray">L\'application vers laquelle mène ce lien ne figure pas dans la liste sur cet appareil. Elle vient peut-être d\'une source désactivée dans « %1$s », dans les paramètres.</string>
     <string name="bookmarked">Dans les favoris</string>
     <string name="category_communication">Communication</string>
     <string name="category_productivity">Productivité</string>
