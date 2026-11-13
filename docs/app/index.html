@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex">
+  <title>An app in ARK-Store</title>
+  <meta name="description" content="A link to an app in ARK-Store, an Android app store for open-source apps.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#16395a">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ARK-Store">
+  <meta property="og:title" content="An app shared from ARK-Store">
+  <meta property="og:description" content="Open the link on an Android phone to see the app in ARK-Store, an app store for open-source apps.">
+  <meta property="og:image" content="https://arkstore.jrs8205.com/social.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="ARK-Store: open-source Android apps, straight from GitHub">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/site.css">
+  <script src="/app/app.js" defer></script>
+</head>
+<body class="single">
+  <main class="card">
+    <img class="logo" src="/logo.webp" alt="" width="88" height="88">
+    <p class="store">ARK-Store</p>
+
+    <!-- Shown as it stands when the link names no app, or the page cannot run its script. -->
+    <div id="none">
+      <h1>A link to an app</h1>
+      <p class="text">This is a link to an app in ARK-Store, an Android app store for open-source apps.
+        Open the link on a phone that has the store, or get the store first.</p>
+    </div>
+
+    <div id="named" hidden>
+      <h1 id="title"></h1>
+      <p class="where" id="where"></p>
+      <p class="text">Someone shared this app with you from ARK-Store, an Android app store for open-source apps.</p>
+    </div>
+
+    <div class="actions">
+      <a class="button main" id="open" hidden>Open in ARK-Store</a>
+      <a class="button" id="get" href="https://github.com/jrs8205/ARK-Store/releases/latest">Get ARK-Store</a>
+      <a class="button" id="source" hidden rel="noopener"></a>
+    </div>
+    <p class="note"><a href="/">What is ARK-Store?</a></p>
+  </main>
+</body>
+</html>

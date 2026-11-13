@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; img-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>ARK-Store: an open-source Android app store</title>
+  <meta name="description" content="ARK-Store is a free, open-source Android app store. Get apps and their updates straight from the developers' releases on GitHub, Codeberg and GitLab.">
+  <link rel="canonical" href="https://arkstore.jrs8205.com/">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#16395a">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ARK-Store">
+  <meta property="og:title" content="ARK-Store: an open-source Android app store">
+  <meta property="og:description" content="Open-source Android apps and their updates, straight from the developers' own releases. Free, no account.">
+  <meta property="og:url" content="https://arkstore.jrs8205.com/">
+  <meta property="og:image" content="https://arkstore.jrs8205.com/social.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta property="og:image:alt" content="ARK-Store: open-source Android apps, straight from GitHub">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/site.webmanifest">
+  <link rel="stylesheet" href="/site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ARK-Store",
+    "description": "An Android app store for open-source apps. It lists apps straight from their developers' releases on GitHub, Codeberg and GitLab, and from the IzzyOnDroid and F-Droid catalogues.",
+    "url": "https://arkstore.jrs8205.com/",
+    "image": "https://arkstore.jrs8205.com/icon-512.png",
+    "screenshot": [
+      "https://arkstore.jrs8205.com/img/list.webp",
+      "https://arkstore.jrs8205.com/img/details.webp",
+      "https://arkstore.jrs8205.com/img/info.webp",
+      "https://arkstore.jrs8205.com/img/settings.webp"
+    ],
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Android 8.0 and later",
+    "downloadUrl": "https://github.com/jrs8205/ARK-Store/releases/latest",
+    "codeRepository": "https://github.com/jrs8205/ARK-Store",
+    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+    "author": { "@type": "Person", "name": "jrs8205", "url": "https://github.com/jrs8205" }
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to the content</a>
+
+  <header class="hero">
+    <div class="wrap">
+      <img class="logo" src="/logo.webp" alt="" width="96" height="96">
+      <h1>ARK-Store</h1>
+      <p class="tagline">Open-source Android apps and their updates, straight from the developers' own releases.</p>
+      <div class="actions">
+        <a class="button main" href="https://github.com/jrs8205/ARK-Store/releases/latest">Download for Android</a>
+        <a class="button" href="https://github.com/jrs8205/ARK-Store">Source on GitHub</a>
+      </div>
+      <ul class="facts">
+        <li>Free</li>
+        <li>Open source, GPL-3.0</li>
+        <li>No account</li>
+        <li>Android 8.0 and later</li>
+        <li>17 languages</li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="part" aria-labelledby="look">
+      <div class="wrap">
+        <h2 id="look">A look inside</h2>
+        <p class="lead">One list tells what is installed, what has a newer version and what there is to get.</p>
+        <div class="shots" role="region" aria-label="Screenshots of ARK-Store" tabindex="0">
+          <figure>
+            <img src="/img/list.webp" width="600" height="1338" alt="The list of apps in ARK-Store, with three updates waiting and a Download all button">
+            <figcaption>Updates and apps in one list</figcaption>
+          </figure>
+          <figure>
+            <img src="/img/details.webp" width="600" height="1338" loading="lazy" alt="The page of an app, with its screenshots and description">
+            <figcaption>Screenshots and a description</figcaption>
+          </figure>
+          <figure>
+            <img src="/img/info.webp" width="600" height="1338" loading="lazy" alt="The details of an app: its source, licence, versions, size and the permissions it asks for">
+            <figcaption>Versions, size and permissions</figcaption>
+          </figure>
+          <figure>
+            <img src="/img/settings.webp" width="600" height="1338" loading="lazy" alt="The settings, with a switch for each place apps come from">
+            <figcaption>You choose where apps come from</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="part" aria-labelledby="what">
+      <div class="wrap">
+        <h2 id="what">What you get</h2>
+        <ul class="tiles">
+          <li>
+            <h3>One list for everything</h3>
+            <p>Updates, installed apps and apps to install in one list. One tap downloads an app or its update, and Download all takes every update that waits.</p>
+          </li>
+          <li>
+            <h3>Five places, one store</h3>
+            <p>Apps from GitHub, Codeberg and GitLab, and the IzzyOnDroid and F-Droid catalogues behind a switch. An app offered by several places is listed once.</p>
+          </li>
+          <li>
+            <h3>Know before you install</h3>
+            <p>The details tell the version, the size, the Android version an app needs and the permissions it asks for. What an update would add is told first.</p>
+          </li>
+          <li>
+            <h3>No account</h3>
+            <p>Nothing to sign in to. The list comes from the store's own index, and a fresh install asks GitHub for nothing.</p>
+          </li>
+          <li>
+            <h3>You install, or root does</h3>
+            <p>The store checks each file and saves it in Download/ARK-Store for you to install from the Files app. On a rooted device it installs and updates by itself.</p>
+          </li>
+          <li>
+            <h3>Updates you hear about</h3>
+            <p>A check in the background about every four hours and a notification when a new version is out. An update can be skipped, or an app held back altogether.</p>
+          </li>
+          <li>
+            <h3>Made to be read</h3>
+            <p>Five palettes, the colours of the wallpaper on Android 12 and later, and a pure black dark theme. Contrast of at least 7:1 and labels for a screen reader.</p>
+          </li>
+          <li>
+            <h3>Backups</h3>
+            <p>Sources, bookmarks and settings export to a file. Apps installed from outside Google Play can be backed up as their APK files and restored.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="part" aria-labelledby="publish">
+      <div class="wrap">
+        <h2 id="publish">Publish your app in four steps</h2>
+        <p class="lead">For developers: no account, no submission form, no review queue, no fees.</p>
+        <ol class="steps">
+          <li>Make the repository public.</li>
+          <li>Give it an open-source licence that GitHub recognises.</li>
+          <li>Create a release and attach the APK.</li>
+          <li><span>Add the topic <code>arkstore</code> to the repository.</span></li>
+        </ol>
+        <p class="after">The app appears for every user at the next index run, usually within an hour, and new versions follow every release. To take it out of the store, remove the topic. The same steps work on Codeberg and GitLab.
+          <a href="https://github.com/jrs8205/ARK-Store#publish-your-app">The full instructions are in the README.</a></p>
+      </div>
+    </section>
+
+    <section class="part" aria-labelledby="questions">
+      <div class="wrap">
+        <h2 id="questions">Questions</h2>
+        <div class="questions">
+          <details>
+            <summary>Is ARK-Store free?</summary>
+            <p>Yes. It is free and open source under the GPL-3.0 licence, and it needs no account.</p>
+          </details>
+          <details>
+            <summary>Why do I install the files myself?</summary>
+            <p>ARK-Store does not ask Android for the right to install apps: Play Protect has blocked builds of the store that did. So the store downloads the file, checks it and saves it in Download/ARK-Store, and you install it from the Files app. On a rooted device the store installs and updates by itself.</p>
+          </details>
+          <details>
+            <summary>Does someone check the apps?</summary>
+            <p>No. Developers publish their apps themselves and nobody reviews them. Only public repositories with a recognised open-source licence are listed, the details tell an app's source, licence and permissions, and the store says so when an installed app is signed with another key than the version offered.</p>
+          </details>
+          <details>
+            <summary>Which phones does it work on?</summary>
+            <p>Phones and tablets with Android 8.0 or later.</p>
+          </details>
+          <details>
+            <summary>Where do I report a problem?</summary>
+            <p>In the <a href="https://github.com/jrs8205/ARK-Store/issues">issues of the repository on GitHub</a>.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="part get" aria-labelledby="get">
+      <div class="wrap">
+        <h2 id="get">Get ARK-Store</h2>
+        <p class="lead">Download the latest APK and open it on your phone. Every release is also mirrored on SourceForge.</p>
+        <div class="actions">
+          <a class="button main" href="https://github.com/jrs8205/ARK-Store/releases/latest">Download from GitHub</a>
+          <a class="button" href="https://sourceforge.net/projects/ark-store/">Download from SourceForge</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <ul>
+        <li><a href="https://github.com/jrs8205/ARK-Store">GitHub</a></li>
+        <li><a href="https://github.com/jrs8205/ARK-Store/releases">Releases</a></li>
+        <li><a href="https://github.com/jrs8205/ARK-Store/blob/main/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/jrs8205/ARK-Store/issues">Issues</a></li>
+        <li><a href="https://github.com/jrs8205/ARK-Store/blob/main/LICENSE">Licence</a></li>
+      </ul>
+      <p>ARK-Store is free software under the GPL-3.0 licence. This site sets no cookies and loads nothing from anywhere else.</p>
+    </div>
+  </footer>
+</body>
+</html>

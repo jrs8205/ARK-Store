@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "org.jarsi.arkstore",
+      "sha256_cert_fingerprints": [
+        "0B:44:0D:E2:D0:59:F7:A5:4F:AD:8F:C3:2F:83:B7:A4:E2:F0:87:61:5C:69:CF:56:BF:33:DA:8B:06:07:53:FF"
+      ]
+    }
+  }
+]
