@@ -403,12 +403,15 @@ internal object CatalogRules {
     /**
      * What was known of the file [assetId] among what was listed [before], or null when none
      * of it has read the file's manifest. The store's own copy from before the lowest Android
-     * was read and the index entry of the same file may both be there: the one that knows the
-     * lowest Android goes before one that knows the identity alone.
+     * or the permissions were read and the index entry of the same file may both be there: the
+     * one that knows them all goes first, then one that knows the lowest Android, and last
+     * one that knows the identity alone.
      */
     fun knownApk(before: List<StoreApp>, assetId: Long): StoreApp? {
         val known = before.filter { it.assetId == assetId && it.packageName != null }
-        return known.firstOrNull { it.apkInfo!!.lowestAndroidKnown } ?: known.firstOrNull()
+        return known.firstOrNull { it.apkInfo!!.readWhole }
+            ?: known.firstOrNull { it.apkInfo!!.lowestAndroidKnown }
+            ?: known.firstOrNull()
     }
 
     /**

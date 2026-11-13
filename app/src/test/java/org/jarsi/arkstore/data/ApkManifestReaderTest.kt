@@ -102,6 +102,90 @@ class ApkManifestReaderTest {
         return chunk(0x0003, ByteArray(0), stringPool(strings) + resourceMap + root + elements + endElement(2))
     }
 
+    /**
+     * A binary manifest of org.example, version 3, that asks for the permissions [asked]:
+     * each a name, the highest Android it is asked for on or null, and whether it is asked
+     * for from Android 6 on only. Those of [nested] are written inside the application
+     * element, where Android does not read them.
+     */
+    private fun askingManifest(asked: List<Triple<String, Int?, Boolean>>, nested: List<String> = emptyList()): ByteArray {
+        val strings = arrayListOf(
+            "versionCode", "package", "manifest", "org.example", "name", "maxSdkVersion", "uses-permission",
+            "uses-permission-sdk-23", "application"
+        )
+        val resourceMap = chunk(
+            0x0180, ByteArray(0),
+            le(24).putInt(0x0101021B).putInt(0).putInt(0).putInt(0).putInt(0x01010003).putInt(0x01010271).array()
+        )
+        fun ask(name: String, max: Int?, newer: Boolean): ByteArray {
+            val index = strings.indexOf(name).takeIf { it >= 0 } ?: strings.size.also { strings += name }
+            val attributes = arrayListOf(Triple(4, 0x03, index))
+            if (max != null) attributes += Triple(5, 0x10, max)
+            val tag = if (newer) 7 else 6
+            return element(tag, attributes) + endElement(tag)
+        }
+        val root = element(2, listOf(Triple(0, 0x10, 3), Triple(1, 0x03, 3)))
+        val children = asked.fold(ByteArray(0)) { all, (name, max, newer) -> all + ask(name, max, newer) }
+        val inside = nested.fold(ByteArray(0)) { all, name -> all + ask(name, null, false) }
+        val application = element(8, emptyList()) + inside + endElement(8)
+        return chunk(0x0003, ByteArray(0), stringPool(strings) + resourceMap + root + children + application + endElement(2))
+    }
+
+    @Test
+    fun readsThePermissionsAsTheListsWriteThem() {
+        val info = read(
+            zipWithManifest(
+                askingManifest(
+                    listOf(
+                        Triple("android.permission.INTERNET", null, false),
+                        Triple("android.permission.WRITE_EXTERNAL_STORAGE", 28, false),
+                        Triple("android.permission.CAMERA", null, true),
+                        Triple("org.example.permission.OWN", null, false)
+                    )
+                )
+            )
+        )
+        assertEquals(listOf(".INTERNET", ".WRITE_EXTERNAL_STORAGE@28", ".CAMERA", "org.example.permission.OWN"), info.permissions)
+    }
+
+    @Test
+    fun aPermissionInsideAnotherElementDoesNotCount() {
+        val manifest = askingManifest(listOf(Triple("android.permission.INTERNET", null, false)), nested = listOf("android.permission.CAMERA"))
+        assertEquals(listOf(".INTERNET"), ApkManifestReader.parseManifest(manifest).permissions)
+    }
+
+    @Test
+    fun aManifestThatAsksForNothingHasAnEmptyList() {
+        assertEquals(emptyList<String>(), read(zipWithManifest(manifest(minSdk = 26))).permissions)
+    }
+
+    @Test
+    fun aNameTooLongOrOddIsLeftOutAndTheRestStand() {
+        val manifest = askingManifest(
+            listOf(
+                Triple("x".repeat(30_000), null, false),
+                Triple("two words", null, false),
+                Triple("android.permission.INTERNET", null, false)
+            )
+        )
+        assertEquals(listOf(".INTERNET"), ApkManifestReader.parseManifest(manifest).permissions)
+    }
+
+    @Test
+    fun permissionsWithoutEndAreNotReadForNothing() {
+        // A hostile manifest: tens of thousands of permissions, each named by a string of tens
+        // of thousands of characters, and as many again with names of their own.
+        val long = "x".repeat(30_000)
+        val asked = List(20_000) { Triple(long, null as Int?, false) } +
+            List(20_000) { Triple("org.example.P$it", null as Int?, false) }
+        val manifest = askingManifest(asked)
+        val started = System.nanoTime()
+        val info = ApkManifestReader.parseManifest(manifest)
+        val millis = (System.nanoTime() - started) / 1_000_000
+        assertTrue("took $millis ms", millis < 1000)
+        assertTrue(info.permissions.orEmpty().size <= Permissions.MAX)
+    }
+
     @Test
     fun usesSdkInsideAnotherElementDoesNotCount() {
         // Android reads uses-sdk as a child of the manifest element only; one inside the

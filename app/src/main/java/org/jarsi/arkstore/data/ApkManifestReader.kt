@@ -16,11 +16,17 @@ data class ApkInfo(
     val versionCode: Long,
     val versionName: String?,
     val minSdk: Int? = null,
-    val minSdkCodename: String? = null
+    val minSdkCodename: String? = null,
+    /** The permissions the APK asks for, as the lists write them (see [Permissions]); null when they are not known. */
+    val permissions: List<String>? = null
 ) {
     /** Whether the lowest Android is known, as a level or as a preview's codename. */
     val lowestAndroidKnown: Boolean
         get() = minSdk != null || minSdkCodename != null
+
+    /** Whether all that the manifest is read for is known: the lowest Android and the permissions. */
+    val readWhole: Boolean
+        get() = lowestAndroidKnown && permissions != null
 }
 
 /** Random access to a remote or local file. */
@@ -56,6 +62,15 @@ object ApkManifestReader {
     private const val ATTR_VERSION_NAME = 0x0101021c
     private const val ATTR_VERSION_CODE_MAJOR = 0x01010576
     private const val ATTR_MIN_SDK = 0x0101020c
+    private const val ATTR_NAME = 0x01010003
+    private const val ATTR_MAX_SDK = 0x01010271
+
+    /**
+     * How many elements that ask for a permission are looked at: several times what a list
+     * keeps, so that names asked for twice and names left out do not cost the real ones their
+     * place, and no more, whatever the file holds.
+     */
+    private const val MAX_ASKED = 1000
     // Android's codenames are a word or two; anything longer is not one.
     private const val MAX_CODENAME = 64
 
@@ -182,9 +197,10 @@ object ApkManifestReader {
 
     /**
      * Parses the binary XML manifest: the root element's attributes for the package and the
-     * version, and those of the uses-sdk element, wherever it stands among the root's
-     * children, for the lowest Android. One nested deeper, inside the application element
-     * say, does not count: Android skips it there. Only the strings looked for are decoded:
+     * version, those of the uses-sdk element, wherever it stands among the root's
+     * children, for the lowest Android, and the names of the permissions asked for. An
+     * element nested deeper, inside the application element say, does not count: Android
+     * skips it there. Only the strings looked for are decoded:
      * a hostile file can hold tens of thousands of elements named by strings of tens of
      * thousands of characters each, and decoding them all would cost gigabytes.
      */
@@ -199,6 +215,8 @@ object ApkManifestReader {
         // A manifest that names no lowest Android runs on every one, as Android takes it.
         var minSdk: Int? = 1
         var codename: String? = null
+        val asked = ArrayList<Permissions.Asked>()
+        var askedSeen = 0
         // How many elements are open: 1 inside the root element.
         var depth = 0
 
@@ -245,13 +263,35 @@ object ApkManifestReader {
                                 else -> minSdk = null
                             }
                         }
+                    } else if (depth == 2 && askedSeen < MAX_ASKED &&
+                        (pool.matches(name, "uses-permission") || pool.matches(name, "uses-permission-sdk-23"))
+                    ) {
+                        // The second kind asks from Android 6 on, which every device the
+                        // store runs on is. Only as children of the manifest element, as
+                        // Android reads them.
+                        askedSeen++
+                        var permission: String? = null
+                        var maxSdk: Int? = null
+                        for (attribute in attributes(xml, resourceIds, body, position + chunkSize)) {
+                            if (attribute.resource == ATTR_NAME ||
+                                (attribute.resource == 0 && pool.matches(attribute.nameIndex, "name"))
+                            ) {
+                                // A name longer than a list keeps is not decoded at all.
+                                permission = if (attribute.dataType == TYPE_STRING) pool[attribute.data, Permissions.MAX_NAME] else null
+                            } else if (attribute.resource == ATTR_MAX_SDK &&
+                                (attribute.dataType == TYPE_INT_DEC || attribute.dataType == TYPE_INT_HEX)
+                            ) {
+                                maxSdk = attribute.data
+                            }
+                        }
+                        if (permission != null) asked += Permissions.Asked(permission, maxSdk)
                     }
                 }
             }
             position += chunkSize
         }
         val info = identity ?: throw IOException("Manifest element not found")
-        return info.copy(minSdk = minSdk, minSdkCodename = codename)
+        return info.copy(minSdk = minSdk, minSdkCodename = codename, permissions = Permissions.listed(asked))
     }
 
     /** One attribute of a start element, its strings left in the pool until they are wanted. */

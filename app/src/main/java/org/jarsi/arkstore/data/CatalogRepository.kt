@@ -838,6 +838,7 @@ class CatalogRepository private constructor(context: Context) {
             signer = signerOf(apk),
             sha256 = apk.getString("sha256"),
             minSdk = StoreApp.minSdkOf(apk),
+            permissions = Permissions.of(apk),
             // The warnings belong to a version, and the one picked for this device need not
             // be the newest. A list written before each file carried its own has them for
             // the newest version only.
@@ -934,6 +935,7 @@ class CatalogRepository private constructor(context: Context) {
             signer = StoreApp.indexedSigner(apk),
             minSdk = StoreApp.minSdkOf(apk),
             minSdkCodename = StoreApp.minSdkCodenameOf(apk),
+            permissions = Permissions.of(apk),
             icon = AppIcon.of(apk.opt("icon")),
             metadata = AppMetadata.mapOf(json.optJSONObject("metadata")),
             metadataAt = (json.opt("metadataAt") as? String)?.takeIf { it.isNotEmpty() }
@@ -1063,11 +1065,11 @@ class CatalogRepository private constructor(context: Context) {
             val url = apk.getString("browser_download_url")
             val size = apk.getLong("size")
             // The asset id changes whenever a file is replaced, so a known id means a known APK.
-            // One known from before the lowest Android was read is read again for it; should
-            // that fail, what was known of it stays.
+            // One known from before the lowest Android or the permissions were read is read
+            // again for them; should that fail, what was known of it stays.
             val knownApp = CatalogRules.knownApk(previous, assetId)
             val known = knownApp?.apkInfo
-            val info = if (known != null && known.lowestAndroidKnown) {
+            val info = if (known != null && known.readWhole) {
                 known
             } else {
                 try {
@@ -1103,6 +1105,7 @@ class CatalogRepository private constructor(context: Context) {
                 versionName = info?.versionName,
                 minSdk = info?.minSdk,
                 minSdkCodename = info?.minSdkCodename,
+                permissions = info?.permissions,
                 // Only the index reads an app's name. A release newer than the index is
                 // taken to be called what the one before it was.
                 label = knownApp?.label
@@ -1211,7 +1214,8 @@ class CatalogRepository private constructor(context: Context) {
                     versionCode = info.versionCode,
                     versionName = info.versionName,
                     minSdk = info.minSdk,
-                    minSdkCodename = info.minSdkCodename
+                    minSdkCodename = info.minSdkCodename,
+                    permissions = info.permissions
                 )
             }
         }

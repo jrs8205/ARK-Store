@@ -92,6 +92,12 @@ class CatalogRulesTest {
         assertSame(identity, CatalogRules.knownApk(listOf(identity), 7))
         assertNull(CatalogRules.knownApk(listOf(identity.copy(packageName = null)), 7))
         assertNull(CatalogRules.knownApk(listOf(indexed), 8))
+        // And the one that knows the permissions too goes before both.
+        val whole = indexed.copy(permissions = listOf(".INTERNET"))
+        assertSame(whole, CatalogRules.knownApk(listOf(identity, indexed, whole), 7))
+        assertTrue(whole.apkInfo!!.readWhole)
+        assertFalse(indexed.apkInfo!!.readWhole)
+        assertFalse(identity.copy(permissions = emptyList()).apkInfo!!.readWhole)
     }
 
     @Test

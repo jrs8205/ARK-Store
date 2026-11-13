@@ -80,6 +80,13 @@ class StoreAppTest {
 
     @Test
     fun codenameOfThePreviewAndroidAFileNeedsIsKeptInTheStoredCopy() {
+        val asking = testApp().copy(permissions = listOf(".INTERNET", ".CAMERA@30"))
+        assertEquals(listOf(".INTERNET", ".CAMERA@30"), StoreApp.fromJson(asking.toJson()).permissions)
+        assertEquals(emptyList<String>(), StoreApp.fromJson(testApp().copy(permissions = emptyList()).toJson()).permissions)
+        // Not known is kept apart from none asked for, also in a copy stored before they were read.
+        assertNull(StoreApp.fromJson(testApp().toJson()).permissions)
+        assertNull(StoreApp.fromJson(testApp().toJson().apply { remove("permissions") }).permissions)
+        assertEquals(listOf(".INTERNET"), asking.copy(permissions = listOf(".INTERNET")).apkInfo?.permissions)
         val app = testApp().copy(minSdkCodename = "Baklava")
         assertEquals("Baklava", StoreApp.fromJson(app.toJson()).minSdkCodename)
         assertNull(StoreApp.fromJson(testApp().toJson()).minSdkCodename)

@@ -80,6 +80,12 @@ data class StoreApp(
      * on, instead of a number, when the index tells it. Only that preview runs the file.
      */
     val minSdkCodename: String? = null,
+    /**
+     * The permissions the APK asks for, as the lists write them (see [Permissions]), when the
+     * place tells them or the file's manifest was read here; null when they are not known,
+     * which is not the same as none asked for.
+     */
+    val permissions: List<String>? = null,
     /** What a catalogue warns about in the app, such as tracking, in its own words. */
     val antiFeatures: List<String> = emptyList(),
     /** The app's icon as the index publishes it, or null when it publishes none. */
@@ -139,7 +145,7 @@ data class StoreApp(
 
     /** What the APK's manifest said of it, or null when the manifest could not be read. */
     val apkInfo: ApkInfo?
-        get() = packageName?.let { ApkInfo(it, versionCode, versionName, minSdk, minSdkCodename) }
+        get() = packageName?.let { ApkInfo(it, versionCode, versionName, minSdk, minSdkCodename, permissions) }
 
     fun toJson(): JSONObject = JSONObject()
         .put("fullName", fullName)
@@ -173,6 +179,7 @@ data class StoreApp(
         .put("sha256", sha256 ?: JSONObject.NULL)
         .put("minSdk", minSdk ?: JSONObject.NULL)
         .put("minSdkCodename", minSdkCodename ?: JSONObject.NULL)
+        .put("permissions", permissions?.let(::JSONArray) ?: JSONObject.NULL)
         .put("antiFeatures", JSONArray(antiFeatures))
         .put("icon", icon?.toJson() ?: JSONObject.NULL)
         .put("metadata", JSONObject().also { json -> metadata.forEach { (language, it) -> json.put(language, it.toJson()) } })
@@ -248,6 +255,7 @@ data class StoreApp(
             sha256 = if (json.isNull("sha256")) null else json.getString("sha256"),
             minSdk = minSdkOf(json),
             minSdkCodename = minSdkCodenameOf(json),
+            permissions = Permissions.of(json),
             antiFeatures = json.optJSONArray("antiFeatures")
                 ?.let { array -> List(array.length()) { array.getString(it) } }
                 .orEmpty(),
