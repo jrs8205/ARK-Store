@@ -35,7 +35,9 @@ class ZipSettings {
             if (of == null || of < read) file.delete()
         }
         if (text == null) return null
-        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("No folder for the settings of a zip file")
+        // Asked after the try, not before: another read may make the folder meanwhile, and the
+        // try then says it made nothing though the folder is there.
+        if (!dir.mkdirs() && !dir.isDirectory) throw IOException("No folder for the settings of a zip file")
         return File(dir, "settings-$read.json").apply { writeText(text) }
     }
 

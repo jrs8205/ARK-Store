@@ -1,9 +1,11 @@
 package org.jarsi.arkstore.backup
 
 import java.io.File
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -68,6 +70,28 @@ class ZipSettingsTest {
         val kept = settings.keep(dir(), settings.begin(2_000), "{\"new\":1}")!!
         assertFalse(left.exists())
         assertTrue(kept.exists())
+    }
+
+    @Test
+    fun aFolderAnotherReadMadeMeanwhileIsNoReasonToGoWithoutTheSettings() {
+        // Two reads come to a folder that is not there yet, and the other makes it between
+        // this one's look at it and its own try: the try then says it made nothing.
+        val settings = ZipSettings()
+        val raced = object : File(dir().path) {
+            override fun mkdirs(): Boolean {
+                File(path).mkdirs()
+                return super.mkdirs()
+            }
+        }
+        val kept = settings.keep(raced, settings.begin(100), "{\"a\":1}")
+        assertEquals("{\"a\":1}", kept?.readText())
+    }
+
+    @Test
+    fun aFolderThatCannotBeMadeIsAnError() {
+        val settings = ZipSettings()
+        val blocked = File(temp.root, "blocked").apply { writeText("not a folder") }
+        assertThrows(IOException::class.java) { settings.keep(File(blocked, "backup-settings"), settings.begin(100), "{\"a\":1}") }
     }
 
     @Test
