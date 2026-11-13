@@ -340,6 +340,8 @@
     <string name="backup_zip_unreadable">Не удалось прочитать ZIP-файл.</string>
     <string name="backup_zip_failed">Не удалось записать ZIP-файл, поэтому он удалён.</string>
     <string name="backup_zip_cancelled">Отменено. Незавершённый ZIP-файл удалён.</string>
+    <string name="backup_zip_failed_left">Не удалось записать ZIP-файл, и незавершённый файл остался на месте. Удалите его сами: это не полная резервная копия.</string>
+    <string name="backup_zip_cancelled_left">Отменено. Незавершённый ZIP-файл остался на месте. Удалите его сами: это не полная резервная копия.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">В ZIP-файл сохранено %1$d приложение.</item>
         <item quantity="few">В ZIP-файл сохранено %1$d приложения.</item>

@@ -333,6 +333,8 @@
     <string name="backup_zip_unreadable">The zip file could not be read.</string>
     <string name="backup_zip_failed">The zip file could not be written, so it was removed.</string>
     <string name="backup_zip_cancelled">Cancelled. The unfinished zip file was removed.</string>
+    <string name="backup_zip_failed_left">The zip file could not be written, and the unfinished file is still there. Delete it yourself: it is not a whole backup.</string>
+    <string name="backup_zip_cancelled_left">Cancelled. The unfinished zip file is still there. Delete it yourself: it is not a whole backup.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">Saved %1$d app to the zip file.</item>
         <item quantity="other">Saved %1$d apps to the zip file.</item>

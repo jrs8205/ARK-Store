@@ -700,6 +700,9 @@ private fun JobFooter(
                 Text(
                     text = stringResource(
                         when {
+                            // The file is told of as removed only when it was.
+                            state.zipLeft && cancelled -> R.string.backup_zip_cancelled_left
+                            state.zipLeft -> R.string.backup_zip_failed_left
                             state.zip && !state.restoring && cancelled -> R.string.backup_zip_cancelled
                             state.zip && !state.restoring -> R.string.backup_zip_failed
                             state.zip && !cancelled -> R.string.backup_zip_unreadable

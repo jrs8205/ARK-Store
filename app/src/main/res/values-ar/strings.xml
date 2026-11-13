@@ -358,6 +358,8 @@
     <string name="backup_zip_unreadable">تعذّرت قراءة ملف ZIP.</string>
     <string name="backup_zip_failed">تعذّرت كتابة ملف ZIP، لذا حُذف.</string>
     <string name="backup_zip_cancelled">تم الإلغاء. حُذف ملف ZIP غير المكتمل.</string>
+    <string name="backup_zip_failed_left">تعذّرت كتابة ملف ZIP، وما زال الملف غير المكتمل موجودًا. احذفه بنفسك: فهو ليس نسخة احتياطية كاملة.</string>
+    <string name="backup_zip_cancelled_left">تم الإلغاء. ما زال ملف ZIP غير المكتمل موجودًا. احذفه بنفسك: فهو ليس نسخة احتياطية كاملة.</string>
     <plurals name="backup_zip_done">
         <item quantity="zero">تم حفظ %1$d تطبيق في ملف ZIP.</item>
         <item quantity="one">تم حفظ تطبيق واحد في ملف ZIP.</item>

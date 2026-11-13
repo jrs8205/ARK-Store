@@ -331,6 +331,8 @@
     <string name="backup_zip_unreadable">Impossible de lire le fichier ZIP.</string>
     <string name="backup_zip_failed">Impossible d\'écrire le fichier ZIP ; il a donc été supprimé.</string>
     <string name="backup_zip_cancelled">Annulé. Le fichier ZIP inachevé a été supprimé.</string>
+    <string name="backup_zip_failed_left">Impossible d\'écrire le fichier ZIP, et le fichier inachevé est toujours là. Supprimez-le vous-même : ce n\'est pas une sauvegarde complète.</string>
+    <string name="backup_zip_cancelled_left">Annulé. Le fichier ZIP inachevé est toujours là. Supprimez-le vous-même : ce n\'est pas une sauvegarde complète.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d application enregistrée dans le fichier ZIP.</item>
         <item quantity="many">%1$d applications enregistrées dans le fichier ZIP.</item>

@@ -340,6 +340,8 @@
     <string name="backup_zip_unreadable">Nie udało się odczytać pliku ZIP.</string>
     <string name="backup_zip_failed">Nie udało się zapisać pliku ZIP, więc został usunięty.</string>
     <string name="backup_zip_cancelled">Anulowano. Niedokończony plik ZIP został usunięty.</string>
+    <string name="backup_zip_failed_left">Nie udało się zapisać pliku ZIP, a niedokończony plik nadal tam jest. Usuń go samodzielnie: nie jest to pełna kopia zapasowa.</string>
+    <string name="backup_zip_cancelled_left">Anulowano. Niedokończony plik ZIP nadal tam jest. Usuń go samodzielnie: nie jest to pełna kopia zapasowa.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">Zapisano %1$d aplikację w pliku ZIP.</item>
         <item quantity="few">Zapisano %1$d aplikacje w pliku ZIP.</item>

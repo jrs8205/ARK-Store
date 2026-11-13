@@ -322,6 +322,8 @@
     <string name="backup_zip_unreadable">Zip-tiedostoa ei voitu lukea.</string>
     <string name="backup_zip_failed">Zip-tiedostoa ei voitu kirjoittaa, joten se poistettiin.</string>
     <string name="backup_zip_cancelled">Keskeytetty. Keskeneräinen zip-tiedosto poistettiin.</string>
+    <string name="backup_zip_failed_left">Zip-tiedostoa ei voitu kirjoittaa, ja keskeneräinen tiedosto jäi paikalleen. Poista se itse: se ei ole kokonainen varmuuskopio.</string>
+    <string name="backup_zip_cancelled_left">Keskeytetty. Keskeneräinen zip-tiedosto jäi paikalleen. Poista se itse: se ei ole kokonainen varmuuskopio.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">Zip-tiedostoon tallennettiin %1$d sovellus.</item>
         <item quantity="other">Zip-tiedostoon tallennettiin %1$d sovellusta.</item>

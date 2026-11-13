@@ -124,7 +124,13 @@ sealed interface BackupState {
         val restoring: Boolean,
         val reason: BackupError,
         val indexWritten: Boolean = true,
-        val zip: Boolean = false
+        val zip: Boolean = false,
+        /**
+         * A zip backup whose unfinished file is still where it was being written: it could not
+         * be removed, or the backup was given up before it had begun. It tells of apps it does
+         * not hold, so the user is told to remove it.
+         */
+        val zipLeft: Boolean = false
     ) : BackupState
 }
 
@@ -191,6 +197,7 @@ object BackupManager {
     }
     private var job: Job? = null
     private val restores = AtomicInteger(0)
+    private val zipSettings = ZipSettings()
 
     /**
      * The installed apps a backup may take, by name: the user's own apps, not the system's and
@@ -276,6 +283,8 @@ object BackupManager {
      */
     suspend fun readZip(context: Context, uri: Uri): BackupFolder? = withContext(Dispatchers.IO) {
         val resolver = context.contentResolver
+        // Numbered as it begins, before the file is read: see ZipSettings.
+        val read = zipSettings.begin(System.currentTimeMillis())
         val head = try {
             resolver.openInputStream(uri)?.use { ZipBackup.readHead(BufferedInputStream(it)) }
         } catch (e: CancellationException) {
@@ -284,16 +293,13 @@ object BackupManager {
             Log.w(TAG, "Could not read a zip file", e)
             null
         } ?: return@withContext null
-        // A file of this read's own: a read given up meanwhile must not overwrite the next one's.
-        File(context.cacheDir, ZIP_SETTINGS_DIR).listFiles()?.forEach { it.delete() }
-        val settings = head.settings?.let { text ->
-            try {
-                val dir = File(context.cacheDir, ZIP_SETTINGS_DIR).apply { mkdirs() }
-                File(dir, "settings-${restores.incrementAndGet()}.json").apply { writeText(text) }.let(Uri::fromFile)
-            } catch (e: IOException) {
-                Log.w(TAG, "Could not keep the zip file's settings", e)
-                null
-            }
+        // A file of this read's own, and only the files of the reads before it removed: a read
+        // given up meanwhile must neither overwrite nor remove the next one's.
+        val settings = try {
+            zipSettings.keep(File(context.cacheDir, ZIP_SETTINGS_DIR), read, head.settings)?.let(Uri::fromFile)
+        } catch (e: IOException) {
+            Log.w(TAG, "Could not keep the zip file's settings", e)
+            null
         }
         val installed = InstalledApps.snapshot(context)
         val rows = head.entries.map { entry ->
@@ -637,7 +643,7 @@ object BackupManager {
         // A job cancelled before its first turn says nothing of how it ended; it is said for it.
         job = launchSettling(
             scope,
-            otherwise = BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip),
+            otherwise = unbegun(restoring, zip),
             settle = { _state.value = it }
         ) {
             val place = try {
@@ -650,13 +656,9 @@ object BackupManager {
             }.orEmpty()
             val end = try {
                 work()
-            } catch (e: CancelledWith) {
-                BackupState.Failed(restoring, BackupError.CANCELLED, e.indexWritten, zip)
-            } catch (_: CancellationException) {
-                BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip)
             } catch (e: Exception) {
-                Log.w(TAG, if (restoring) "Restore failed" else "Backup failed", e)
-                BackupState.Failed(restoring, BackupError.FOLDER_UNAVAILABLE, zip = zip)
+                if (e !is CancellationException) Log.w(TAG, if (restoring) "Restore failed" else "Backup failed", e)
+                failedBy(restoring, zip, e)
             }
             // Written down before it is shown, so that the settings read it with the outcome.
             withContext(NonCancellable) {
@@ -750,12 +752,13 @@ object BackupManager {
                 )
             }
         } catch (e: Throwable) {
-            // A zip cut short would tell of apps it does not hold; it goes.
-            withContext(NonCancellable) {
-                runCatching { DocumentsContract.deleteDocument(context.contentResolver, uri) }
-                    .onFailure { Log.w(TAG, "Could not remove the unfinished zip file", it) }
+            // A zip cut short would tell of apps it does not hold; it goes. A folder that says
+            // it did not remove the file, or refuses, has left it there, and that is told.
+            val removed = withContext(NonCancellable) {
+                gone { DocumentsContract.deleteDocument(context.contentResolver, uri) }
             }
-            throw e
+            if (!removed) Log.w(TAG, "Could not remove the unfinished zip file")
+            throw if (removed || e !is Exception) e else leftBehind(e)
         }
         return BackupState.Done(false, whole.size, 0, changed.map { it.entry.label }, zip = true, dataFailed = dataFailed)
     }
@@ -1056,14 +1059,6 @@ object BackupManager {
                 return renamed
             }
         }
-
-    /** A cancel, carrying whether the folder's index was still written. */
-    private class CancelledWith(val indexWritten: Boolean, cause: CancellationException) :
-        CancellationException(cause.message) {
-        init {
-            initCause(cause)
-        }
-    }
 
     /**
      * What every app folder in the tree holds, by package: its entry, none (a copy cut short, or
@@ -1366,6 +1361,50 @@ object BackupManager {
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
 
+
+/** A cancel, carrying whether the folder's index was still written. */
+internal class CancelledWith(val indexWritten: Boolean, cause: CancellationException) :
+    CancellationException(cause.message) {
+    init {
+        initCause(cause)
+    }
+}
+
+/** A cancel of a zip backup whose unfinished file could not be removed afterwards. */
+internal class ZipLeftCancelled(cause: CancellationException) : CancellationException(cause.message) {
+    init {
+        initCause(cause)
+    }
+}
+
+/** A failure of a zip backup whose unfinished file could not be removed afterwards. */
+internal class ZipLeft(cause: Exception) : IOException("The unfinished zip file could not be removed", cause)
+
+/** [error], which ended a zip backup, as it is passed on when the unfinished file could not be removed: a cancel stays a cancel. */
+internal fun leftBehind(error: Exception): Exception =
+    if (error is CancellationException) ZipLeftCancelled(error) else ZipLeft(error)
+
+/** Whether [delete] removed what it was to remove: one that says it did not, or cannot, has not. */
+internal fun gone(delete: () -> Boolean): Boolean = try {
+    delete()
+} catch (e: Exception) {
+    false
+}
+
+/** How a backup or a restore that [error] ended is told of. */
+internal fun failedBy(restoring: Boolean, zip: Boolean, error: Exception): BackupState.Failed = when (error) {
+    is CancelledWith -> BackupState.Failed(restoring, BackupError.CANCELLED, error.indexWritten, zip)
+    is ZipLeftCancelled -> BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip, zipLeft = true)
+    is CancellationException -> BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip)
+    else -> BackupState.Failed(restoring, BackupError.FOLDER_UNAVAILABLE, zip = zip, zipLeft = error is ZipLeft)
+}
+
+/**
+ * How a job cancelled before its first turn is told of. A zip backup's file was made by the
+ * picker before the job, and nothing has removed it.
+ */
+internal fun unbegun(restoring: Boolean, zip: Boolean): BackupState.Failed =
+    BackupState.Failed(restoring, BackupError.CANCELLED, zip = zip, zipLeft = zip && !restoring)
 
 /**
  * Launches [work] in [scope] and hands what it returns to [settle]. When the job ends without

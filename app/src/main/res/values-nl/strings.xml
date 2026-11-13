@@ -322,6 +322,8 @@
     <string name="backup_zip_unreadable">Het zip-bestand kon niet worden gelezen.</string>
     <string name="backup_zip_failed">Het zip-bestand kon niet worden geschreven en is daarom verwijderd.</string>
     <string name="backup_zip_cancelled">Geannuleerd. Het onvoltooide zip-bestand is verwijderd.</string>
+    <string name="backup_zip_failed_left">Het zip-bestand kon niet worden geschreven, en het onvoltooide bestand staat er nog. Verwijder het zelf: het is geen volledige back-up.</string>
+    <string name="backup_zip_cancelled_left">Geannuleerd. Het onvoltooide zip-bestand staat er nog. Verwijder het zelf: het is geen volledige back-up.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d app opgeslagen in het zip-bestand.</item>
         <item quantity="other">%1$d apps opgeslagen in het zip-bestand.</item>

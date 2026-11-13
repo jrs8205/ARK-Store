@@ -22,7 +22,12 @@ data class BackupEvent(
     /** Found up to date in the folder. */
     val skipped: Int,
     val failed: Int,
-    val outcome: Outcome
+    val outcome: Outcome,
+    /**
+     * False when a backup to a folder copied its apps but could not write the folder's index
+     * and the settings file, see [BackupState.Done.indexWritten].
+     */
+    val indexWritten: Boolean = true
 ) {
     enum class Kind { FOLDER, ZIP, RESTORE }
 
@@ -38,6 +43,7 @@ data class BackupEvent(
         .put("skipped", skipped)
         .put("failed", failed)
         .put("outcome", outcome.name)
+        .put("indexWritten", indexWritten)
 }
 
 /** The last backups and restores, newest first, kept on the device for the settings to tell. */
@@ -67,7 +73,9 @@ object BackupLog {
                     saved = json.getInt("saved"),
                     skipped = json.getInt("skipped"),
                     failed = json.getInt("failed"),
-                    outcome = BackupEvent.Outcome.valueOf(json.getString("outcome"))
+                    outcome = BackupEvent.Outcome.valueOf(json.getString("outcome")),
+                    // An event written before this was told of had no trouble to tell.
+                    indexWritten = json.optBoolean("indexWritten", true)
                 )
             } catch (_: JSONException) {
                 null
@@ -81,11 +89,13 @@ object BackupLog {
     fun event(kind: BackupEvent.Kind, at: Long, place: String, apps: Int, bytes: Long, state: BackupState): BackupEvent =
         when (state) {
             is BackupState.Done -> BackupEvent(
-                kind, at, place, apps, bytes, state.saved, state.skipped, state.failed.size, BackupEvent.Outcome.DONE
+                kind, at, place, apps, bytes, state.saved, state.skipped, state.failed.size, BackupEvent.Outcome.DONE,
+                state.indexWritten
             )
             is BackupState.Failed -> BackupEvent(
                 kind, at, place, apps, bytes, 0, 0, 0,
-                if (state.reason == BackupError.CANCELLED) BackupEvent.Outcome.CANCELLED else BackupEvent.Outcome.FAILED
+                if (state.reason == BackupError.CANCELLED) BackupEvent.Outcome.CANCELLED else BackupEvent.Outcome.FAILED,
+                state.indexWritten
             )
             else -> BackupEvent(kind, at, place, apps, bytes, 0, 0, 0, BackupEvent.Outcome.FAILED)
         }

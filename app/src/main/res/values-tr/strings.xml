@@ -322,6 +322,8 @@
     <string name="backup_zip_unreadable">ZIP dosyası okunamadı.</string>
     <string name="backup_zip_failed">ZIP dosyası yazılamadı, bu yüzden kaldırıldı.</string>
     <string name="backup_zip_cancelled">İptal edildi. Tamamlanmamış ZIP dosyası kaldırıldı.</string>
+    <string name="backup_zip_failed_left">ZIP dosyası yazılamadı ve tamamlanmamış dosya hâlâ yerinde duruyor. Dosyayı kendiniz silin: tam bir yedek değildir.</string>
+    <string name="backup_zip_cancelled_left">İptal edildi. Tamamlanmamış ZIP dosyası hâlâ yerinde duruyor. Dosyayı kendiniz silin: tam bir yedek değildir.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d uygulama ZIP dosyasına kaydedildi.</item>
         <item quantity="other">%1$d uygulama ZIP dosyasına kaydedildi.</item>

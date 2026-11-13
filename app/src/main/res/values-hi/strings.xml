@@ -322,6 +322,8 @@
     <string name="backup_zip_unreadable">ZIP फ़ाइल पढ़ी नहीं जा सकी।</string>
     <string name="backup_zip_failed">ZIP फ़ाइल लिखी नहीं जा सकी, इसलिए उसे हटा दिया गया।</string>
     <string name="backup_zip_cancelled">रद्द किया गया। अधूरी ZIP फ़ाइल हटा दी गई।</string>
+    <string name="backup_zip_failed_left">ZIP फ़ाइल लिखी नहीं जा सकी, और अधूरी फ़ाइल अब भी वहीं है। उसे खुद मिटा दें: वह पूरा बैकअप नहीं है।</string>
+    <string name="backup_zip_cancelled_left">रद्द किया गया। अधूरी ZIP फ़ाइल अब भी वहीं है। उसे खुद मिटा दें: वह पूरा बैकअप नहीं है।</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d ऐप ZIP फ़ाइल में सेव किया गया।</item>
         <item quantity="other">%1$d ऐप ZIP फ़ाइल में सेव किए गए।</item>

@@ -1,6 +1,8 @@
 package org.jarsi.arkstore.backup
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupLogTest {
@@ -46,5 +48,25 @@ class BackupLogTest {
         val failed = BackupLog.event(BackupEvent.Kind.RESTORE, 5, "R", 2, 50, BackupState.Failed(true, BackupError.FOLDER_UNAVAILABLE))
         assertEquals(BackupEvent.Outcome.FAILED, failed.outcome)
         assertEquals(0, failed.saved)
+    }
+
+    @Test
+    fun anEventRemembersThatTheFoldersIndexWasNotWritten() {
+        val done = BackupLog.event(
+            BackupEvent.Kind.FOLDER, 5, "F", 3, 100, BackupState.Done(false, 3, 0, emptyList(), indexWritten = false)
+        )
+        assertFalse(done.indexWritten)
+        val cancelled = BackupLog.event(
+            BackupEvent.Kind.FOLDER, 6, "F", 3, 100, BackupState.Failed(false, BackupError.CANCELLED, indexWritten = false)
+        )
+        assertFalse(cancelled.indexWritten)
+        assertEquals(listOf(cancelled, done), BackupLog.fromText(BackupLog.toText(listOf(cancelled, done))))
+        assertTrue(BackupLog.event(BackupEvent.Kind.FOLDER, 7, "F", 3, 100, BackupState.Done(false, 3, 0, emptyList())).indexWritten)
+    }
+
+    @Test
+    fun anEventWrittenBeforeTheIndexWasToldOfIsTakenToHaveHadItWritten() {
+        val old = """[{"kind":"FOLDER","at":1,"place":"F","apps":3,"bytes":100,"saved":3,"skipped":0,"failed":0,"outcome":"DONE"}]"""
+        assertTrue(BackupLog.fromText(old).single().indexWritten)
     }
 }

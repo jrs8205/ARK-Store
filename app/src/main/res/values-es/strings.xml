@@ -331,6 +331,8 @@
     <string name="backup_zip_unreadable">No se ha podido leer el archivo ZIP.</string>
     <string name="backup_zip_failed">No se ha podido escribir el archivo ZIP, así que se ha eliminado.</string>
     <string name="backup_zip_cancelled">Cancelado. Se ha eliminado el archivo ZIP sin terminar.</string>
+    <string name="backup_zip_failed_left">No se ha podido escribir el archivo ZIP, y el archivo sin terminar sigue ahí. Bórralo tú: no es una copia de seguridad completa.</string>
+    <string name="backup_zip_cancelled_left">Cancelado. El archivo ZIP sin terminar sigue ahí. Bórralo tú: no es una copia de seguridad completa.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">Se ha guardado %1$d aplicación en el archivo ZIP.</item>
         <item quantity="many">Se han guardado %1$d aplicaciones en el archivo ZIP.</item>

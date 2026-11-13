@@ -322,6 +322,8 @@
     <string name="backup_zip_unreadable">Die ZIP-Datei konnte nicht gelesen werden.</string>
     <string name="backup_zip_failed">Die ZIP-Datei konnte nicht geschrieben werden und wurde deshalb entfernt.</string>
     <string name="backup_zip_cancelled">Abgebrochen. Die unvollständige ZIP-Datei wurde entfernt.</string>
+    <string name="backup_zip_failed_left">Die ZIP-Datei konnte nicht geschrieben werden, und die unvollständige Datei ist noch vorhanden. Lösche sie selbst: Sie ist keine vollständige Sicherung.</string>
+    <string name="backup_zip_cancelled_left">Abgebrochen. Die unvollständige ZIP-Datei ist noch vorhanden. Lösche sie selbst: Sie ist keine vollständige Sicherung.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d App in der ZIP-Datei gespeichert.</item>
         <item quantity="other">%1$d Apps in der ZIP-Datei gespeichert.</item>

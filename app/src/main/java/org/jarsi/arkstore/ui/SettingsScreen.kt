@@ -659,6 +659,14 @@ private fun BackupEventLine(event: BackupEvent) {
                 MaterialTheme.colorScheme.error
             }
         )
+        // Told here as it was when the backup ended: a later look must not take it for a whole one.
+        if (!event.indexWritten) {
+            Text(
+                text = stringResource(R.string.backup_index_not_written),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
     }
 }
 

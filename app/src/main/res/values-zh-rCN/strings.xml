@@ -313,6 +313,8 @@
     <string name="backup_zip_unreadable">无法读取该 ZIP 文件。</string>
     <string name="backup_zip_failed">无法写入该 ZIP 文件，因此已将其删除。</string>
     <string name="backup_zip_cancelled">已取消。未完成的 ZIP 文件已删除。</string>
+    <string name="backup_zip_failed_left">无法写入该 ZIP 文件，未完成的文件仍留在原处。它不是完整的备份，请自行删除。</string>
+    <string name="backup_zip_cancelled_left">已取消。未完成的 ZIP 文件仍留在原处。它不是完整的备份，请自行删除。</string>
     <plurals name="backup_zip_done">
         <item quantity="other">已将 %1$d 个应用保存到 ZIP 文件。</item>
     </plurals>

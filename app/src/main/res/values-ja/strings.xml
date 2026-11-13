@@ -313,6 +313,8 @@
     <string name="backup_zip_unreadable">ZIP ファイルを読み込めませんでした。</string>
     <string name="backup_zip_failed">ZIP ファイルを書き込めなかったため、削除しました。</string>
     <string name="backup_zip_cancelled">キャンセルしました。途中までの ZIP ファイルは削除しました。</string>
+    <string name="backup_zip_failed_left">ZIP ファイルを書き込めず、途中までのファイルが残っています。完全なバックアップではないため、ご自身で削除してください。</string>
+    <string name="backup_zip_cancelled_left">キャンセルしました。途中までの ZIP ファイルが残っています。完全なバックアップではないため、ご自身で削除してください。</string>
     <plurals name="backup_zip_done">
         <item quantity="other">%1$d 個のアプリを ZIP ファイルに保存しました。</item>
     </plurals>

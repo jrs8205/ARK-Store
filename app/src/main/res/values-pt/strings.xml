@@ -331,6 +331,8 @@
     <string name="backup_zip_unreadable">Não foi possível ler o arquivo ZIP.</string>
     <string name="backup_zip_failed">Não foi possível gravar o arquivo ZIP, então ele foi removido.</string>
     <string name="backup_zip_cancelled">Cancelado. O arquivo ZIP incompleto foi removido.</string>
+    <string name="backup_zip_failed_left">Não foi possível gravar o arquivo ZIP, e o arquivo incompleto continua lá. Apague-o você mesmo: ele não é um backup completo.</string>
+    <string name="backup_zip_cancelled_left">Cancelado. O arquivo ZIP incompleto continua lá. Apague-o você mesmo: ele não é um backup completo.</string>
     <plurals name="backup_zip_done">
         <item quantity="one">%1$d app salvo no arquivo ZIP.</item>
         <item quantity="many">%1$d apps salvos no arquivo ZIP.</item>

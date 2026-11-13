@@ -313,6 +313,8 @@
     <string name="backup_zip_unreadable">ZIP 파일을 읽을 수 없었습니다.</string>
     <string name="backup_zip_failed">ZIP 파일을 쓸 수 없어 삭제했습니다.</string>
     <string name="backup_zip_cancelled">취소되었습니다. 완료되지 않은 ZIP 파일은 삭제되었습니다.</string>
+    <string name="backup_zip_failed_left">ZIP 파일을 쓸 수 없었으며, 완료되지 않은 파일이 그대로 남아 있습니다. 온전한 백업이 아니므로 직접 삭제해 주세요.</string>
+    <string name="backup_zip_cancelled_left">취소되었습니다. 완료되지 않은 ZIP 파일이 그대로 남아 있습니다. 온전한 백업이 아니므로 직접 삭제해 주세요.</string>
     <plurals name="backup_zip_done">
         <item quantity="other">앱 %1$d개를 ZIP 파일에 저장했습니다.</item>
     </plurals>
