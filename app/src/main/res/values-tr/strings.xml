@@ -47,6 +47,9 @@
     <string name="detail_size">Boyut</string>
     <string name="detail_package">Paket</string>
     <string name="detail_requires">Gereksinim</string>
+    <string name="permissions_title">İzinler (%1$d)</string>
+    <string name="permissions_none">Uygulama hiçbir izin istemiyor.</string>
+    <string name="permissions_new">Bu güncellemede yeni:</string>
     <string name="requires_android">Android %1$s veya üzeri</string>
     <string name="requires_api">Android API düzeyi %1$d veya üzeri</string>
     <string name="requires_preview">Android %1$s (önizleme)</string>

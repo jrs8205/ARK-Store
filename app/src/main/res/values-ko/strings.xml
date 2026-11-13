@@ -46,6 +46,9 @@
     <string name="detail_size">크기</string>
     <string name="detail_package">패키지</string>
     <string name="detail_requires">요구 사항</string>
+    <string name="permissions_title">권한(%1$d)</string>
+    <string name="permissions_none">이 앱은 권한을 요청하지 않습니다.</string>
+    <string name="permissions_new">이번 업데이트에서 추가됨:</string>
     <string name="requires_android">Android %1$s 이상</string>
     <string name="requires_api">Android API 레벨 %1$d 이상</string>
     <string name="requires_preview">Android %1$s(프리뷰)</string>

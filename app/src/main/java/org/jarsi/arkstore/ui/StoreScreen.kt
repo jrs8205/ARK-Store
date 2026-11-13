@@ -1275,6 +1275,7 @@ private fun DetailsSheet(
             Formatter.formatShortFileSize(context, app.apkSize)
         )
         app.packageName?.let { DetailLine(stringResource(R.string.detail_package), it) }
+        PermissionsSection(app, row.installed)
 
         if (app.releaseNotes.isNotBlank()) {
             Text(

@@ -51,6 +51,9 @@
     <string name="detail_size">الحجم</string>
     <string name="detail_package">الحزمة</string>
     <string name="detail_requires">يتطلّب</string>
+    <string name="permissions_title">الأذونات (%1$d)</string>
+    <string name="permissions_none">لا يطلب التطبيق أي أذونات.</string>
+    <string name="permissions_new">الجديد في هذا التحديث:</string>
     <string name="requires_android">نظام Android %1$s أو إصدار أحدث</string>
     <string name="requires_api">نظام Android بمستوى API %1$d أو أعلى</string>
     <string name="requires_preview">نظام Android %1$s (إصدار معاينة)</string>

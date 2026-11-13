@@ -47,6 +47,9 @@
     <string name="detail_size">साइज़</string>
     <string name="detail_package">पैकेज</string>
     <string name="detail_requires">ज़रूरत</string>
+    <string name="permissions_title">अनुमतियां (%1$d)</string>
+    <string name="permissions_none">यह ऐप कोई अनुमति नहीं मांगता।</string>
+    <string name="permissions_new">इस अपडेट में नया:</string>
     <string name="requires_android">Android %1$s या इसके बाद का वर्शन</string>
     <string name="requires_api">Android API लेवल %1$d या इससे ऊपर</string>
     <string name="requires_preview">Android %1$s (प्रीव्यू)</string>

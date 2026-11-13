@@ -46,6 +46,9 @@
     <string name="detail_size">サイズ</string>
     <string name="detail_package">パッケージ</string>
     <string name="detail_requires">動作環境</string>
+    <string name="permissions_title">権限（%1$d）</string>
+    <string name="permissions_none">このアプリは権限を要求しません。</string>
+    <string name="permissions_new">このアップデートで追加:</string>
     <string name="requires_android">Android %1$s 以降</string>
     <string name="requires_api">Android API レベル %1$d 以降</string>
     <string name="requires_preview">Android %1$s（プレビュー版）</string>

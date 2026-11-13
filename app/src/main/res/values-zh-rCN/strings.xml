@@ -46,6 +46,9 @@
     <string name="detail_size">大小</string>
     <string name="detail_package">软件包名称</string>
     <string name="detail_requires">系统要求</string>
+    <string name="permissions_title">权限（%1$d）</string>
+    <string name="permissions_none">此应用不请求任何权限。</string>
+    <string name="permissions_new">此更新新增：</string>
     <string name="requires_android">Android %1$s 或更高版本</string>
     <string name="requires_api">Android API 级别 %1$d 或更高版本</string>
     <string name="requires_preview">Android %1$s（预览版）</string>

@@ -49,6 +49,9 @@
     <string name="detail_size">Размер</string>
     <string name="detail_package">Пакет</string>
     <string name="detail_requires">Требуется</string>
+    <string name="permissions_title">Разрешения (%1$d)</string>
+    <string name="permissions_none">Приложение не запрашивает разрешений.</string>
+    <string name="permissions_new">Новое в этом обновлении:</string>
     <string name="requires_android">Android %1$s и выше</string>
     <string name="requires_api">Android с уровнем API %1$d и выше</string>
     <string name="requires_preview">Android %1$s (предварительная версия)</string>

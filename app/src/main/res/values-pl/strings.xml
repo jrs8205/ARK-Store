@@ -49,6 +49,9 @@
     <string name="detail_size">Rozmiar</string>
     <string name="detail_package">Pakiet</string>
     <string name="detail_requires">Wymaga</string>
+    <string name="permissions_title">Uprawnienia (%1$d)</string>
+    <string name="permissions_none">Aplikacja nie prosi o żadne uprawnienia.</string>
+    <string name="permissions_new">Nowe w tej aktualizacji:</string>
     <string name="requires_android">Android %1$s lub nowszy</string>
     <string name="requires_api">Android (poziom API %1$d) lub nowszy</string>
     <string name="requires_preview">Android %1$s (wersja przedpremierowa)</string>

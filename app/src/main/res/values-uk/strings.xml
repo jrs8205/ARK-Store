@@ -49,6 +49,9 @@
     <string name="detail_size">Розмір</string>
     <string name="detail_package">Пакет</string>
     <string name="detail_requires">Вимоги</string>
+    <string name="permissions_title">Дозволи (%1$d)</string>
+    <string name="permissions_none">Додаток не запитує дозволів.</string>
+    <string name="permissions_new">Нове в цьому оновленні:</string>
     <string name="requires_android">Android %1$s або новіша версія</string>
     <string name="requires_api">Android із рівнем API %1$d або вищим</string>
     <string name="requires_preview">Android %1$s (попередня тестова версія)</string>

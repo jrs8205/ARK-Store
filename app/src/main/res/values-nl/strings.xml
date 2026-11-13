@@ -47,6 +47,9 @@
     <string name="detail_size">Grootte</string>
     <string name="detail_package">Pakket</string>
     <string name="detail_requires">Vereist</string>
+    <string name="permissions_title">Rechten (%1$d)</string>
+    <string name="permissions_none">De app vraagt geen rechten.</string>
+    <string name="permissions_new">Nieuw in deze update:</string>
     <string name="requires_android">Android %1$s of hoger</string>
     <string name="requires_api">Android API-niveau %1$d of hoger</string>
     <string name="requires_preview">Android %1$s (preview)</string>
