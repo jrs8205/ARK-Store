@@ -71,6 +71,9 @@ object ApkManifestReader {
      * place, and no more, whatever the file holds.
      */
     private const val MAX_ASKED = 1000
+
+    /** The elements that ask for a permission, as Android reads them: the last is an older name of the second. */
+    private val ASKING_ELEMENTS = listOf("uses-permission", "uses-permission-sdk-23", "uses-permission-sdk-m")
     // Android's codenames are a word or two; anything longer is not one.
     private const val MAX_CODENAME = 64
 
@@ -264,10 +267,10 @@ object ApkManifestReader {
                             }
                         }
                     } else if (depth == 2 && askedSeen < MAX_ASKED &&
-                        (pool.matches(name, "uses-permission") || pool.matches(name, "uses-permission-sdk-23"))
+                        ASKING_ELEMENTS.any { pool.matches(name, it) }
                     ) {
-                        // The second kind asks from Android 6 on, which every device the
-                        // store runs on is. Only as children of the manifest element, as
+                        // The second and the third ask from Android 6 on, which every device
+                        // the store runs on is. Only as children of the manifest element, as
                         // Android reads them.
                         askedSeen++
                         var permission: String? = null

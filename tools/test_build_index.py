@@ -642,13 +642,13 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(build_index.adaptive_layers(manifest(None)), {})
 
 
-def asking_manifest(asked, inside_application=()):
+def asking_manifest(asked, inside_application=(), newer_element="uses-permission-sdk-23"):
     """A binary manifest of org.example, version 3, that asks for the permissions asked: each a
     name, or (name, highest Android version), or (name, highest or None, True) for one asked
     for from Android 6 on. Those of inside_application are written inside the application
     element, where Android does not read them."""
     strings = ["versionCode", "name", "maxSdkVersion", "package", "manifest", "application", "org.example",
-               "uses-permission", "uses-permission-sdk-23"]
+               "uses-permission", newer_element]
     resource_map = chunk(0x0180, b"", struct.pack("<3I", 0x0101021B, 0x01010003, 0x01010271))
 
     def element(request):
@@ -698,6 +698,19 @@ class PermissionsTest(unittest.TestCase):
     def test_permission_asked_for_from_android_6_on_counts(self):
         self.assertEqual(self.asked(("android.permission.CAMERA", None, True), ("android.permission.BLUETOOTH", 30, True)),
                          [".CAMERA", ".BLUETOOTH@30"])
+
+    def test_older_name_of_the_element_that_asks_from_android_6_on_counts_too(self):
+        # Android reads uses-permission-sdk-m as it reads uses-permission-sdk-23.
+        asked = [("android.permission.CAMERA", None, True), ("android.permission.BLUETOOTH", 30, True)]
+        self.assertEqual(build_index.asked_permissions(asking_manifest(asked, newer_element="uses-permission-sdk-m")),
+                         [".CAMERA", ".BLUETOOTH@30"])
+        # An element that only looks like one of them asks for nothing.
+        self.assertEqual(build_index.asked_permissions(asking_manifest(asked, newer_element="uses-permission-sdk-x")), [])
+
+    def test_name_as_long_as_the_platform_prefix_is_a_name_like_any_other(self):
+        self.assertEqual(len("com.example.READ_DB"), len(build_index.PLATFORM_PERMISSION))
+        self.assertEqual(self.asked("com.example.READ_DB", ("com.example.READ_XY", 30)),
+                         ["com.example.READ_DB", "com.example.READ_XY@30"])
 
     def test_permission_asked_for_twice_is_listed_once_with_its_widest_reach(self):
         self.assertEqual(

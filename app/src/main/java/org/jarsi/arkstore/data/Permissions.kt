@@ -23,6 +23,9 @@ object Permissions {
     private const val MAX_SDK = 10000
     private val NAME = Regex("[A-Za-z0-9_][A-Za-z0-9_.\\-]*")
 
+    /** What follows an app's package in the name of the permission androidx makes for the app's own receivers. */
+    private const val OWN_RECEIVERS = ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+
     /**
      * One permission a file asks for: its whole [name], and the highest Android API level it
      * is asked for on, or null when it is asked for on every one.
@@ -65,8 +68,10 @@ object Permissions {
                 ?.toInt()?.takeIf { it in 1..MAX_SDK }
                 ?: return null
         }
+        // A dot with nothing after it names nothing of the platform's.
+        if (written == "." || written.length > MAX_NAME) return null
         val name = if (written.startsWith(".")) PLATFORM + written.substring(1) else written
-        if (written.length > MAX_NAME || name.length == PLATFORM.length || !NAME.matches(name)) return null
+        if (!NAME.matches(name)) return null
         return Asked(name, maxSdk)
     }
 
@@ -89,16 +94,18 @@ object Permissions {
 
     /**
      * The whole names of those of [listed] a device of the Android API level [sdk] would be
-     * asked for, in the order they are listed. The permissions the app of [packageName]
-     * makes for itself, named under its own package, are left out: they let the app's parts
-     * talk to each other and give it nothing of the device's or of another app's.
+     * asked for, in the order they are listed. The one permission the build tools make for
+     * the app of [packageName] itself, so that its own receivers hear only the app, is left
+     * out: it gives the app nothing of the device's or of another app's. Nothing else is
+     * taken for the app's own by its name: a name under an app's package says nothing of who
+     * made the permission, and it may guard another app's data.
      */
     fun onDevice(listed: List<String>, sdk: Int, packageName: String?): List<String> {
-        val own = packageName?.let { "$it." }
+        val own = packageName?.let { it + OWN_RECEIVERS }
         return listed.mapNotNull(::asked)
             .filter { it.maxSdk == null || sdk <= it.maxSdk }
             .map { it.name }
-            .filter { own == null || !it.startsWith(own) }
+            .filter { it != own }
             .distinct()
     }
 

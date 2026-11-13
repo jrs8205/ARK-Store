@@ -78,6 +78,13 @@ class PermissionsTest {
         assertEquals(asked("android.permission.WRITE_EXTERNAL_STORAGE", 28), Permissions.asked(".WRITE_EXTERNAL_STORAGE@28"))
         assertEquals(asked("com.example.permission.OWN"), Permissions.asked("com.example.permission.OWN"))
         assertEquals(asked("android.permission.health.READ_STEPS"), Permissions.asked(".health.READ_STEPS"))
+        // A name as long as the platform's prefix is a name like any other.
+        val nineteen = "com.example.READ_DB"
+        assertEquals(19, nineteen.length)
+        assertEquals(asked(nineteen), Permissions.asked(nineteen))
+        assertEquals(asked(nineteen, 30), Permissions.asked("$nineteen@30"))
+        assertEquals(listOf(nineteen), Permissions.of(JSONObject().put("permissions", JSONArray(Permissions.listed(listOf(asked(nineteen)))))))
+        assertEquals(listOf(nineteen), Permissions.onDevice(listOf(nineteen), 35, "org.example.app"))
         for (odd in listOf("", ".", "@28", ".A@", ".A@x", ".A@0", ".A@99999", ".A@28@29", "two words", ".A B", "a\"b")) {
             assertNull(odd, Permissions.asked(odd))
         }
@@ -121,6 +128,24 @@ class PermissionsTest {
         )
         // Without the app's package nothing is taken for its own.
         assertEquals(3, Permissions.onDevice(listed, 35, null).size)
+        // A name under the app's package says nothing of who made the permission: it may be
+        // another app's, and guard that app's data. Only the one the build tools make for an
+        // app's own receivers is known to be its own.
+        assertEquals(
+            listOf("org.example.app.companion.ACCESS_DATA", "org.example.app.permission.OWN"),
+            Permissions.onDevice(
+                listOf(
+                    "org.example.app.companion.ACCESS_DATA", "org.example.app.permission.OWN",
+                    "org.example.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+                ),
+                35, "org.example.app"
+            )
+        )
+        // And another app's of that kind is not this app's.
+        assertEquals(
+            listOf("org.example.other.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"),
+            Permissions.onDevice(listOf("org.example.other.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"), 35, "org.example.app")
+        )
         // A package that only begins the same is another's.
         assertEquals(
             listOf("org.example.application.permission.X"),

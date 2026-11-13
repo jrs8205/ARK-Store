@@ -1,7 +1,10 @@
 package org.jarsi.arkstore.ui
 
 import java.util.Locale
+import org.jarsi.arkstore.data.InstalledVersion
+import org.jarsi.arkstore.data.testApp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
@@ -41,6 +44,23 @@ class PermissionTextsTest {
         val wake = described("android.permission.WAKE_LOCK", "prevent phone from sleeping")
         val audio = described("android.permission.RECORD_AUDIO", "record audio", true)
         assertEquals(listOf(camera, audio, internet, wake), PermissionTexts.ordered(listOf(internet, camera, wake, audio)))
+    }
+
+    @Test
+    fun whatAnUpdateAddsIsToldAgainstTheVersionInstalledNow() {
+        val offered = testApp(versionCode = 3)
+        val one = InstalledVersion(versionCode = 1, versionName = "1.0", updatedAt = 1_000)
+        val two = InstalledVersion(versionCode = 2, versionName = "2.0", updatedAt = 2_000)
+        // Another version installed meanwhile is another comparison, to be made anew.
+        assertNotEquals(installedCompared(offered, one), installedCompared(offered, two))
+        assertEquals(installedCompared(offered, one), installedCompared(offered, one.copy(label = "Renamed")))
+        // The same version installed again is one too: its permissions are read again.
+        assertNotEquals(installedCompared(offered, one), installedCompared(offered, one.copy(updatedAt = 1_500)))
+        // Nothing to compare with: no app installed, another app under the name, or a version not older.
+        assertNull(installedCompared(offered, null))
+        assertNull(installedCompared(offered, one.copy(otherApp = true)))
+        assertNull(installedCompared(offered, one.copy(versionCode = 3)))
+        assertNull(installedCompared(offered, one.copy(versionCode = 4)))
     }
 
     @Test

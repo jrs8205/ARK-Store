@@ -108,10 +108,14 @@ class ApkManifestReaderTest {
      * for from Android 6 on only. Those of [nested] are written inside the application
      * element, where Android does not read them.
      */
-    private fun askingManifest(asked: List<Triple<String, Int?, Boolean>>, nested: List<String> = emptyList()): ByteArray {
+    private fun askingManifest(
+        asked: List<Triple<String, Int?, Boolean>>,
+        nested: List<String> = emptyList(),
+        newerElement: String = "uses-permission-sdk-23"
+    ): ByteArray {
         val strings = arrayListOf(
             "versionCode", "package", "manifest", "org.example", "name", "maxSdkVersion", "uses-permission",
-            "uses-permission-sdk-23", "application"
+            newerElement, "application"
         )
         val resourceMap = chunk(
             0x0180, ByteArray(0),
@@ -146,6 +150,19 @@ class ApkManifestReaderTest {
             )
         )
         assertEquals(listOf(".INTERNET", ".WRITE_EXTERNAL_STORAGE@28", ".CAMERA", "org.example.permission.OWN"), info.permissions)
+    }
+
+    @Test
+    fun theOlderNameOfTheElementThatAsksFromAndroid6OnCountsToo() {
+        // Android reads uses-permission-sdk-m as it reads uses-permission-sdk-23.
+        val manifest = askingManifest(
+            listOf(Triple("android.permission.CAMERA", null, true), Triple("android.permission.BLUETOOTH", 30, true)),
+            newerElement = "uses-permission-sdk-m"
+        )
+        assertEquals(listOf(".CAMERA", ".BLUETOOTH@30"), ApkManifestReader.parseManifest(manifest).permissions)
+        // An element that only looks like one of them asks for nothing.
+        val other = askingManifest(listOf(Triple("android.permission.CAMERA", null, true)), newerElement = "uses-permission-sdk-x")
+        assertEquals(emptyList<String>(), ApkManifestReader.parseManifest(other).permissions)
     }
 
     @Test

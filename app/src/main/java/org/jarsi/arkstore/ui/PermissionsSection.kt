@@ -80,6 +80,19 @@ private fun installedPermissions(packages: PackageManager, packageName: String):
 }
 
 /**
+ * What the permissions an update adds are told against: the version of [app]'s package that
+ * is [installed] and when it was installed, or null when there is nothing to compare with,
+ * as when no app is installed, another app has the name, or the file offered is no newer.
+ * Another version installed meanwhile, or the same one again, is another comparison: what was
+ * read of the one before says nothing of it.
+ */
+internal fun installedCompared(app: StoreApp, installed: InstalledVersion?): Pair<Long, Long>? =
+    installed?.takeIf { !it.otherApp && app.versionCode > it.versionCode }?.let { it.versionCode to it.updatedAt }
+
+/** What was read for a page, with what it was read for: shown only while that still holds. */
+private data class PermissionsRead(val key: List<Any?>, val shown: PermissionsShown)
+
+/**
  * The permissions [app] asks for, when the place it comes from tells them: how many, with the
  * list behind a tap, and above it the ones an update would add to those of the [installed]
  * version, which are shown without asking. Nothing when the permissions are not known.
@@ -90,13 +103,16 @@ internal fun PermissionsSection(app: StoreApp, installed: InstalledVersion?) {
     val context = LocalContext.current
     val locale = LocalConfiguration.current.locales[0]
     // Told only of the app itself, and of a version newer than the one installed.
-    val compare = installed != null && !installed.otherApp && app.versionCode > installed.versionCode
-    val shown by produceState<PermissionsShown?>(null, listed, app.packageName, compare, locale) {
+    val compared = installedCompared(app, installed)
+    val key = listOf(listed, app.packageName, compared, locale)
+    val read by produceState<PermissionsRead?>(null, key) {
         value = withContext(Dispatchers.IO) {
-            permissionsShown(context.packageManager, listed, app.packageName, compare, locale)
+            PermissionsRead(key, permissionsShown(context.packageManager, listed, app.packageName, compared != null, locale))
         }
     }
-    val permissions = shown ?: return
+    // What was read for another app, or against another installed version, is not shown
+    // while this one's is on its way.
+    val permissions = read?.takeIf { it.key == key }?.shown ?: return
     var expanded by rememberSaveable(app.fullName) { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(top = 12.dp)) {

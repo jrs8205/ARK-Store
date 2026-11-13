@@ -90,6 +90,9 @@ MAX_SDK = 10000
 # reader read is read again. Raise it whenever asked_permissions or permission_list changes
 # what is written.
 PERMISSIONS_READER = 1
+# The elements that ask for a permission, as Android reads them: the last is an older name of
+# the second, which asks from Android 6 on.
+ASKING_ELEMENTS = ("uses-permission", "uses-permission-sdk-23", "uses-permission-sdk-m")
 USER_AGENT = "ARK-Store-index"
 # An app's long description and phone screenshots are read from where the F-Droid tools take
 # them, fastlane/metadata/android/<locale>/, for each of these languages.
@@ -681,7 +684,8 @@ def asked_permissions(data):
     """The permissions a binary AndroidManifest.xml asks for, as they are written in the
     index (see permission_list), in the order the manifest names them. Read from the
     uses-permission elements, and from those that ask from Android 6 on, which every device
-    the store runs on is; only as children of the manifest element, as Android reads them."""
+    the store runs on is (see ASKING_ELEMENTS); only as children of the manifest element, as
+    Android reads them."""
     asked = []
     depth = 0
     for element, attributes in elements(data, ends=True):
@@ -689,7 +693,7 @@ def asked_permissions(data):
             depth -= 1
             continue
         depth += 1
-        if depth != 2 or element not in ("uses-permission", "uses-permission-sdk-23"):
+        if depth != 2 or element not in ASKING_ELEMENTS:
             continue
         name = None
         highest = None
