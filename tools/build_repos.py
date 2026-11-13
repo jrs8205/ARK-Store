@@ -24,7 +24,9 @@ import time
 import urllib.parse
 import urllib.request
 
-from build_index import LANGUAGES, MAX_SUMMARY, chosen_screenshots, guess_category, preferred_locale, write_json
+from build_index import (
+    LANGUAGES, MAX_SUMMARY, chosen_screenshots, guess_category, permission_list, preferred_locale, write_json,
+)
 
 USER_AGENT = "ARK-Store-index"
 MAX_ENTRY = 1024 * 1024
@@ -32,8 +34,8 @@ MAX_INDEX = 256 * 1024 * 1024
 MAX_NOTES = 500
 # Raised when the lists are built differently, so that a list an earlier run wrote is built
 # again whether the catalogue has changed or not: 2 carries the translated summaries, 3 the common
-# languages beyond English and Finnish.
-BUILDER = 3
+# languages beyond English and Finnish, 4 the permissions each file asks for.
+BUILDER = 4
 # Apps built for one CPU architecture at a time have a version for each; this many of an
 # app's newest versions are looked at to find them all.
 MAX_VERSIONS = 12
@@ -133,6 +135,21 @@ def min_sdk(manifest):
 
 def signers(manifest):
     return tuple((manifest.get("signer") or {}).get("sha256") or [])
+
+
+def asked_permissions(manifest):
+    """The permissions a version asks for, as build_index writes those of a file on GitHub
+    (see build_index.permission_list). The catalogue names them under "usesPermission" and,
+    those asked for from Android 6 on, under "usesPermissionSdk23", each as {"name",
+    "maxSdkVersion"}. One described oddly is left out, and a version that names none asks for
+    none."""
+    asked = []
+    for key in ("usesPermission", "usesPermissionSdk23"):
+        listed = manifest.get(key)
+        for permission in listed if isinstance(listed, list) else []:
+            if isinstance(permission, dict):
+                asked.append((permission.get("name"), permission.get("maxSdkVersion")))
+    return permission_list(asked)
 
 
 def offered_versions(versions):
@@ -283,6 +300,7 @@ def build_apk(address, package, label, version, anti_feature_names):
         "signer": signed_by[0] if len(signed_by) == 1 else None,
         "abis": abis,
         "minSdk": min_sdk(manifest),
+        "permissions": asked_permissions(manifest),
         # What this version is warned about. Versions differ in it, and a device is offered
         # the one that suits it, which need not be the newest.
         "antiFeatures": sorted(

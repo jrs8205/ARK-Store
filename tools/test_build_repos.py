@@ -59,6 +59,32 @@ def build(entry, source="fdroid"):
 
 
 class BuildAppTest(unittest.TestCase):
+    def test_permissions_of_a_version_are_written_beside_its_file(self):
+        asking = version(4)
+        asking["manifest"]["usesPermission"] = [
+            {"name": "android.permission.INTERNET"},
+            {"name": "android.permission.WRITE_EXTERNAL_STORAGE", "maxSdkVersion": 28},
+            {"name": "org.example.permission.OWN", "maxSdkVersion": None},
+        ]
+        asking["manifest"]["usesPermissionSdk23"] = [{"name": "android.permission.CAMERA"}]
+        apk = build(package([asking]))["apks"][0]
+        self.assertEqual(apk["permissions"],
+                         [".INTERNET", ".WRITE_EXTERNAL_STORAGE@28", "org.example.permission.OWN", ".CAMERA"])
+
+    def test_version_that_names_no_permissions_asks_for_none(self):
+        self.assertEqual(build(package([version(4)]))["apks"][0]["permissions"], [])
+
+    def test_permissions_described_oddly_are_left_out_and_the_file_stays(self):
+        odd = version(4)
+        odd["manifest"]["usesPermission"] = [
+            {"name": 7}, "android.permission.CAMERA", None, {"maxSdkVersion": 28}, {"name": "two words"},
+            {"name": "android.permission.INTERNET", "maxSdkVersion": "28"},
+        ]
+        odd["manifest"]["usesPermissionSdk23"] = {"name": "android.permission.CAMERA"}
+        apk = build(package([odd]))["apks"][0]
+        self.assertEqual(apk["permissions"], [".INTERNET"])
+        self.assertEqual(apk["versionCode"], 4)
+
     def test_label_is_localized_metadata_not_the_apk_default_name(self):
         for source in ("fdroid", "izzy"):
             with self.subTest(source=source):
