@@ -47,8 +47,8 @@
     <string name="detail_size">Koko</string>
     <string name="detail_package">Paketti</string>
     <string name="detail_requires">Vaatii</string>
-    <string name="permissions_title">Käyttöoikeudet (%1$d)</string>
-    <string name="permissions_none">Sovellus ei pyydä käyttöoikeuksia.</string>
+    <string name="permissions_title">Luvat (%1$d)</string>
+    <string name="permissions_none">Sovellus ei pyydä lupia.</string>
     <string name="permissions_new">Uutta tässä päivityksessä:</string>
     <string name="requires_android">Android %1$s tai uudempi</string>
     <string name="requires_api">Androidin API-taso %1$d tai uudempi</string>
