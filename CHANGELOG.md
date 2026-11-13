@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.12.0
+
+- The page of an app tells the permissions it asks for, in the device's own words: how many,
+  and the list behind a tap. When an update would add permissions to the ones the installed
+  version has, those are told first, without a tap
+- The permissions come from the lists, from the catalogues of F-Droid and IzzyOnDroid, and
+  from the file itself when a release is read straight from GitHub. An app found by the
+  automatic search shows them once its next release has been read
+- The history of backups tells when the index of the folder was not written
+- An unfinished zip that could not be removed is said to be still there
+- Cancelling stops a restore, or a look at a zip, also while a large file that is not wanted
+  is passed over
+- With root, a cancelled restore lets the step that puts an app's data in place finish and
+  then puts the old data back
+- The settings of a zip are no longer lost when another zip is read at the same time
+
 ## 1.11.1
 
 - An installed app that is also in F-Droid or IzzyOnDroid, signed there with the developer's
