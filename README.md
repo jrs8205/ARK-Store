@@ -118,6 +118,8 @@ following a developer who has not added it.
 - The details tell the latest version, when it was published, the size of the file and the
   Android version the app needs. An installed app whose newest version needs a newer Android
   than the device has stays in the list, with a note; one not installed is left out.
+- The details tell the permissions an app asks for, in the device's own words, behind a tap.
+  The ones an update would add to those of the installed version are told first.
 - Stars and download counts from GitHub.
 - Screenshots and a longer description in the details, when the developer publishes them,
   whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.
