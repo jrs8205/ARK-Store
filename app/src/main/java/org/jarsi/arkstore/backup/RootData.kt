@@ -5,7 +5,9 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.install.Root
 
@@ -431,6 +433,7 @@ object RootData {
      * the app's data, owned by [uid], the app stopped first. The old data is kept aside until
      * every part is in place; a part that fails puts the parts before it back as they were,
      * so that the app is left with the data it had, never with parts of two.
+     * A cancel waits for the part being put in place and then puts back what was done.
      */
     @Throws(IOException::class)
     suspend fun swap(staged: List<Staged>, packageName: String, uid: Int) {
@@ -439,12 +442,19 @@ object RootData {
         val swapped = ArrayList<Staged>(staged.size)
         try {
             for (part in staged) {
-                // Counted as begun before its command runs: a command cut short by a cancel
-                // or a failure may have moved the data already, and is put back all the same.
+                // Counted as begun before its command runs: a command that fails, or that
+                // root is lost in the middle of, may have moved the data already, and is put
+                // back all the same.
                 swapped += part
                 // No limit on the time: the ownership and the labels of large data take a
-                // while, and a cancel kills the command as it is.
-                val ran = Root.run(RootDataCommands.swap(part.part, userId, packageName, uid, part.token), null, global = true)
+                // while. And no cancel either: killing `su` does not stop what it has started
+                // on the root app's side, and things put back while the command still ran
+                // could be moved again by it. The command runs to its end, and a cancel that
+                // came meanwhile is heeded after it, when what it did can be undone in peace.
+                val ran = withContext(NonCancellable) {
+                    Root.run(RootDataCommands.swap(part.part, userId, packageName, uid, part.token), null, global = true)
+                }
+                coroutineContext.ensureActive()
                 when (ran) {
                     Root.Outcome.NoRoot -> throw IOException("Root could not be had for the data of $packageName")
                     is Root.Outcome.Ran -> if (ran.exit != 0) {

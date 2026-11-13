@@ -3,7 +3,10 @@ package org.jarsi.arkstore.backup
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.jarsi.arkstore.install.Root
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -133,6 +136,38 @@ class RootDataTest {
         }
         assertThrows(IOException::class.java) { runBlocking { RootData.swap(listOf(a, b), pkg, 10123) } }
         assertEquals(2, unswaps().size)
+        assertEquals(0, finishes().size)
+    }
+
+    @Test
+    fun aCancelWhileAPartGoesInPlaceLetsItsCommandEndBeforeThingsArePutBack() = runBlocking {
+        // Killing `su` does not stop what it has started, so the command is let run to its
+        // end: things put back while it still ran could be moved again by it.
+        device()
+        val a = RootData.stage("tar", AppBackup.DATA_USER, pkg, ByteArrayInputStream(archive()))
+        val b = RootData.stage("tar", AppBackup.DATA_USER_DE, pkg, ByteArrayInputStream(archive()))
+        val before = Root.transport!!
+        val order = ArrayList<String>()
+        lateinit var job: Job
+        Root.transport = { command, stdin, stdout, global ->
+            when {
+                command.startsWith("chown") -> {
+                    order += "swap begins"
+                    job.cancel()
+                    // Where a cancel would cut the command short, were it heeded here.
+                    yield()
+                    order += "swap ends"
+                }
+                command.startsWith("{ if [ -e /data/user") -> order += "put back"
+            }
+            before(command, stdin, stdout, global)
+        }
+        job = launch { RootData.swap(listOf(a, b), pkg, 10123) }
+        job.join()
+        assertTrue(job.isCancelled)
+        assertEquals(listOf("swap begins", "swap ends", "put back"), order)
+        // The part after it is not begun, and the old data is not cleared away.
+        assertEquals(1, swaps().size)
         assertEquals(0, finishes().size)
     }
 
