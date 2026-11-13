@@ -71,6 +71,25 @@ SIGNER_READER = 2
 # came after the application element and wrote 1 for it. Raise it whenever lowest_sdk or
 # the way parse_manifest finds the element changes what is written.
 SDK_READER = 1
+# android:name and android:maxSdkVersion of the uses-permission elements.
+ATTRIBUTE_NAME = 0x01010003
+ATTRIBUTE_MAX_SDK = 0x01010271
+# The permissions a file asks for are written beside it, each by its name. A name of the
+# platform's own, which begins with this, is written as what follows it with the dot kept in
+# front (".CAMERA"): most names are such, and a list has thousands of files. A permission
+# asked for only up to some version of Android has that version after an "@"
+# (".WRITE_EXTERNAL_STORAGE@28"). A name as it is written never begins with a dot and holds
+# no "@", see PERMISSION_NAME, so the two ways of writing cannot be taken for each other.
+PLATFORM_PERMISSION = "android.permission."
+PERMISSION_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.\-]*")
+MAX_PERMISSION_NAME = 200
+MAX_PERMISSIONS = 200
+# No device has a version of Android beyond this; a highest version beyond it limits nothing.
+MAX_SDK = 10000
+# The version of the reader of the permissions, written beside each list: a file an older
+# reader read is read again. Raise it whenever asked_permissions or permission_list changes
+# what is written.
+PERMISSIONS_READER = 1
 USER_AGENT = "ARK-Store-index"
 # An app's long description and phone screenshots are read from where the F-Droid tools take
 # them, fastlane/metadata/android/<locale>/, for each of these languages.
@@ -330,13 +349,14 @@ def inflate(data, limit):
 
 
 def read_manifest(url, size, labels=None, icons=None):
-    """Returns (package, versionCode, versionName, label, signer, minSdk) from the APK at
-    url, fetching only its zip directory, the compressed AndroidManifest.xml, its signing
-    block and, when the app's name is kept there, its resource table. label is None when the
-    APK does not tell it; signer is the SHA-256 of the certificate the APK is signed with, in
-    hex, or None when that cannot be told (see read_signer); minSdk is the lowest Android API
-    level the app runs on, or the codename of the preview of Android the manifest names
-    instead of a number.
+    """Returns (package, versionCode, versionName, label, signer, minSdk, permissions) from
+    the APK at url, fetching only its zip directory, the compressed AndroidManifest.xml, its
+    signing block and, when the app's name is kept there, its resource table. label is None
+    when the APK does not tell it; signer is the SHA-256 of the certificate the APK is signed
+    with, in hex, or None when that cannot be told (see read_signer); minSdk is the lowest
+    Android API level the app runs on, or the codename of the preview of Android the manifest
+    names instead of a number; permissions are the permissions the app asks for, as they are
+    written in the index (see asked_permissions).
 
     labels maps a package to the label already read from another APK of the same release.
     The files of one release differ in the CPU architecture they are built for, not in what
@@ -352,6 +372,7 @@ def read_manifest(url, size, labels=None, icons=None):
             raise ManifestError("manifest not found")
         manifest = read_entry(url, size, entries[MANIFEST_FILE], MAX_MANIFEST)
         package, version_code, version_name, label, icon, min_sdk = parse_manifest(manifest)
+        permissions = asked_permissions(manifest)
     except (struct.error, IndexError, ValueError, zlib.error, UnicodeDecodeError) as error:
         raise ManifestError(str(error)) from error
     table = None
@@ -370,7 +391,7 @@ def read_manifest(url, size, labels=None, icons=None):
     except (ManifestError, struct.error, IndexError) as error:
         print("  no signer from %s: %s" % (url.rsplit("/", 1)[-1], error), file=sys.stderr)
         signer = None
-    return package, version_code, version_name, tidy_label(label), signer, min_sdk
+    return package, version_code, version_name, tidy_label(label), signer, min_sdk, permissions
 
 
 def read_signer(url, size, directory_start):
@@ -654,6 +675,60 @@ def parse_manifest(data):
     if manifest is None:
         raise ManifestError("manifest element not found")
     return manifest + (application or (None, None)) + (min_sdk,)
+
+
+def asked_permissions(data):
+    """The permissions a binary AndroidManifest.xml asks for, as they are written in the
+    index (see permission_list), in the order the manifest names them. Read from the
+    uses-permission elements, and from those that ask from Android 6 on, which every device
+    the store runs on is; only as children of the manifest element, as Android reads them."""
+    asked = []
+    depth = 0
+    for element, attributes in elements(data, ends=True):
+        if attributes is None:
+            depth -= 1
+            continue
+        depth += 1
+        if depth != 2 or element not in ("uses-permission", "uses-permission-sdk-23"):
+            continue
+        name = None
+        highest = None
+        for resource, attribute, data_type, value, text in attributes:
+            if resource == ATTRIBUTE_NAME or (resource == 0 and attribute == "name"):
+                name = text if data_type == 0x03 else None
+            elif resource == ATTRIBUTE_MAX_SDK and data_type in (0x10, 0x11):
+                highest = value
+        if name is not None:
+            asked.append((name, highest))
+    return permission_list(asked)
+
+
+def permission_list(asked):
+    """The permissions asked, pairs of a name and the highest Android API level the
+    permission is asked for on, or None for no limit, as the index lists them: see
+    PLATFORM_PERMISSION. A name asked for more than once is listed once, where it first came,
+    with its widest reach. A name that is not written the way names are is left out, since
+    what a manifest says goes to every phone as it is, and of a file that asks for more than
+    MAX_PERMISSIONS only so many are kept."""
+    reach = {}
+    for name, highest in asked:
+        if not isinstance(name, str) or len(name) > MAX_PERMISSION_NAME or not PERMISSION_NAME.fullmatch(name):
+            continue
+        # Android takes 0 for no limit, and a limit no device comes to is none either.
+        if not isinstance(highest, int) or isinstance(highest, bool) or not 0 < highest <= MAX_SDK:
+            highest = None
+        if name not in reach:
+            if len(reach) == MAX_PERMISSIONS:
+                continue
+            reach[name] = highest
+        elif reach[name] is not None and (highest is None or highest > reach[name]):
+            reach[name] = highest
+    listed = []
+    for name, highest in reach.items():
+        if name.startswith(PLATFORM_PERMISSION) and len(name) > len(PLATFORM_PERMISSION):
+            name = name[len(PLATFORM_PERMISSION) - 1:]
+        listed.append(name if highest is None else "%s@%d" % (name, highest))
+    return listed
 
 
 def lowest_sdk(attributes):
@@ -1836,16 +1911,19 @@ def release_info(release, previous_apks, icons=None):
         known = previous_apks.get(asset["id"])
         if known and "label" in known and known.get("signerReader") == SIGNER_READER \
                 and known.get("sdkReader") == SDK_READER and (icons is None or "icon" in known) \
-                and (known.get("minSdk") is not None or "minSdkCodename" in known):
+                and (known.get("minSdk") is not None or "minSdkCodename" in known) \
+                and "permissions" in known and known.get("permissionsReader") == PERMISSIONS_READER:
             # The asset id changes whenever a file is replaced, so a known id means the same
             # contents. Its name and address can still change, so those are never reused.
             # An entry written before names, signers, icons or the lowest Android version
             # were read lacks them, and is read again, as is one whose signer or lowest
             # Android version an older reader named (see SIGNER_READER and SDK_READER). One
-            # written before codenames were kept has None for a codename, and is read again.
+            # written before codenames were kept has None for a codename, and is read again,
+            # as is one written before the permissions were read, or by an older reader of
+            # them (see PERMISSIONS_READER).
             lowest = known["minSdk"] if known.get("minSdkCodename") is None else known["minSdkCodename"]
             manifest = (known["packageName"], known["versionCode"], known["versionName"],
-                        known["label"], known["signer"], lowest)
+                        known["label"], known["signer"], lowest, known["permissions"])
             icon = known.get("icon")
             # A file of the release added since is read for its name and icon only when
             # this one does not tell them, just as if this one had been read now.
@@ -1881,6 +1959,11 @@ def release_info(release, previous_apks, icons=None):
             "minSdk": lowest if isinstance(lowest, int) else None,
             "minSdkCodename": lowest if isinstance(lowest, str) else None,
             "sdkReader": SDK_READER,
+            # The permissions the file asks for, see PLATFORM_PERMISSION for how they are
+            # written, and which reader read them. The app tells them before an install and
+            # names those an update would add.
+            "permissions": manifest[6] if len(manifest) > 6 else None,
+            "permissionsReader": PERMISSIONS_READER,
         }
         if icons is not None:
             # See IconStore.get; None for an app whose icon could not be kept.

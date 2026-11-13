@@ -61,7 +61,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "old.apk", "url": "https://example.invalid/old.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "permissions": [], "permissionsReader": 1,
         }}
         with mock.patch.object(build_index, "api", return_value=release("new.apk")), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -73,6 +73,56 @@ class BuildAppTest(unittest.TestCase):
         self.assertEqual((apk["packageName"], apk["versionCode"]), ("org.example", 4))
         self.assertEqual(apk["label"], "Example")
         self.assertEqual(apk["minSdk"], 21)
+
+    def test_permissions_are_written_beside_the_file_with_their_reader(self):
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 26, [".INTERNET", ".CAMERA@30"])):
+            app = build_index.build_app(REPO, {})
+        apk = app["apks"][0]
+        self.assertEqual(apk["permissions"], [".INTERNET", ".CAMERA@30"])
+        self.assertEqual(apk["permissionsReader"], build_index.PERMISSIONS_READER)
+
+    def test_apk_known_without_its_permissions_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 21, [".INTERNET"])) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["permissions"], [".INTERNET"])
+
+    def test_apk_known_with_its_permissions_keeps_them(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
+            "permissions": [".INTERNET"], "permissionsReader": build_index.PERMISSIONS_READER,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest") as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_not_called()
+        self.assertEqual(app["apks"][0]["permissions"], [".INTERNET"])
+        self.assertEqual(app["apks"][0]["permissionsReader"], build_index.PERMISSIONS_READER)
+
+    def test_apk_whose_permissions_an_older_reader_read_is_read_again(self):
+        previous = {7: {
+            "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
+            "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
+            "permissions": [".INTERNET"], "permissionsReader": build_index.PERMISSIONS_READER - 1,
+        }}
+        with mock.patch.object(build_index, "api", return_value=release()), \
+                mock.patch.object(build_index, "read_manifest",
+                                  return_value=("org.example", 4, "1.4", "Example", None, 21, [])) as reader:
+            app = build_index.build_app(REPO, previous)
+        reader.assert_called_once()
+        self.assertEqual(app["apks"][0]["permissions"], [])
 
     def test_apk_known_without_a_lowest_android_version_is_read_again(self):
         previous = {7: {
@@ -105,7 +155,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": None, "minSdkCodename": "Baklava", "sdkReader": 1,
+            "signer": None, "signerReader": 2, "minSdk": None, "minSdkCodename": "Baklava", "sdkReader": 1, "permissions": [], "permissionsReader": 1,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as reader:
@@ -157,7 +207,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": None,
-            "signer": "ab" * 32, "signerReader": 2, "minSdk": 21, "sdkReader": 1,
+            "signer": "ab" * 32, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "permissions": [], "permissionsReader": 1,
         }}
         with mock.patch.object(build_index, "api", return_value=release()), \
                 mock.patch.object(build_index, "read_manifest") as read_manifest:
@@ -220,7 +270,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "icon": "https://x/icons/org.example-abc.png",
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "permissions": [], "permissionsReader": 1, "icon": "https://x/icons/org.example-abc.png",
         }}
         releases = [dict(release()[0], assets=release()[0]["assets"] + [asset("app-arm64.apk", 8)])]
         icons = build_index.IconStore("unused", "https://x/icons")
@@ -235,7 +285,7 @@ class BuildAppTest(unittest.TestCase):
         previous = {7: {
             "id": 7, "name": "app.apk", "url": "https://example.invalid/app.apk", "size": 100,
             "packageName": "org.example", "versionCode": 4, "versionName": "1.4", "label": "Example",
-            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "icon": None,
+            "signer": None, "signerReader": 2, "minSdk": 21, "sdkReader": 1, "permissions": [], "permissionsReader": 1, "icon": None,
         }}
         icons = build_index.IconStore("unused", "https://x/icons")
         with mock.patch.object(build_index, "api", return_value=release()), \
@@ -592,6 +642,91 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(build_index.adaptive_layers(manifest(None)), {})
 
 
+def asking_manifest(asked, inside_application=()):
+    """A binary manifest of org.example, version 3, that asks for the permissions asked: each a
+    name, or (name, highest Android version), or (name, highest or None, True) for one asked
+    for from Android 6 on. Those of inside_application are written inside the application
+    element, where Android does not read them."""
+    strings = ["versionCode", "name", "maxSdkVersion", "package", "manifest", "application", "org.example",
+               "uses-permission", "uses-permission-sdk-23"]
+    resource_map = chunk(0x0180, b"", struct.pack("<3I", 0x0101021B, 0x01010003, 0x01010271))
+
+    def element(request):
+        if isinstance(request, tuple) and isinstance(request[0], str):
+            name, highest, newer = (request + (None, False))[:3]
+        else:
+            name, highest, newer = request, None, False
+        if isinstance(name, str):
+            strings.append(name)
+            attributes = [(1, 0x03, len(strings) - 1)]
+        else:
+            # A name that is no text: a number, or a reference to a resource.
+            attributes = [(1,) + name]
+        if highest is not None:
+            attributes.append((2, 0x10, highest))
+        tag = 8 if newer else 7
+        return manifest_element(tag, attributes) + end_element(tag)
+
+    body = manifest_element(4, [(0, 0x10, 3), (3, 0x03, 6)])
+    body += b"".join(element(request) for request in asked)
+    body += manifest_element(5, []) + b"".join(element(request) for request in inside_application) + end_element(5)
+    body += end_element(4)
+    return chunk(0x0003, b"", string_pool(strings) + resource_map + body)
+
+
+class PermissionsTest(unittest.TestCase):
+    def asked(self, *requests, **more):
+        return build_index.asked_permissions(asking_manifest(requests, **more))
+
+    def test_permissions_are_listed_in_the_order_they_are_asked_for(self):
+        self.assertEqual(
+            self.asked("android.permission.INTERNET", "android.permission.CAMERA", "com.example.permission.OWN"),
+            [".INTERNET", ".CAMERA", "com.example.permission.OWN"])
+
+    def test_platform_prefix_is_left_out_and_nothing_else(self):
+        # What follows the prefix can have dots of its own, and a name can merely begin like it.
+        self.assertEqual(
+            self.asked("android.permission.health.READ_STEPS", "android.permission", "android.permissions.X",
+                       "com.android.launcher.permission.INSTALL_SHORTCUT"),
+            [".health.READ_STEPS", "android.permission", "android.permissions.X",
+             "com.android.launcher.permission.INSTALL_SHORTCUT"])
+
+    def test_highest_android_version_asked_on_is_kept(self):
+        self.assertEqual(self.asked(("android.permission.WRITE_EXTERNAL_STORAGE", 28), "android.permission.INTERNET"),
+                         [".WRITE_EXTERNAL_STORAGE@28", ".INTERNET"])
+
+    def test_permission_asked_for_from_android_6_on_counts(self):
+        self.assertEqual(self.asked(("android.permission.CAMERA", None, True), ("android.permission.BLUETOOTH", 30, True)),
+                         [".CAMERA", ".BLUETOOTH@30"])
+
+    def test_permission_asked_for_twice_is_listed_once_with_its_widest_reach(self):
+        self.assertEqual(
+            self.asked(("android.permission.A", 28), "android.permission.B", "android.permission.A",
+                       ("android.permission.B", 30), ("android.permission.C", 28), ("android.permission.C", 32)),
+            [".A", ".B", ".C@32"])
+
+    def test_permission_inside_another_element_does_not_count(self):
+        self.assertEqual(self.asked("android.permission.INTERNET", inside_application=["android.permission.CAMERA"]),
+                         [".INTERNET"])
+
+    def test_manifest_that_asks_for_nothing_has_an_empty_list(self):
+        self.assertEqual(self.asked(), [])
+
+    def test_odd_names_are_left_out(self):
+        long_name = "a." + "b" * build_index.MAX_PERMISSION_NAME
+        self.assertEqual(
+            self.asked("", "no spaces.please", "android.permission.CAMERA\n", "quote\"d", "at@sign", long_name,
+                       (0x10, 7), (0x01, 0x7F010000), "ok.NAME_1"),
+            ["ok.NAME_1"])
+
+    def test_highest_version_that_is_no_version_is_taken_as_none(self):
+        self.assertEqual(self.asked(("android.permission.A", 0), ("android.permission.B", 1 << 20)), [".A", ".B"])
+
+    def test_only_so_many_are_kept(self):
+        names = ["org.example.P%d" % number for number in range(build_index.MAX_PERMISSIONS + 20)]
+        self.assertEqual(self.asked(*names), names[:build_index.MAX_PERMISSIONS])
+
+
 class ResourceStringTest(unittest.TestCase):
     STRINGS = ["Default", "English", "Suomi"]
 
@@ -716,7 +851,11 @@ class ReadManifestTest(unittest.TestCase):
 
     def test_label_is_looked_up_in_the_resource_table(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": self.TABLE}
-        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App", None, 1))
+        self.assertEqual(self.read(files), ("org.example", 3, None, "Example App", None, 1, []))
+
+    def test_permissions_are_read_with_the_rest(self):
+        files = {b"AndroidManifest.xml": asking_manifest(["android.permission.INTERNET", ("android.permission.CAMERA", 30)])}
+        self.assertEqual(self.read(files)[6], [".INTERNET", ".CAMERA@30"])
 
     def test_lowest_android_version_is_read_with_the_rest(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6), min_sdk=24)}
@@ -729,9 +868,9 @@ class ReadManifestTest(unittest.TestCase):
 
     def test_unreadable_resource_table_costs_only_the_label(self):
         files = {b"AndroidManifest.xml": manifest((0x01, 0x7F020000)), b"resources.arsc": b"junk" * 8}
-        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1, []))
         files.pop(b"resources.arsc")
-        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1))
+        self.assertEqual(self.read(files), ("org.example", 3, None, None, None, 1, []))
 
     def test_signer_is_the_certificate_of_the_signing_block(self):
         files = {b"AndroidManifest.xml": manifest((0x03, 6))}
@@ -794,7 +933,7 @@ class ReadManifestTest(unittest.TestCase):
 
         with mock.patch.object(build_index, "read_range", side_effect=read_range):
             result = build_index.read_manifest("https://example.invalid/a.apk", len(apk))
-        self.assertEqual(result, ("org.example", 3, None, None, None, 1))
+        self.assertEqual(result, ("org.example", 3, None, None, None, 1, []))
 
     def test_label_is_tidied(self):
         self.assertEqual(build_index.tidy_label("  Two\n words "), "Two words")

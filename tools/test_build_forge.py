@@ -390,7 +390,7 @@ class GitLabTest(unittest.TestCase):
             "id": build_forge.file_id(7, self.APK, 4321, "one"), "name": "app.apk", "url": self.APK,
             "size": 4321, "packageName": "org.example", "versionCode": 3, "versionName": "1.0",
             "label": "Example", "signer": None, "signerReader": 2, "minSdk": 21, "minSdkCodename": None,
-            "sdkReader": 1,
+            "sdkReader": 1, "permissions": None, "permissionsReader": 1,
         }])
 
     def test_file_name_comes_from_the_address_when_the_link_is_named_otherwise(self):
