@@ -41,6 +41,7 @@
     <string name="fail_install">Échec de l\'installation.</string>
     <string name="fail_save">Le fichier n\'a pas pu être enregistré dans le dossier des téléchargements.</string>
     <string name="fail_no_root">L\'accès root n\'a pas pu être obtenu, rien n\'a donc été installé.</string>
+    <string name="fail_downgrade">Android n\'a pas installé l\'ancienne version à la place de la plus récente. Désinstallez d\'abord l\'application, puis installez l\'ancienne version. Cette opération supprime les données de l\'application.</string>
 
     <string name="detail_latest">Dernière version</string>
     <string name="detail_installed">Version installée</string>
@@ -376,4 +377,16 @@
     <string name="restore_wrong_password">Ce n\'est pas le mot de passe avec lequel les données ont été chiffrées.</string>
     <string name="support_title">Soutenir ARK-Store</string>
     <string name="support_description">ARK-Store est gratuit et open source, et le restera toujours. S\'il rend votre téléphone plus agréable à utiliser, vous pouvez m\'offrir un café ou sponsoriser mon travail.</string>
+    <string name="older_title">Versions précédentes</string>
+    <string name="older_description">Jusqu\'à trois versions antérieures à la plus récente.</string>
+    <string name="action_show_older">Afficher les versions précédentes</string>
+    <string name="older_loading">Recherche des versions précédentes…</string>
+    <string name="older_none">Il n\'y a pas de version précédente pour cet appareil.</string>
+    <string name="older_failed">Les versions précédentes n\'ont pas pu être lues. Réessayez plus tard.</string>
+    <string name="older_confirm_title">Version %1$s</string>
+    <string name="older_confirm_root">Cette version sera installée. Si une version plus récente est actuellement installée, elle sera remplacée, et les données enregistrées par la version plus récente risquent de ne pas fonctionner avec l\'ancienne. La mise à jour vers la dernière version reste proposée, mais elle n\'est installée que si vous la demandez.</string>
+    <string name="older_confirm_download">Le fichier est enregistré dans le dossier des téléchargements. Ouvrez-le depuis ce dossier pour l\'installer.</string>
+    <string name="older_confirm_download_installed">Le fichier est enregistré dans le dossier des téléchargements. Si la version installée est plus récente, Android n\'installe pas celle-ci par-dessus : désinstallez d\'abord l\'application, puis ouvrez le fichier. La désinstallation supprime les données de l\'application.</string>
+    <string name="older_saved">La version %1$s est enregistrée dans le dossier des téléchargements. Ouvrez le fichier pour l\'installer.</string>
+    <string name="older_saved_uninstall">La version %1$s est enregistrée dans le dossier des téléchargements. Android ne l\'installe pas par-dessus une version plus récente : désinstallez d\'abord l\'application, puis ouvrez le fichier. La désinstallation supprime les données de l\'application.</string>
 </resources>

@@ -31,6 +31,8 @@ import org.jarsi.arkstore.data.GitHubToken
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
+import org.jarsi.arkstore.data.OlderVersion
+import org.jarsi.arkstore.data.OlderVersions
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.SourceStore
 import org.jarsi.arkstore.data.ShareLink
@@ -93,6 +95,7 @@ internal fun failureText(reason: FailReason, status: AppStatus): Int = when (rea
     FailReason.INSTALL -> R.string.fail_install
     FailReason.SAVE -> R.string.fail_save
     FailReason.NO_ROOT -> R.string.fail_no_root
+    FailReason.DOWNGRADE -> R.string.fail_downgrade
 }
 
 enum class LoadError { NETWORK, RATE_LIMIT, TOKEN }
@@ -102,6 +105,9 @@ enum class SourceError { INVALID, DUPLICATE, NOT_FOUND, NOT_OPEN, NETWORK, RATE_
 enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 
 enum class TransferError { NOT_A_BACKUP, FAILED }
+
+/** What the earlier versions read for [app] are kept under: the app at the version offered. */
+internal fun olderKey(app: StoreApp): String = "${app.fullName}@${app.tag}"
 
 /**
  * The file saved for this row's app for the user to install, when the row shows it: an update or
@@ -548,6 +554,35 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun install(app: StoreApp) = InstallManager.install(getApplication(), app)
+
+    private val _older = MutableStateFlow<Map<String, OlderUiState>>(emptyMap())
+
+    /**
+     * The earlier versions asked for, by [olderKey]: of an app as it is offered now. Once the
+     * lists offer a newer version, what was read no longer is what comes before it.
+     */
+    val older: StateFlow<Map<String, OlderUiState>> = _older.asStateFlow()
+
+    /** Reads the earlier versions of [app] from the place it comes from, unless that is under way. */
+    fun loadOlder(app: StoreApp) {
+        val key = olderKey(app)
+        if (_older.value[key] is OlderUiState.Loading) return
+        _older.update { it + (key to OlderUiState.Loading) }
+        viewModelScope.launch {
+            val read = try {
+                OlderUiState.Loaded(repository.olderVersions(app))
+            } catch (_: RateLimitedException) {
+                OlderUiState.Failed(LoadError.RATE_LIMIT)
+            } catch (_: IOException) {
+                OlderUiState.Failed(LoadError.NETWORK)
+            }
+            _older.update { it + (key to read) }
+        }
+    }
+
+    /** Installs the earlier [version] of [app], or saves its file for the user to install. */
+    fun installOlder(app: StoreApp, version: OlderVersion) =
+        InstallManager.installOlder(getApplication(), OlderVersions.asApp(app, version))
 
     fun installAll(apps: List<StoreApp>) = InstallManager.installAll(getApplication(), apps)
 

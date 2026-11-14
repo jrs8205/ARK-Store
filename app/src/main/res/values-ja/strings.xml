@@ -39,6 +39,7 @@
     <string name="fail_install">インストールに失敗しました。</string>
     <string name="fail_save">ファイルをダウンロード フォルダに保存できませんでした。</string>
     <string name="fail_no_root">Root 権限を取得できなかったため、何もインストールされませんでした。</string>
+    <string name="fail_downgrade">Android は、新しいバージョンを古いバージョンに置き換えませんでした。先にアプリをアンインストールしてから、古いバージョンをインストールしてください。この操作を行うと、アプリのデータは削除されます。</string>
 
     <string name="detail_latest">最新バージョン</string>
     <string name="detail_installed">インストール済み</string>
@@ -354,4 +355,16 @@
     <string name="restore_wrong_password">パスワードが、データの暗号化に使われたものと一致しません。</string>
     <string name="support_title">ARK-Store を支援</string>
     <string name="support_description">ARK-Store はいつでも無料のオープンソースで、これからもそれは変わりません。スマートフォンがより快適になったと感じていただけたら、コーヒーをごちそうしていただくか、開発をスポンサーとして支援していただけるとうれしいです。</string>
+    <string name="older_title">以前のバージョン</string>
+    <string name="older_description">最新版より前のバージョンを最大 3 つまで表示します。</string>
+    <string name="action_show_older">以前のバージョンを表示</string>
+    <string name="older_loading">以前のバージョンを検索しています…</string>
+    <string name="older_none">このデバイス向けの以前のバージョンはありません。</string>
+    <string name="older_failed">以前のバージョンを読み込めませんでした。しばらくしてからもう一度お試しください。</string>
+    <string name="older_confirm_title">バージョン %1$s</string>
+    <string name="older_confirm_root">このバージョンをインストールします。現在これより新しいバージョンがインストールされている場合は置き換えられ、新しいバージョンが保存したデータは古いバージョンでは動作しないことがあります。最新バージョンへの更新は引き続き表示されますが、操作したときにのみインストールされます。</string>
+    <string name="older_confirm_download">ファイルはダウンロード フォルダに保存されます。インストールするには、そこでファイルを開いてください。</string>
+    <string name="older_confirm_download_installed">ファイルはダウンロード フォルダに保存されます。インストール済みのバージョンのほうが新しい場合、Android はこのバージョンを上書きインストールしません。先にアプリをアンインストールしてから、ファイルを開いてください。アンインストールすると、アプリのデータは削除されます。</string>
+    <string name="older_saved">バージョン %1$s はダウンロード フォルダに保存されています。インストールするには、ファイルを開いてください。</string>
+    <string name="older_saved_uninstall">バージョン %1$s はダウンロード フォルダに保存されています。Android は、これより新しいバージョンには上書きインストールしません。先にアプリをアンインストールしてから、ファイルを開いてください。アンインストールすると、アプリのデータは削除されます。</string>
 </resources>

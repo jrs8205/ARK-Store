@@ -29,6 +29,7 @@ import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.HttpStatusException
 import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
+import org.jarsi.arkstore.data.KeptVersions
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
@@ -112,6 +113,16 @@ internal fun unaskedAllowed(
  */
 internal fun failureLasts(reason: FailReason?): Boolean =
     reason != FailReason.NO_ROOT && reason != FailReason.DOWNLOAD
+
+/**
+ * The updates among [found] the store may install unasked: of the apps it installed itself,
+ * [self] being its package, and not of one whose installed version is the one the user went
+ * back to, by [kept] (see [KeptVersions]). Such an update is announced like any other.
+ */
+internal fun unasked(found: List<Pair<StoreApp, InstalledVersion>>, self: String, kept: Map<String, Long>): List<StoreApp> =
+    found.filter { (app, installed) ->
+        installed.installer == self && !KeptVersions.keeps(kept, app.packageName, installed.versionCode)
+    }.map { it.first }
 
 /** The [updates] worth trying unasked: those whose version has not [failed] that way before. */
 internal fun toTry(updates: List<StoreApp>, failed: Set<String>): List<StoreApp> =
@@ -206,7 +217,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         val settings = AutoUpdate.read(context)
         val updates = found.map { it.first }
         val failed = stillFailed(preferences.getStringSet(PREF_FAILED, null).orEmpty(), updates).toMutableSet()
-        val owned = found.filter { (_, installed) -> installed.installer == context.packageName }.map { it.first }
+        val owned = unasked(found, context.packageName, KeptVersions.read(context))
         if (!asksRoot(settings, toTry(owned, failed), unmetered(context), charging(context))) return emptySet()
         // Asked once a run: the root app may ask the user the first time, and the answer holds
         // for the run. A refusal later on, in the middle of an install, ends the run, and the
@@ -228,6 +239,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             if (!allowed()) break
             // Or skipped this very update, or held its app back, since the list was made.
             if (UpdatePolicy.read(context).skips(app)) continue
+            // Or gone back to an earlier version of the app: the list knows the one before that.
+            if (app.packageName in KeptVersions.read(context) && !stillOwned(context, app)) continue
             // And they may do any of these during this one: a download that goes on regardless
             // is what the settings were there to prevent. An install already with the system
             // goes on. A download not done within its time is given up too, as nothing would
@@ -260,6 +273,12 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
         }
         preferences.edit { putStringSet(PREF_FAILED, failed) }
         return settled
+    }
+
+    /** Whether [app]'s update may still be installed unasked, as the apps stand installed now. */
+    private fun stillOwned(context: Context, app: StoreApp): Boolean {
+        val now = InstalledApps.updates(context, listOf(app))
+        return unasked(now, context.packageName, KeptVersions.read(context)).isNotEmpty()
     }
 
     private fun unmetered(context: Context): Boolean =

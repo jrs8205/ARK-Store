@@ -197,6 +197,31 @@ class InstallManagerTest {
     }
 
     @Test
+    fun anOlderVersionGoesToRootAsOneAndItsRefusalIsToldAsThat() = runBlocking {
+        val created = ArrayList<String>()
+        val message = "INSTALL_FAILED_VERSION_DOWNGRADE: Downgrade detected: Update version code 4 is older than current 5"
+        Root.transport = { command, stdin, _, _ ->
+            stdin?.invoke(java.io.ByteArrayOutputStream())
+            when {
+                command == "id" -> Root.Outcome.Ran(0, "uid=0(root) gid=0(root)", "")
+                command.startsWith("pm install-create") -> {
+                    created += command
+                    Root.Outcome.Ran(0, "Success: created install session [77]\n", "")
+                }
+                command.startsWith("pm install-commit") -> Root.Outcome.Ran(1, "Failure [$message]\n", "")
+                else -> Root.Outcome.Ran(0, "Success\n", "")
+            }
+        }
+        val result = InstallManager.handOver(
+            context, "owner/example", null, "org.example", listOf("base.apk" to aFile()), true, saveAs(4), downgrade = true
+        )
+        assertTrue(created.single().startsWith("pm install-create -r -d "))
+        assertEquals(InstallManager.HandOver.Failed(InstallState.Failed(FailReason.DOWNGRADE, message)), result)
+        // Nor is the file saved instead: the system has said why it would not take it.
+        assertEquals(emptyList<String>(), saves)
+    }
+
+    @Test
     fun rootSuccessSettlesInstalledAndFailureShowsTheMessage() = runBlocking {
         rootAnswering(Root.Outcome.Ran(0, "Success\n", ""))
         assertEquals(

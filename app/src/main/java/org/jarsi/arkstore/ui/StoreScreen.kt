@@ -161,6 +161,7 @@ import org.jarsi.arkstore.data.Bookmarks
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Categories
 import org.jarsi.arkstore.data.FollowedLink
+import org.jarsi.arkstore.data.OlderVersion
 import org.jarsi.arkstore.data.ShareLink
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.install.ApkFolder
@@ -179,6 +180,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val saved by viewModel.saved.collectAsStateWithLifecycle()
+    val olderVersions by viewModel.older.collectAsStateWithLifecycle()
     val root by viewModel.root.collectAsStateWithLifecycle()
     val rootLost by viewModel.rootLost.collectAsStateWithLifecycle()
     val direct = installsDirectly(root, rootLost)
@@ -640,7 +642,13 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     onSkipVersion = { viewModel.skipVersion(selected.app) },
                     onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
                     onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
-                    held = selected.app.packageName?.let { it in updatePolicy.held } == true
+                    held = selected.app.packageName?.let { it in updatePolicy.held } == true,
+                    older = olderVersions[olderKey(selected.app)],
+                    install = installs[selected.app.fullName],
+                    saved = saved[selected.app.fullName],
+                    onLoadOlder = { viewModel.loadOlder(selected.app) },
+                    onInstallOlder = { viewModel.installOlder(selected.app, it) },
+                    onOpenFolder = viewModel::openFolder
                 )
             }
         }
@@ -1213,7 +1221,14 @@ private fun DetailsSheet(
     onHoldUpdates: () -> Unit = {},
     onOfferUpdates: () -> Unit = {},
     /** Whether the app is held back from every update, as opposed to one version skipped. */
-    held: Boolean = false
+    held: Boolean = false,
+    /** The earlier versions of the app, when they were asked for; see [OlderVersionsSection]. */
+    older: OlderUiState? = null,
+    install: InstallState? = null,
+    saved: SavedApk? = null,
+    onLoadOlder: () -> Unit = {},
+    onInstallOlder: (OlderVersion) -> Unit = {},
+    onOpenFolder: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
@@ -1458,6 +1473,11 @@ private fun DetailsSheet(
             app.packageName != context.packageName
         ) {
             ReturnToStable(app.packageName)
+        }
+        // Only a repository has releases to go back through. Not for another app under this
+        // name, nor for the store itself, whose own data an older version might not read.
+        if (app.fromRepository && row.status != AppStatus.OTHER_APP && app.packageName != context.packageName) {
+            OlderVersionsSection(row, direct, older, install, saved, onLoadOlder, onInstallOlder, onOpenFolder)
         }
     }
 }
@@ -2176,7 +2196,7 @@ private fun compactNumber(value: Long): String =
     CompactDecimalFormat.getInstance(Locale.getDefault(), CompactDecimalFormat.CompactStyle.SHORT)
         .format(value)
 
-private fun formatDate(iso: String): String? = runCatching {
+internal fun formatDate(iso: String): String? = runCatching {
     DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)
         .withZone(ZoneId.systemDefault())
         .format(Instant.parse(iso))

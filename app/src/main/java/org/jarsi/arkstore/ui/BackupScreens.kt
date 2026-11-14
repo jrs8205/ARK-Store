@@ -885,6 +885,7 @@ private fun failureText(failure: InstallState.Failed): String {
             FailReason.SIGNATURE_MISMATCH -> R.string.fail_signature
             FailReason.DOWNLOAD, FailReason.INSTALL, FailReason.SAVE -> R.string.fail_install
             FailReason.NO_ROOT -> R.string.fail_no_root
+            FailReason.DOWNGRADE -> R.string.fail_downgrade
         }
     )
     val detail = failure.detail?.takeIf { failure.reason == FailReason.INSTALL && it.isNotBlank() }

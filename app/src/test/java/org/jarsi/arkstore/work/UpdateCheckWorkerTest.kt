@@ -7,6 +7,7 @@ import java.io.IOException
 import kotlinx.coroutines.runBlocking
 import org.jarsi.arkstore.FakePreferences
 import org.jarsi.arkstore.data.HttpStatusException
+import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.RateLimitedException
 import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.UpdatePolicy
@@ -89,6 +90,20 @@ class UpdateCheckWorkerTest {
         assertEquals(emptyList<StoreApp>(), wanted(listOf(first, second), policy))
         assertEquals(listOf(first), wanted(listOf(first, second), UpdatePolicy.NONE.hold("org.bob", true)))
         assertEquals(listOf(second), wanted(listOf(first, second), UpdatePolicy.NONE.skip(first)))
+    }
+
+    @Test
+    fun onlyTheStoresOwnInstallsAreUpdatedUnaskedAndNotAVersionTheUserWentBackTo() {
+        val self = "org.jarsi.arkstore"
+        val own = testApp("alice/app", packageName = "org.alice", versionCode = 5) to InstalledVersion(4, null, installer = self)
+        val others = testApp("bob/app", packageName = "org.bob", versionCode = 5) to
+            InstalledVersion(4, null, installer = "com.android.vending")
+        val back = testApp("carol/app", packageName = "org.carol", versionCode = 5) to InstalledVersion(3, null, installer = self)
+        val found = listOf(own, others, back)
+        assertEquals(listOf(own.first, back.first), unasked(found, self, emptyMap()))
+        assertEquals(listOf(own.first), unasked(found, self, mapOf("org.carol" to 3L)))
+        // Gone back to another version than the one installed now: updated like any other.
+        assertEquals(listOf(own.first, back.first), unasked(found, self, mapOf("org.carol" to 2L)))
     }
 
     @Test

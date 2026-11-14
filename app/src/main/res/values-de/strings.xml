@@ -40,6 +40,7 @@
     <string name="fail_install">Die Installation ist fehlgeschlagen.</string>
     <string name="fail_save">Die Datei konnte nicht im Download-Ordner gespeichert werden.</string>
     <string name="fail_no_root">Root war nicht verfügbar, daher wurde nichts installiert.</string>
+    <string name="fail_downgrade">Android hat die ältere Version nicht anstelle der neueren installiert. Deinstalliere die App zuerst und installiere dann die ältere Version. Dabei werden die Daten der App gelöscht.</string>
 
     <string name="detail_latest">Neueste Version</string>
     <string name="detail_installed">Installiert</string>
@@ -365,4 +366,16 @@
     <string name="restore_wrong_password">Das ist nicht das Passwort, mit dem die Daten verschlüsselt wurden.</string>
     <string name="support_title">ARK-Store unterstützen</string>
     <string name="support_description">ARK-Store ist immer kostenlos und Open Source, und das bleibt auch so. Wenn ARK-Store die Nutzung deines Smartphones angenehmer macht, kannst du mir einen Kaffee ausgeben oder meine Arbeit sponsern.</string>
+    <string name="older_title">Frühere Versionen</string>
+    <string name="older_description">Bis zu drei Versionen vor der neuesten.</string>
+    <string name="action_show_older">Frühere Versionen anzeigen</string>
+    <string name="older_loading">Frühere Versionen werden gesucht …</string>
+    <string name="older_none">Für dieses Gerät gibt es keine früheren Versionen.</string>
+    <string name="older_failed">Die früheren Versionen konnten nicht gelesen werden. Versuche es später erneut.</string>
+    <string name="older_confirm_title">Version %1$s</string>
+    <string name="older_confirm_root">Diese Version wird installiert. Ist gerade eine neuere installiert, wird sie ersetzt, und Daten, die die neuere Version gespeichert hat, funktionieren in der älteren möglicherweise nicht. Das Update auf die neueste Version wird weiter angeboten, aber nur installiert, wenn du es anforderst.</string>
+    <string name="older_confirm_download">Die Datei wird im Download-Ordner gespeichert. Öffne sie dort, um sie zu installieren.</string>
+    <string name="older_confirm_download_installed">Die Datei wird im Download-Ordner gespeichert. Ist die installierte Version neuer, installiert Android diese nicht darüber: Deinstalliere die App zuerst und öffne dann die Datei. Beim Deinstallieren werden die Daten der App gelöscht.</string>
+    <string name="older_saved">Version %1$s ist im Download-Ordner gespeichert. Öffne die Datei, um sie zu installieren.</string>
+    <string name="older_saved_uninstall">Version %1$s ist im Download-Ordner gespeichert. Android installiert sie nicht über eine neuere Version: Deinstalliere die App zuerst und öffne dann die Datei. Beim Deinstallieren werden die Daten der App gelöscht.</string>
 </resources>

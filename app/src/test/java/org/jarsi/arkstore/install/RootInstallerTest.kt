@@ -51,6 +51,15 @@ class RootInstallerTest {
     }
 
     @Test
+    fun anOlderVersionIsAskedForAsOne() = runBlocking {
+        answering { command ->
+            Root.Outcome.Ran(0, if (command.startsWith("pm install-create")) "Success: created install session [12]\n" else "Success\n", "")
+        }
+        RootInstaller.install("org.jarsi.arkstore", "org.example.app", listOf("base.apk" to apk()), downgrade = true)
+        assertEquals("pm install-create -r -d --user 0 -i org.jarsi.arkstore --pkg org.example.app -S 3", commands.first())
+    }
+
+    @Test
     fun aSuccessWithoutASessionIsNoInstall() = runBlocking {
         // Whatever pm says, nothing can be written to a session that is not known.
         answering { Root.Outcome.Ran(0, "Success\n", "") }

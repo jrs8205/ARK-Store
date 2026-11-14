@@ -42,6 +42,7 @@
     <string name="fail_install">Instalacja nie powiodła się.</string>
     <string name="fail_save">Nie udało się zapisać pliku w folderze pobranych plików.</string>
     <string name="fail_no_root">Nie udało się uzyskać uprawnień roota, więc nic nie zostało zainstalowane.</string>
+    <string name="fail_downgrade">Android nie zainstalował starszej wersji w miejsce nowszej. Najpierw odinstaluj aplikację, a potem zainstaluj starszą wersję. Spowoduje to usunięcie danych aplikacji.</string>
 
     <string name="detail_latest">Najnowsza wersja</string>
     <string name="detail_installed">Zainstalowana</string>
@@ -387,4 +388,16 @@
     <string name="restore_wrong_password">To nie jest hasło, którym zaszyfrowano dane.</string>
     <string name="support_title">Wesprzyj ARK-Store</string>
     <string name="support_description">ARK-Store jest zawsze bezpłatny i ma otwarty kod źródłowy, i tak już zostanie. Jeśli dzięki niemu korzystanie z telefonu jest przyjemniejsze, możesz postawić mi kawę lub sponsorować moją pracę.</string>
+    <string name="older_title">Wcześniejsze wersje</string>
+    <string name="older_description">Maksymalnie trzy wersje poprzedzające najnowszą.</string>
+    <string name="action_show_older">Pokaż wcześniejsze wersje</string>
+    <string name="older_loading">Wyszukiwanie wcześniejszych wersji…</string>
+    <string name="older_none">Nie ma wcześniejszych wersji dla tego urządzenia.</string>
+    <string name="older_failed">Nie udało się odczytać wcześniejszych wersji. Spróbuj ponownie później.</string>
+    <string name="older_confirm_title">Wersja %1$s</string>
+    <string name="older_confirm_root">Ta wersja zostanie zainstalowana. Jeśli obecnie zainstalowana jest nowsza wersja, zostanie zastąpiona, a dane zapisane przez nowszą wersję mogą nie działać w starszej. Aktualizacja do najnowszej wersji pozostaje dostępna, ale zostanie zainstalowana tylko na Twoje żądanie.</string>
+    <string name="older_confirm_download">Plik zostanie zapisany w folderze pobranych plików. Otwórz go tam, aby go zainstalować.</string>
+    <string name="older_confirm_download_installed">Plik zostanie zapisany w folderze pobranych plików. Jeśli zainstalowana wersja jest nowsza, Android nie zainstaluje na niej tej wersji: najpierw odinstaluj aplikację, a potem otwórz plik. Odinstalowanie usuwa dane aplikacji.</string>
+    <string name="older_saved">Wersja %1$s jest zapisana w folderze pobranych plików. Otwórz plik, aby ją zainstalować.</string>
+    <string name="older_saved_uninstall">Wersja %1$s jest zapisana w folderze pobranych plików. Android nie zainstaluje jej na nowszej wersji: najpierw odinstaluj aplikację, a potem otwórz plik. Odinstalowanie usuwa dane aplikacji.</string>
 </resources>

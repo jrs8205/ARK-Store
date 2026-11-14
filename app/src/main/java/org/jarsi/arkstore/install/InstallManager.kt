@@ -41,6 +41,7 @@ import org.jarsi.arkstore.data.CatalogRepository
 import org.jarsi.arkstore.data.CatalogRules
 import org.jarsi.arkstore.data.Http
 import org.jarsi.arkstore.data.InstalledApps
+import org.jarsi.arkstore.data.KeptVersions
 import org.jarsi.arkstore.data.StoreApp
 
 sealed interface InstallState {
@@ -58,7 +59,9 @@ enum class FailReason {
     /** The checked file could not be saved to the folder for the user to install. */
     SAVE,
     /** Root, the only way the store installs anything itself, could not be had. */
-    NO_ROOT
+    NO_ROOT,
+    /** The system would not put an older version in place of the newer one installed. */
+    DOWNGRADE
 }
 
 /** How an install that was waited for came out: installed, or the file [SAVED] for the user to install. */
@@ -166,6 +169,8 @@ internal fun isLocal(key: String): Boolean = key.startsWith(LOCAL_PREFIX)
  */
 object InstallManager {
     private const val TAG = "InstallManager"
+    /** What `pm` begins its refusal of an older version with. */
+    private const val VERSION_DOWNGRADE = "INSTALL_FAILED_VERSION_DOWNGRADE"
     private const val MAX_DOWNLOADS = 3
     /** Where the files saved for the user are written down, see [saved]. */
     private const val PREFS_SAVED = "saved_apks"
@@ -264,6 +269,16 @@ object InstallManager {
         begin(context, app, foreground, saveWithoutRoot = true) != null
 
     /**
+     * [install] of an earlier version of an app, which the user picked: [app] as
+     * [org.jarsi.arkstore.data.OlderVersions.asApp] makes it. Root is asked to put it in place
+     * of a newer version installed, and the version is noted as the one gone back to (see
+     * [KeptVersions]). What its file turns out to be says nothing of the version the lists
+     * offer: no conflict of keys is remembered or forgotten by it.
+     */
+    fun installOlder(context: Context, app: StoreApp): Boolean =
+        begin(context, app, foreground = true, saveWithoutRoot = true, older = true) != null
+
+    /**
      * [install], returning the attempt begun, or null when none was. [onBegun] is told its
      * number before it runs: what the caller is told is this attempt's, whatever becomes
      * of it, and not read afterwards from a map that may by then hold a later attempt.
@@ -274,6 +289,7 @@ object InstallManager {
         app: StoreApp,
         foreground: Boolean,
         saveWithoutRoot: Boolean,
+        older: Boolean = false,
         onBegun: (attempt: Int) -> Unit = {}
     ): InstallJob? {
         // A file of this attempt's own: the cleanup of an earlier attempt of the same app,
@@ -283,7 +299,7 @@ object InstallManager {
             "${attempts.incrementAndGet()}-${CatalogRules.downloadName(app.fullName)}"
         )
         return begin(context, app.fullName, foreground, target, onBegun) { appContext, install ->
-            downloadAndInstall(appContext, app, target, install, saveWithoutRoot)
+            downloadAndInstall(appContext, app, target, install, saveWithoutRoot, older)
         }
     }
 
@@ -492,7 +508,8 @@ object InstallManager {
         app: StoreApp,
         target: File,
         install: InstallJob,
-        saveWithoutRoot: Boolean
+        saveWithoutRoot: Boolean,
+        older: Boolean
     ) {
         val job = coroutineContext[Job]
         try {
@@ -531,7 +548,7 @@ object InstallManager {
         val versionCode = PackageInfoCompat.getLongVersionCode(archive)
         // Needed only when the manifest could not be read remotely. Storing it waits for a
         // refresh that is running, which an install should not have to do otherwise.
-        if (app.packageName == null) {
+        if (app.packageName == null && !older) {
             try {
                 CatalogRepository.get(appContext).rememberApkInfo(
                     app.fullName,
@@ -552,14 +569,15 @@ object InstallManager {
             }
         }
         if (!ApkCheck.signaturesMatch(appContext, archive)) {
-            InstalledApps.rememberConflict(appContext, app, archive.packageName)
+            // An earlier version signed otherwise says nothing of the one the lists offer.
+            if (!older) InstalledApps.rememberConflict(appContext, app, archive.packageName)
             fail(install, app.fullName, InstallState.Failed(FailReason.SIGNATURE_MISMATCH))
             // The app now counts as installed from elsewhere rather than as an update.
-            notifyInstalledChanged()
+            if (!older) notifyInstalledChanged()
             return
         }
         // The row stood as one of another key: it is looked at again, whatever becomes of the file.
-        if (InstalledApps.forgetConflict(appContext, app, archive.packageName)) notifyInstalledChanged()
+        if (!older && InstalledApps.forgetConflict(appContext, app, archive.packageName)) notifyInstalledChanged()
 
         // Installing the store itself through root ends this process, so it waits for every
         // other install to be done with, and for a backup or a restore under way, however
@@ -584,8 +602,11 @@ object InstallManager {
         } else {
             null
         }
-        val result = handOver(appContext, app.fullName, app, archive.packageName, listOf("base.apk" to target), rootWanted, saveAs)
-        settle(appContext, install, app.fullName, app, archive.packageName, result)
+        val result = handOver(
+            appContext, app.fullName, app, archive.packageName, listOf("base.apk" to target), rootWanted, saveAs,
+            downgrade = older
+        )
+        settle(appContext, install, app.fullName, app.takeIf { !older }, archive.packageName, result, versionCode.takeIf { older })
     }
 
     /** What a file saved for the user is saved as: its name, and what it is of. */
@@ -602,7 +623,8 @@ object InstallManager {
      * Installs the checked [files] of [packageName] through root when [rootWanted] and root is
      * given; otherwise saves the base file for the user to install, as [saveAs] says, or, with
      * no [saveAs], gives up without root. A file root refused is not saved instead: the system
-     * has said why it would not take it.
+     * has said why it would not take it. With [downgrade], root is asked to take the files
+     * even when they are of an older version than the one installed.
      */
     internal suspend fun handOver(
         context: Context,
@@ -611,9 +633,10 @@ object InstallManager {
         packageName: String,
         files: List<Pair<String, File>>,
         rootWanted: Boolean,
-        saveAs: SaveAs?
+        saveAs: SaveAs?,
+        downgrade: Boolean = false
     ): HandOver {
-        if (rootWanted) commitAsRoot(context, key, packageName, files)?.let { return it }
+        if (rootWanted) commitAsRoot(context, key, packageName, files, downgrade)?.let { return it }
         if (saveAs == null) return HandOver.Failed(InstallState.Failed(FailReason.NO_ROOT))
         val uri = try {
             val file = files.first().second
@@ -641,7 +664,8 @@ object InstallManager {
         context: Context,
         key: String,
         packageName: String,
-        files: List<Pair<String, File>>
+        files: List<Pair<String, File>>,
+        downgrade: Boolean
     ): HandOver? {
         if (Root.check() !is RootCheck.Granted) {
             Log.w(TAG, "Root was not given; $key is not installed through it")
@@ -649,7 +673,7 @@ object InstallManager {
             return null
         }
         setRootLost(context, false)
-        return when (val result = RootInstaller.install(context.packageName, packageName, files)) {
+        return when (val result = RootInstaller.install(context.packageName, packageName, files, downgrade)) {
             RootInstaller.Result.NoRoot -> {
                 Log.w(TAG, "Root was lost during the install of $key")
                 setRootLost(context, true)
@@ -659,19 +683,29 @@ object InstallManager {
                 PackageInstaller.STATUS_SUCCESS -> HandOver.Installed
                 PackageInstaller.STATUS_FAILURE_CONFLICT, PackageInstaller.STATUS_FAILURE_INCOMPATIBLE ->
                     HandOver.Failed(InstallState.Failed(conflictReason(result.message), result.message))
-                else -> HandOver.Failed(InstallState.Failed(FailReason.INSTALL, result.message))
+                else -> HandOver.Failed(
+                    InstallState.Failed(
+                        if (result.message?.startsWith(VERSION_DOWNGRADE) == true) FailReason.DOWNGRADE else FailReason.INSTALL,
+                        result.message
+                    )
+                )
             }
         }
     }
 
-    /** Settles the attempt [install] of [key] by what [result] came to, for the screen and for whoever waits for it. */
+    /**
+     * Settles the attempt [install] of [key] by what [result] came to, for the screen and for
+     * whoever waits for it. [keptAt] is the version installed when it is one the user went
+     * back to, noted as that before the rows are told of the install.
+     */
     private fun settle(
         context: Context,
         install: InstallJob,
         key: String,
         app: StoreApp?,
         packageName: String,
-        result: HandOver
+        result: HandOver,
+        keptAt: Long? = null
     ) {
         when (result) {
             is HandOver.Failed -> {
@@ -683,6 +717,7 @@ object InstallManager {
                 fail(install, key, result.state)
             }
             HandOver.Installed -> {
+                if (keptAt != null) KeptVersions.keep(context, packageName, keptAt)
                 setState(key, null)
                 outcomes.tryEmit(Settled(key, install.id, Outcome.INSTALLED))
                 notifyInstalledChanged()

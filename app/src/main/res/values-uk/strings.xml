@@ -42,6 +42,7 @@
     <string name="fail_install">Не вдалося встановити додаток.</string>
     <string name="fail_save">Не вдалося зберегти файл у папку завантажень.</string>
     <string name="fail_no_root">Не вдалося отримати root-права, тому нічого не встановлено.</string>
+    <string name="fail_downgrade">Android не встановив старішу версію замість новішої. Спершу видаліть додаток, а потім установіть старішу версію. При цьому дані додатка буде видалено.</string>
 
     <string name="detail_latest">Остання версія</string>
     <string name="detail_installed">Установлено</string>
@@ -387,4 +388,16 @@
     <string name="restore_wrong_password">Це не той пароль, яким було зашифровано дані.</string>
     <string name="support_title">Підтримати ARK-Store</string>
     <string name="support_description">ARK-Store — безкоштовний додаток із відкритим кодом, і таким він залишиться завжди. Якщо з ним вашим телефоном приємніше користуватися, можете пригостити мене кавою або спонсорувати мою роботу.</string>
+    <string name="older_title">Попередні версії</string>
+    <string name="older_description">До трьох версій, що передують найновішій.</string>
+    <string name="action_show_older">Показати попередні версії</string>
+    <string name="older_loading">Пошук попередніх версій…</string>
+    <string name="older_none">Для цього пристрою немає попередніх версій.</string>
+    <string name="older_failed">Не вдалося прочитати попередні версії. Спробуйте пізніше.</string>
+    <string name="older_confirm_title">Версія %1$s</string>
+    <string name="older_confirm_root">Буде встановлено цю версію. Якщо зараз установлено новішу версію, її буде замінено, а дані, збережені новішою версією, можуть не працювати у старішій. Оновлення до останньої версії й надалі пропонуватиметься, але встановиться лише на ваш запит.</string>
+    <string name="older_confirm_download">Файл зберігається в папку завантажень. Відкрийте його там, щоб установити.</string>
+    <string name="older_confirm_download_installed">Файл зберігається в папку завантажень. Якщо встановлена версія новіша, Android не встановить цю версію поверх неї: спершу видаліть додаток, а потім відкрийте файл. Під час видалення дані додатка буде видалено.</string>
+    <string name="older_saved">Версію %1$s збережено в папці завантажень. Відкрийте файл, щоб установити її.</string>
+    <string name="older_saved_uninstall">Версію %1$s збережено в папці завантажень. Android не встановить її поверх новішої версії: спершу видаліть додаток, а потім відкрийте файл. Під час видалення дані додатка буде видалено.</string>
 </resources>

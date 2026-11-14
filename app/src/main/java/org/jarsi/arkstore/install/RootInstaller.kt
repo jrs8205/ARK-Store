@@ -51,13 +51,18 @@ internal object PmOutput {
  * `current` would be the user in the foreground, which a work or a private profile is not.
  */
 internal object RootCommands {
-    /** A session for [packageName] alone: the system refuses files of any other package in it. */
-    fun createSession(installer: String, packageName: String, bytes: Long, userId: Int): String {
+    /**
+     * A session for [packageName] alone: the system refuses files of any other package in it.
+     * With [downgrade], one that may put an older version in place of a newer, which the
+     * system allows root from Android 10 on; an earlier Android refuses it all the same.
+     */
+    fun createSession(installer: String, packageName: String, bytes: Long, userId: Int, downgrade: Boolean = false): String {
         require(AppBackup.isPackageName(installer)) { "Not a package name" }
         require(AppBackup.isPackageName(packageName)) { "Not a package name" }
         require(bytes > 0) { "No size" }
         require(userId >= 0) { "Not a user" }
-        return "pm install-create -r --user $userId -i $installer --pkg $packageName -S $bytes"
+        val flags = if (downgrade) "-r -d" else "-r"
+        return "pm install-create $flags --user $userId -i $installer --pkg $packageName -S $bytes"
     }
 
     fun writeSplit(sessionId: Int, name: String, bytes: Long): String {
@@ -112,15 +117,17 @@ internal object RootInstaller {
     /**
      * Installs [files] of [packageName] as one session, the base file first, [installer]
      * named as the one who did. Any file that cannot be given whole fails the session, which
-     * is then abandoned.
+     * is then abandoned. With [downgrade], the files may be of an older version than the one
+     * installed, see [RootCommands.createSession].
      */
     suspend fun install(
         installer: String,
         packageName: String,
-        files: List<Pair<String, File>>
+        files: List<Pair<String, File>>,
+        downgrade: Boolean = false
     ): Result {
         val total = files.sumOf { it.second.length() }
-        val created = Root.run(RootCommands.createSession(installer, packageName, total, Root.userId), PM_TIMEOUT_MS)
+        val created = Root.run(RootCommands.createSession(installer, packageName, total, Root.userId, downgrade), PM_TIMEOUT_MS)
         if (created !is Root.Outcome.Ran) return Result.NoRoot
         val sessionId = PmOutput.sessionId(created.out) ?: return noSession(created)
         try {

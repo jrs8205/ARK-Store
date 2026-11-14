@@ -39,6 +39,7 @@
     <string name="fail_install">安装失败。</string>
     <string name="fail_save">无法将文件保存到下载文件夹。</string>
     <string name="fail_no_root">无法获取 Root 权限，因此未安装任何内容。</string>
+    <string name="fail_downgrade">Android 没有用较旧的版本替换较新的版本。请先卸载该应用，然后安装较旧的版本。这会删除该应用的数据。</string>
 
     <string name="detail_latest">最新版本</string>
     <string name="detail_installed">已安装版本</string>
@@ -354,4 +355,16 @@
     <string name="restore_wrong_password">此密码与加密数据时使用的密码不一致。</string>
     <string name="support_title">支持 ARK-Store</string>
     <string name="support_description">ARK-Store 始终免费且开源，今后也不会改变。如果它让您的手机用起来更顺手，欢迎请我喝杯咖啡，或赞助我的工作。</string>
+    <string name="older_title">早期版本</string>
+    <string name="older_description">最新版本之前的最多三个版本。</string>
+    <string name="action_show_older">显示早期版本</string>
+    <string name="older_loading">正在查找早期版本…</string>
+    <string name="older_none">没有适用于此设备的早期版本。</string>
+    <string name="older_failed">无法读取早期版本。请稍后重试。</string>
+    <string name="older_confirm_title">版本 %1$s</string>
+    <string name="older_confirm_root">将安装此版本。如果当前已安装较新的版本，它会被替换，而较新版本保存的数据可能无法在较旧版本中使用。最新版本的更新仍会提供，但只有在您要求时才会安装。</string>
+    <string name="older_confirm_download">文件会保存到下载文件夹。请在该文件夹中打开文件进行安装。</string>
+    <string name="older_confirm_download_installed">文件会保存到下载文件夹。如果已安装的版本较新，Android 不会将此版本覆盖安装在其上：请先卸载该应用，然后打开文件。卸载会删除该应用的数据。</string>
+    <string name="older_saved">版本 %1$s 已保存到下载文件夹。打开文件即可安装。</string>
+    <string name="older_saved_uninstall">版本 %1$s 已保存到下载文件夹。Android 不会将它覆盖安装在较新的版本上：请先卸载该应用，然后打开文件。卸载会删除该应用的数据。</string>
 </resources>

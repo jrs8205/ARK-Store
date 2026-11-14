@@ -40,6 +40,7 @@
     <string name="fail_install">De installatie is mislukt.</string>
     <string name="fail_save">Het bestand kon niet in de downloadmap worden opgeslagen.</string>
     <string name="fail_no_root">Root was niet beschikbaar, dus er is niets geïnstalleerd.</string>
+    <string name="fail_downgrade">Android heeft de oudere versie niet in plaats van de nieuwere geïnstalleerd. Verwijder de app eerst en installeer daarna de oudere versie. Daarbij worden de gegevens van de app verwijderd.</string>
 
     <string name="detail_latest">Nieuwste versie</string>
     <string name="detail_installed">Geïnstalleerd</string>
@@ -365,4 +366,16 @@
     <string name="restore_wrong_password">Dit is niet het wachtwoord waarmee de gegevens zijn versleuteld.</string>
     <string name="support_title">Steun ARK-Store</string>
     <string name="support_description">ARK-Store is altijd gratis en open source, en dat blijft ook zo. Maakt het je telefoon prettiger in gebruik, dan kun je me op een kopje koffie trakteren of mijn werk sponsoren.</string>
+    <string name="older_title">Eerdere versies</string>
+    <string name="older_description">Maximaal drie versies vóór de nieuwste.</string>
+    <string name="action_show_older">Eerdere versies tonen</string>
+    <string name="older_loading">Eerdere versies zoeken…</string>
+    <string name="older_none">Er zijn geen eerdere versies voor dit apparaat.</string>
+    <string name="older_failed">De eerdere versies konden niet worden gelezen. Probeer het later opnieuw.</string>
+    <string name="older_confirm_title">Versie %1$s</string>
+    <string name="older_confirm_root">Deze versie wordt geïnstalleerd. Als er nu een nieuwere versie is geïnstalleerd, wordt die vervangen, en gegevens die de nieuwere versie heeft opgeslagen werken mogelijk niet in de oudere. De update naar de nieuwste versie blijft beschikbaar, maar wordt alleen geïnstalleerd als je erom vraagt.</string>
+    <string name="older_confirm_download">Het bestand wordt opgeslagen in de downloadmap. Open het daar om het te installeren.</string>
+    <string name="older_confirm_download_installed">Het bestand wordt opgeslagen in de downloadmap. Als de geïnstalleerde versie nieuwer is, installeert Android deze er niet overheen: verwijder de app eerst en open daarna het bestand. Bij het verwijderen worden de gegevens van de app gewist.</string>
+    <string name="older_saved">Versie %1$s is opgeslagen in de downloadmap. Open het bestand om deze te installeren.</string>
+    <string name="older_saved_uninstall">Versie %1$s is opgeslagen in de downloadmap. Android installeert deze niet over een nieuwere versie heen: verwijder de app eerst en open daarna het bestand. Bij het verwijderen worden de gegevens van de app gewist.</string>
 </resources>

@@ -39,6 +39,7 @@
     <string name="fail_install">설치하지 못했습니다.</string>
     <string name="fail_save">파일을 다운로드 폴더에 저장하지 못했습니다.</string>
     <string name="fail_no_root">루트 권한을 얻지 못해 아무것도 설치하지 않았습니다.</string>
+    <string name="fail_downgrade">Android가 이전 버전을 최신 버전 대신 설치하지 않았습니다. 먼저 앱을 제거한 후 이전 버전을 설치하세요. 이렇게 하면 앱 데이터가 삭제됩니다.</string>
 
     <string name="detail_latest">최신 버전</string>
     <string name="detail_installed">설치된 버전</string>
@@ -354,4 +355,16 @@
     <string name="restore_wrong_password">데이터를 암호화할 때 사용한 비밀번호가 아닙니다.</string>
     <string name="support_title">ARK-Store 후원하기</string>
     <string name="support_description">ARK-Store는 언제나 무료 오픈 소스이며 앞으로도 변함없습니다. 휴대전화를 더 편하게 쓰는 데 도움이 되었다면 커피 한 잔을 사 주시거나 제 작업을 후원해 주세요.</string>
+    <string name="older_title">이전 버전</string>
+    <string name="older_description">최신 버전보다 앞선 버전을 최대 세 개까지 보여 줍니다.</string>
+    <string name="action_show_older">이전 버전 보기</string>
+    <string name="older_loading">이전 버전을 찾는 중…</string>
+    <string name="older_none">이 기기에 맞는 이전 버전이 없습니다.</string>
+    <string name="older_failed">이전 버전을 읽지 못했습니다. 나중에 다시 시도하세요.</string>
+    <string name="older_confirm_title">버전 %1$s</string>
+    <string name="older_confirm_root">이 버전을 설치합니다. 지금 더 최신 버전이 설치되어 있으면 이 버전으로 바뀌며, 최신 버전이 저장한 데이터가 이전 버전에서 작동하지 않을 수 있습니다. 최신 버전으로의 업데이트는 계속 표시되지만, 요청할 때만 설치됩니다.</string>
+    <string name="older_confirm_download">파일은 다운로드 폴더에 저장됩니다. 설치하려면 그곳에서 파일을 여세요.</string>
+    <string name="older_confirm_download_installed">파일은 다운로드 폴더에 저장됩니다. 설치된 버전이 더 최신이면 Android는 이 버전을 그 위에 설치하지 않습니다. 먼저 앱을 제거한 후 파일을 여세요. 제거하면 앱 데이터가 삭제됩니다.</string>
+    <string name="older_saved">%1$s 버전이 다운로드 폴더에 저장되어 있습니다. 설치하려면 파일을 여세요.</string>
+    <string name="older_saved_uninstall">%1$s 버전이 다운로드 폴더에 저장되어 있습니다. Android는 이 버전을 더 최신 버전 위에 설치하지 않습니다. 먼저 앱을 제거한 후 파일을 여세요. 제거하면 앱 데이터가 삭제됩니다.</string>
 </resources>

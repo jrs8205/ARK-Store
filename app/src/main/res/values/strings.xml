@@ -44,6 +44,7 @@
     <string name="fail_install">The installation failed.</string>
     <string name="fail_save">The file could not be saved to the downloads folder.</string>
     <string name="fail_no_root">Root access was unavailable, so nothing was installed.</string>
+    <string name="fail_downgrade">Android did not put the older version in place of the newer one. Uninstall the app first and then install the older version. This removes the app\'s data.</string>
 
     <string name="detail_latest">Latest version</string>
     <string name="detail_installed">Installed</string>
@@ -376,4 +377,16 @@
     <string name="restore_wrong_password">The password is not the one the data was encrypted with.</string>
     <string name="support_title">Support ARK-Store</string>
     <string name="support_description">ARK-Store is always free and open source, and it will stay that way. If it makes your phone nicer to use, you can buy me a coffee or sponsor my work.</string>
+    <string name="older_title">Earlier versions</string>
+    <string name="older_description">Up to three versions before the newest one.</string>
+    <string name="action_show_older">Show earlier versions</string>
+    <string name="older_loading">Looking for earlier versions…</string>
+    <string name="older_none">There are no earlier versions for this device.</string>
+    <string name="older_failed">The earlier versions could not be read. Try again later.</string>
+    <string name="older_confirm_title">Version %1$s</string>
+    <string name="older_confirm_root">This version is installed. If a newer one is installed now, it is replaced, and data saved by the newer version may not work in the older one. The update to the newest version stays on offer, but is installed only when you ask for it.</string>
+    <string name="older_confirm_download">The file is saved to the downloads folder. Open it there to install it.</string>
+    <string name="older_confirm_download_installed">The file is saved to the downloads folder. If the installed version is newer, Android does not install this one over it: uninstall the app first and then open the file. Uninstalling removes the app\'s data.</string>
+    <string name="older_saved">Version %1$s is saved in the downloads folder. Open the file to install it.</string>
+    <string name="older_saved_uninstall">Version %1$s is saved in the downloads folder. Android does not install it over a newer version: uninstall the app first and then open the file. Uninstalling removes the app\'s data.</string>
 </resources>

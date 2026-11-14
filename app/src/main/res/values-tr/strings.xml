@@ -40,6 +40,7 @@
     <string name="fail_install">Yükleme başarısız oldu.</string>
     <string name="fail_save">Dosya indirilenler klasörüne kaydedilemedi.</string>
     <string name="fail_no_root">Root izni alınamadı, bu yüzden hiçbir şey yüklenmedi.</string>
+    <string name="fail_downgrade">Android eski sürümü daha yeni sürümün yerine yüklemedi. Önce uygulamayı kaldırın, ardından eski sürümü yükleyin. Bu işlem uygulamanın verilerini siler.</string>
 
     <string name="detail_latest">En son sürüm</string>
     <string name="detail_installed">Yüklü</string>
@@ -365,4 +366,16 @@
     <string name="restore_wrong_password">Bu parola, verilerin şifrelendiği parola değil.</string>
     <string name="support_title">ARK-Store\'u destekleyin</string>
     <string name="support_description">ARK-Store her zaman ücretsiz ve açık kaynaklıdır, böyle de kalacak. Telefonunuzu kullanmayı daha keyifli hale getiriyorsa bana bir kahve ısmarlayabilir veya çalışmama sponsor olabilirsiniz.</string>
+    <string name="older_title">Önceki sürümler</string>
+    <string name="older_description">En yeni sürümden önceki en fazla üç sürüm.</string>
+    <string name="action_show_older">Önceki sürümleri göster</string>
+    <string name="older_loading">Önceki sürümler aranıyor…</string>
+    <string name="older_none">Bu cihaz için önceki sürüm yok.</string>
+    <string name="older_failed">Önceki sürümler okunamadı. Daha sonra tekrar deneyin.</string>
+    <string name="older_confirm_title">%1$s sürümü</string>
+    <string name="older_confirm_root">Bu sürüm yüklenecek. Şu anda daha yeni bir sürüm yüklüyse onun yerini alır ve daha yeni sürümün kaydettiği veriler eski sürümde çalışmayabilir. En yeni sürüme güncelleme sunulmaya devam eder, ancak yalnızca siz istediğinizde yüklenir.</string>
+    <string name="older_confirm_download">Dosya indirilenler klasörüne kaydedilir. Yüklemek için dosyayı oradan açın.</string>
+    <string name="older_confirm_download_installed">Dosya indirilenler klasörüne kaydedilir. Yüklü sürüm daha yeniyse Android bu sürümü onun üzerine yüklemez: önce uygulamayı kaldırın, ardından dosyayı açın. Kaldırma işlemi uygulamanın verilerini siler.</string>
+    <string name="older_saved">%1$s sürümü indirilenler klasörüne kaydedildi. Yüklemek için dosyayı açın.</string>
+    <string name="older_saved_uninstall">%1$s sürümü indirilenler klasörüne kaydedildi. Android bu sürümü daha yeni bir sürümün üzerine yüklemez: önce uygulamayı kaldırın, ardından dosyayı açın. Kaldırma işlemi uygulamanın verilerini siler.</string>
 </resources>

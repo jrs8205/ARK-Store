@@ -40,6 +40,7 @@
     <string name="fail_install">Asennus epäonnistui.</string>
     <string name="fail_save">Tiedostoa ei voitu tallentaa latauskansioon.</string>
     <string name="fail_no_root">Root-oikeutta ei saatu, joten mitään ei asennettu.</string>
+    <string name="fail_downgrade">Android ei asentanut vanhempaa versiota uudemman tilalle. Poista sovellus ensin ja asenna vanhempi versio sitten. Tämä poistaa sovelluksen tiedot.</string>
 
     <string name="detail_latest">Uusin versio</string>
     <string name="detail_installed">Asennettu</string>
@@ -365,4 +366,16 @@
     <string name="restore_wrong_password">Salasana ei ole se, jolla tiedot salattiin.</string>
     <string name="support_title">Tue ARK-Storea</string>
     <string name="support_description">ARK-Store on aina ilmainen ja avointa lähdekoodia, ja sellaisena se pysyy. Jos se tekee puhelimestasi mukavamman, voit tarjota minulle kahvin tai sponsoroida työtäni.</string>
+    <string name="older_title">Aiemmat versiot</string>
+    <string name="older_description">Enintään kolme uusinta edeltävää versiota.</string>
+    <string name="action_show_older">Näytä aiemmat versiot</string>
+    <string name="older_loading">Etsitään aiempia versioita…</string>
+    <string name="older_none">Tälle laitteelle ei ole aiempia versioita.</string>
+    <string name="older_failed">Aiempia versioita ei voitu lukea. Yritä myöhemmin uudelleen.</string>
+    <string name="older_confirm_title">Versio %1$s</string>
+    <string name="older_confirm_root">Tämä versio asennetaan. Jos asennettuna on nyt uudempi versio, se korvataan, eivätkä uudemman version tallentamat tiedot välttämättä toimi vanhemmassa. Päivitys uusimpaan versioon pysyy tarjolla, mutta se asennetaan vain, kun pyydät sitä.</string>
+    <string name="older_confirm_download">Tiedosto tallennetaan latauskansioon. Asenna se avaamalla tiedosto sieltä.</string>
+    <string name="older_confirm_download_installed">Tiedosto tallennetaan latauskansioon. Jos asennettu versio on uudempi, Android ei asenna tätä sen päälle: poista sovellus ensin ja avaa tiedosto sitten. Poistaminen poistaa sovelluksen tiedot.</string>
+    <string name="older_saved">Versio %1$s on tallennettu latauskansioon. Asenna se avaamalla tiedosto.</string>
+    <string name="older_saved_uninstall">Versio %1$s on tallennettu latauskansioon. Android ei asenna sitä uudemman version päälle: poista sovellus ensin ja avaa tiedosto sitten. Poistaminen poistaa sovelluksen tiedot.</string>
 </resources>

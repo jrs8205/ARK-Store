@@ -44,6 +44,7 @@
     <string name="fail_install">تعذّر التثبيت.</string>
     <string name="fail_save">تعذّر حفظ الملف في مجلد التنزيلات.</string>
     <string name="fail_no_root">تعذّر الحصول على صلاحيات الروت، لذا لم يُثبَّت شيء.</string>
+    <string name="fail_downgrade">لم يثبّت Android الإصدار الأقدم بدلًا من الإصدار الأحدث. ألغِ تثبيت التطبيق أولًا ثم ثبّت الإصدار الأقدم. سيؤدي ذلك إلى حذف بيانات التطبيق.</string>
 
     <string name="detail_latest">أحدث إصدار</string>
     <string name="detail_installed">الإصدار المثبّت</string>
@@ -409,4 +410,16 @@
     <string name="restore_wrong_password">ليست هذه كلمة المرور التي شُفِّرت بها البيانات.</string>
     <string name="support_title">ادعم ARK-Store</string>
     <string name="support_description">إن ARK-Store مجاني ومفتوح المصدر دائمًا، وسيبقى كذلك. إذا جعل استخدام هاتفك أكثر راحة، فيمكنك أن تدعوني إلى فنجان قهوة أو أن ترعى عملي.</string>
+    <string name="older_title">الإصدارات السابقة</string>
+    <string name="older_description">حتى ثلاثة إصدارات تسبق أحدث إصدار.</string>
+    <string name="action_show_older">عرض الإصدارات السابقة</string>
+    <string name="older_loading">جارٍ البحث عن الإصدارات السابقة…</string>
+    <string name="older_none">لا توجد إصدارات سابقة لهذا الجهاز.</string>
+    <string name="older_failed">تعذّرت قراءة الإصدارات السابقة. حاول مرة أخرى لاحقًا.</string>
+    <string name="older_confirm_title">الإصدار %1$s</string>
+    <string name="older_confirm_root">سيُثبَّت هذا الإصدار. إذا كان هناك إصدار أحدث مثبّت الآن فسيُستبدل، وقد لا تعمل البيانات التي حفظها الإصدار الأحدث في الإصدار الأقدم. سيبقى التحديث إلى أحدث إصدار معروضًا، لكنه لن يُثبَّت إلا عندما تطلبه.</string>
+    <string name="older_confirm_download">يُحفظ الملف في مجلد التنزيلات. افتحه من هناك لتثبيته.</string>
+    <string name="older_confirm_download_installed">يُحفظ الملف في مجلد التنزيلات. إذا كان الإصدار المثبّت أحدث، فلن يثبّت Android هذا الإصدار فوقه: ألغِ تثبيت التطبيق أولًا ثم افتح الملف. إلغاء التثبيت يحذف بيانات التطبيق.</string>
+    <string name="older_saved">الإصدار %1$s محفوظ في مجلد التنزيلات. افتح الملف لتثبيته.</string>
+    <string name="older_saved_uninstall">الإصدار %1$s محفوظ في مجلد التنزيلات. لا يثبّته Android فوق إصدار أحدث: ألغِ تثبيت التطبيق أولًا ثم افتح الملف. إلغاء التثبيت يحذف بيانات التطبيق.</string>
 </resources>

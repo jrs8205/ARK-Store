@@ -41,6 +41,7 @@
     <string name="fail_install">Falha na instalação.</string>
     <string name="fail_save">Não foi possível salvar o arquivo na pasta de downloads.</string>
     <string name="fail_no_root">Não foi possível obter root, então nada foi instalado.</string>
+    <string name="fail_downgrade">O Android não instalou a versão anterior no lugar da mais recente. Desinstale o app primeiro e depois instale a versão anterior. Isso apaga os dados do app.</string>
 
     <string name="detail_latest">Versão mais recente</string>
     <string name="detail_installed">Versão instalada</string>
@@ -376,4 +377,16 @@
     <string name="restore_wrong_password">Esta não é a senha usada para criptografar os dados.</string>
     <string name="support_title">Apoie a ARK-Store</string>
     <string name="support_description">A ARK-Store é sempre gratuita e de código aberto, e vai continuar assim. Se ela deixa o seu celular mais agradável de usar, você pode me pagar um café ou patrocinar o meu trabalho.</string>
+    <string name="older_title">Versões anteriores</string>
+    <string name="older_description">Até três versões anteriores à mais recente.</string>
+    <string name="action_show_older">Mostrar versões anteriores</string>
+    <string name="older_loading">Procurando versões anteriores…</string>
+    <string name="older_none">Não há versões anteriores para este dispositivo.</string>
+    <string name="older_failed">Não foi possível ler as versões anteriores. Tente novamente mais tarde.</string>
+    <string name="older_confirm_title">Versão %1$s</string>
+    <string name="older_confirm_root">Esta versão será instalada. Se houver uma versão mais recente instalada agora, ela será substituída, e os dados salvos pela versão mais recente podem não funcionar na anterior. A atualização para a versão mais recente continua sendo oferecida, mas só é instalada quando você pedir.</string>
+    <string name="older_confirm_download">O arquivo é salvo na pasta de downloads. Abra o arquivo nessa pasta para instalar.</string>
+    <string name="older_confirm_download_installed">O arquivo é salvo na pasta de downloads. Se a versão instalada for mais recente, o Android não instala esta por cima dela: desinstale o app primeiro e depois abra o arquivo. A desinstalação apaga os dados do app.</string>
+    <string name="older_saved">A versão %1$s está salva na pasta de downloads. Abra o arquivo para instalar.</string>
+    <string name="older_saved_uninstall">A versão %1$s está salva na pasta de downloads. O Android não a instala por cima de uma versão mais recente: desinstale o app primeiro e depois abra o arquivo. A desinstalação apaga os dados do app.</string>
 </resources>
