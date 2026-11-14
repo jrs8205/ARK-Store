@@ -128,6 +128,20 @@ java {
     }
 }
 
+// Some tests read files as they are on disk: SiteTest the front page of the site, ManifestTest
+// the manifest and the two files of backup rules. Named as inputs, a change to one of them
+// alone runs the tests again rather than passing on the result of an earlier run.
+tasks.withType<Test>().configureEach {
+    inputs.files(
+        rootProject.file("docs/index.html"),
+        "src/main/AndroidManifest.xml",
+        "src/main/res/xml/backup_rules.xml",
+        "src/main/res/xml/data_extraction_rules.xml"
+    )
+        .withPropertyName("filesTheTestsRead")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+}
+
 dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
