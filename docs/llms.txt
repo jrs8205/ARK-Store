@@ -8,6 +8,8 @@ Facts worth knowing:
 - A developer publishes an app by adding the topic `arkstore` to a public repository that has an open-source licence and a release with an APK attached. There is no account, submission form, review queue or fee, and nobody reviews the apps.
 - The store downloads and checks each file and saves it in Download/ARK-Store for the user to install from the Files app. On a rooted device it installs and updates by itself. It does not ask Android for the right to install apps.
 - The details of an app tell its source, licence, version, size, the Android version it needs and the permissions it asks for.
+- An app is shared as a link, `https://arkstore.jrs8205.com/app/?id=owner/repo`. On a phone with ARK-Store the link opens the app's page in the store; anywhere else it opens a page that tells where the app and the store are found.
+- The details offer up to three versions before the newest one, for apps from GitHub, Codeberg and GitLab. With root the chosen version is installed; without root its file is saved for the user to install.
 - The list of apps comes from the store's own index, rebuilt about every half hour. A fresh install asks GitHub for nothing.
 
 ## Documentation

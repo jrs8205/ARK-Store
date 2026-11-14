@@ -123,6 +123,11 @@ following a developer who has not added it.
 - **Share** in the details gives out a link to the app. On a phone with ARK-Store the link
   opens the app's page in the store; anywhere else it opens a page that tells where the app
   and the store are found.
+- **Earlier versions** in the details: up to three versions before the newest one, for apps
+  from GitHub, Codeberg and GitLab. With root on, the one you choose is installed; without
+  root its file is saved for you to install, after uninstalling the app if the installed
+  version is newer. The update to the newest version stays on offer, and with root on the
+  background check leaves it for you to install.
 - Stars and download counts from GitHub.
 - Screenshots and a longer description in the details, when the developer publishes them,
   whether on GitHub, Codeberg or GitLab, in the catalogues or in a source added on the device.
