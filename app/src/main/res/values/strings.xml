@@ -19,6 +19,9 @@
     <string name="action_retry">Try again</string>
     <string name="action_dismiss">Dismiss</string>
     <string name="action_view_source">View on GitHub</string>
+    <string name="action_view_codeberg">View on Codeberg</string>
+    <string name="action_view_gitlab">View on GitLab</string>
+    <string name="action_view_page">View project page</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d update available</item>

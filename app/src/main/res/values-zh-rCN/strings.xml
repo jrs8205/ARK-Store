@@ -17,6 +17,9 @@
     <string name="action_retry">重试</string>
     <string name="action_dismiss">关闭</string>
     <string name="action_view_source">在 GitHub 上查看</string>
+    <string name="action_view_codeberg">在 Codeberg 上查看</string>
+    <string name="action_view_gitlab">在 GitLab 上查看</string>
+    <string name="action_view_page">查看项目页面</string>
 
     <plurals name="section_updates">
         <item quantity="other">%d 个可用更新</item>

@@ -17,6 +17,9 @@
     <string name="action_retry">Повторити</string>
     <string name="action_dismiss">Закрити</string>
     <string name="action_view_source">Переглянути на GitHub</string>
+    <string name="action_view_codeberg">Переглянути на Codeberg</string>
+    <string name="action_view_gitlab">Переглянути на GitLab</string>
+    <string name="action_view_page">Переглянути сторінку проєкту</string>
 
     <plurals name="section_updates">
         <item quantity="one">Доступне %d оновлення</item>

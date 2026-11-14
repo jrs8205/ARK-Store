@@ -17,6 +17,9 @@
     <string name="action_retry">再試行</string>
     <string name="action_dismiss">閉じる</string>
     <string name="action_view_source">GitHub で表示</string>
+    <string name="action_view_codeberg">Codeberg で表示</string>
+    <string name="action_view_gitlab">GitLab で表示</string>
+    <string name="action_view_page">プロジェクトのページを表示</string>
 
     <plurals name="section_updates">
         <item quantity="other">%d 件の更新があります</item>

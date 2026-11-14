@@ -333,6 +333,17 @@ internal object CatalogRules {
         return "$host/" + segments.take(depth).joinToString("/").removeSuffix(".git")
     }
 
+    /**
+     * The place the page of [app] is on, the one its details open: GitHub, Codeberg or GitLab,
+     * by the names of the sources, or null when the page is somewhere else. A catalogue entry
+     * names its page itself, which can be a repository on any of the three, another site
+     * altogether, or the catalogue's own page of the app.
+     */
+    fun pagePlace(app: StoreApp): String? {
+        val host = project(app)?.substringBefore('/') ?: return null
+        return HOSTS.entries.firstOrNull { it.value == host }?.key
+    }
+
     /** The places apps are offered from, in the order their chips are shown. */
     val PLACES = listOf(
         StoreApp.SOURCE_GITHUB, StoreApp.SOURCE_CODEBERG, StoreApp.SOURCE_GITLAB,

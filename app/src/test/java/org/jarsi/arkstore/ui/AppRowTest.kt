@@ -3,6 +3,7 @@ package org.jarsi.arkstore.ui
 import org.jarsi.arkstore.R
 import org.jarsi.arkstore.data.AppStatus
 import org.jarsi.arkstore.data.InstalledVersion
+import org.jarsi.arkstore.data.StoreApp
 import org.jarsi.arkstore.data.testApp
 import org.jarsi.arkstore.install.FailReason
 import org.jarsi.arkstore.install.SavedApk
@@ -22,6 +23,22 @@ class AppRowTest {
         status = AppStatus.UP_TO_DATE,
         betaVersion = betaVersion
     )
+
+    @Test
+    fun theButtonOfAnAppsPageNamesThePlaceThePageIsOn() {
+        assertEquals(R.string.action_view_source, viewPageText(stable))
+        val codeberg = testApp("codeberg:owner/app").copy(source = StoreApp.SOURCE_CODEBERG)
+        assertEquals(R.string.action_view_codeberg, viewPageText(codeberg))
+        val gitlab = testApp("gitlab:group/app").copy(source = StoreApp.SOURCE_GITLAB)
+        assertEquals(R.string.action_view_gitlab, viewPageText(gitlab))
+        // A catalogue's entry opens the page it names: a repository on one of the places, or
+        // a page the button has no name for.
+        val entry = testApp("fdroid:org.example").copy(source = StoreApp.SOURCE_FDROID)
+        assertEquals(R.string.action_view_source, viewPageText(entry.copy(repoUrl = "https://github.com/owner/app")))
+        assertEquals(R.string.action_view_gitlab, viewPageText(entry.copy(repoUrl = "https://gitlab.com/owner/app")))
+        assertEquals(R.string.action_view_page, viewPageText(entry.copy(repoUrl = "https://example.org/app")))
+        assertEquals(R.string.action_view_page, viewPageText(entry.copy(repoUrl = "https://f-droid.org/packages/org.example")))
+    }
 
     @Test
     fun installedPrereleaseIsABeta() {

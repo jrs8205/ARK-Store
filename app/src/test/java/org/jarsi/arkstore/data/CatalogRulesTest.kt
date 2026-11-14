@@ -434,6 +434,23 @@ class CatalogRulesTest {
         assertNull(named("https://apt.izzysoft.de/fdroid/index/apk/org.example"))
     }
 
+    @Test
+    fun thePlaceOfAnAppsPageIsTheOneItsAddressIsOn() {
+        assertEquals(StoreApp.SOURCE_GITHUB, CatalogRules.pagePlace(app(fullName = "Owner/App")))
+        assertEquals(StoreApp.SOURCE_CODEBERG, CatalogRules.pagePlace(codeberg(1)))
+        val project = app(fullName = "gitlab:group/sub/app").copy(source = StoreApp.SOURCE_GITLAB)
+        assertEquals(StoreApp.SOURCE_GITLAB, CatalogRules.pagePlace(project))
+        // A catalogue names the page of its entry itself: wherever that is.
+        val izzy = catalogue(StoreApp.SOURCE_IZZY, "dev")
+        fun named(url: String) = CatalogRules.pagePlace(izzy.copy(repoUrl = url))
+        assertEquals(StoreApp.SOURCE_GITHUB, named("https://github.com/RikkaApps/Shizuku"))
+        assertEquals(StoreApp.SOURCE_CODEBERG, named("https://codeberg.org/owner/app"))
+        assertEquals(StoreApp.SOURCE_GITLAB, named("https://gitlab.com/group/sub/app/-/releases"))
+        assertNull(named("https://example.org/app"))
+        assertNull(named("https://git.sr.ht/~owner/app"))
+        assertNull(named("https://apt.izzysoft.de/fdroid/index/apk/org.example"))
+    }
+
     private fun codeberg(versionCode: Long, auto: Boolean = true) =
         app(fullName = "codeberg:owner/app", versionCode = versionCode, auto = auto)
             .copy(source = StoreApp.SOURCE_CODEBERG)

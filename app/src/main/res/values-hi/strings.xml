@@ -17,6 +17,9 @@
     <string name="action_retry">फिर से कोशिश करें</string>
     <string name="action_dismiss">बंद करें</string>
     <string name="action_view_source">GitHub पर देखें</string>
+    <string name="action_view_codeberg">Codeberg पर देखें</string>
+    <string name="action_view_gitlab">GitLab पर देखें</string>
+    <string name="action_view_page">प्रोजेक्ट का पेज देखें</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d अपडेट उपलब्ध है</item>

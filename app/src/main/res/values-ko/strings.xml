@@ -17,6 +17,9 @@
     <string name="action_retry">다시 시도</string>
     <string name="action_dismiss">닫기</string>
     <string name="action_view_source">GitHub에서 보기</string>
+    <string name="action_view_codeberg">Codeberg에서 보기</string>
+    <string name="action_view_gitlab">GitLab에서 보기</string>
+    <string name="action_view_page">프로젝트 페이지 보기</string>
 
     <plurals name="section_updates">
         <item quantity="other">업데이트 가능한 앱 %d개</item>

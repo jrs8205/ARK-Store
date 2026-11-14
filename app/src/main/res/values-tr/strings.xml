@@ -17,6 +17,9 @@
     <string name="action_retry">Tekrar dene</string>
     <string name="action_dismiss">Kapat</string>
     <string name="action_view_source">GitHub\'da görüntüle</string>
+    <string name="action_view_codeberg">Codeberg\'de görüntüle</string>
+    <string name="action_view_gitlab">GitLab\'da görüntüle</string>
+    <string name="action_view_page">Proje sayfasını görüntüle</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d güncelleme mevcut</item>

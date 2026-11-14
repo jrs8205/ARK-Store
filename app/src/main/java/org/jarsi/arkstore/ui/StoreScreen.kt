@@ -1352,7 +1352,7 @@ private fun DetailsSheet(
             modifier = Modifier.padding(top = 16.dp)
         ) {
             StoreOutlinedButton(onClick = { openUrl(context, app.repoUrl) }) {
-                Text(stringResource(R.string.action_view_source))
+                Text(stringResource(viewPageText(app)))
             }
             TextButton(
                 onClick = {
@@ -2118,6 +2118,18 @@ private fun origin(app: StoreApp): String = when {
     !app.fromRepository -> app.developer.ifBlank { app.packageName.orEmpty() }
     app.title.equals(app.repo, ignoreCase = true) -> app.owner
     else -> app.repoPath
+}
+
+/**
+ * What the button that opens the page of [app] says: the place the page is on, by name, when
+ * it is one of the three the store knows ([CatalogRules.pagePlace]); otherwise only that it
+ * is the project's page, as the button cannot name a place it does not know.
+ */
+internal fun viewPageText(app: StoreApp): Int = when (CatalogRules.pagePlace(app)) {
+    StoreApp.SOURCE_GITHUB -> R.string.action_view_source
+    StoreApp.SOURCE_CODEBERG -> R.string.action_view_codeberg
+    StoreApp.SOURCE_GITLAB -> R.string.action_view_gitlab
+    else -> R.string.action_view_page
 }
 
 /** The name of the place an app is offered from. */

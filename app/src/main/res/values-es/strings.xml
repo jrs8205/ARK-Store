@@ -17,6 +17,9 @@
     <string name="action_retry">Reintentar</string>
     <string name="action_dismiss">Cerrar</string>
     <string name="action_view_source">Ver en GitHub</string>
+    <string name="action_view_codeberg">Ver en Codeberg</string>
+    <string name="action_view_gitlab">Ver en GitLab</string>
+    <string name="action_view_page">Ver la página del proyecto</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d actualización disponible</item>

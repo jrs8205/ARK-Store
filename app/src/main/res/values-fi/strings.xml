@@ -17,6 +17,9 @@
     <string name="action_retry">Yritä uudelleen</string>
     <string name="action_dismiss">Sulje</string>
     <string name="action_view_source">Näytä GitHubissa</string>
+    <string name="action_view_codeberg">Näytä Codebergissä</string>
+    <string name="action_view_gitlab">Näytä GitLabissa</string>
+    <string name="action_view_page">Näytä projektin sivu</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d päivitys saatavilla</item>

@@ -17,6 +17,9 @@
     <string name="action_retry">Opnieuw proberen</string>
     <string name="action_dismiss">Sluiten</string>
     <string name="action_view_source">Bekijken op GitHub</string>
+    <string name="action_view_codeberg">Bekijken op Codeberg</string>
+    <string name="action_view_gitlab">Bekijken op GitLab</string>
+    <string name="action_view_page">Projectpagina bekijken</string>
 
     <plurals name="section_updates">
         <item quantity="one">%d update beschikbaar</item>
