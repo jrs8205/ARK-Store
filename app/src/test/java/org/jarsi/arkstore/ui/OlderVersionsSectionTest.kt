@@ -1,5 +1,6 @@
 package org.jarsi.arkstore.ui
 
+import kotlinx.coroutines.CancellationException
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.OlderVersion
 import org.jarsi.arkstore.data.testApp
@@ -8,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -71,6 +73,19 @@ class OlderVersionsSectionTest {
         // Another project's file, or none.
         assertNull(withPackageOf(unread, older.copy(repo = "bob/app")))
         assertNull(withPackageOf(unread, null))
+    }
+
+    @Test
+    fun aLookTheSystemFailsLeavesWhatWasKnown() {
+        val known = InstalledVersion(50, null)
+        assertEquals(InstalledVersion(40, null), foundOr(known) { InstalledVersion(40, null) })
+        // Found to be gone: that is an answer.
+        assertNull(foundOr(known) { null })
+        // No answer: neither installed nor gone is learnt of it.
+        assertEquals(known, foundOr(known) { throw IllegalStateException("package manager has died") })
+        assertNull(foundOr(null) { throw SecurityException() })
+        // Being cancelled goes on to whoever cancelled.
+        assertThrows(CancellationException::class.java) { foundOr(known) { throw CancellationException() } }
     }
 
     @Test

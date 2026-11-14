@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -28,6 +29,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.R
@@ -79,6 +81,19 @@ internal fun withPackageOf(app: StoreApp, saved: SavedApk?): StoreApp? =
     saved?.takeIf { app.packageName == null && it.repo == app.fullName }?.let { app.copy(packageName = it.packageName) }
 
 /**
+ * What [look] finds to be installed, or what was known [before] when the system fails the
+ * look, as its package service can: a look that failed tells nothing, so the app is not taken
+ * for one that is not installed. Being cancelled is not a failed look.
+ */
+internal fun foundOr(before: InstalledVersion?, look: () -> InstalledVersion?): InstalledVersion? = try {
+    look()
+} catch (e: CancellationException) {
+    throw e
+} catch (_: RuntimeException) {
+    before
+}
+
+/**
  * What is installed of the app of [row], for the file [saved] for it: what the row tells, or,
  * for an app whose package the lists do not know, what is installed of the file's package
  * (see [withPackageOf]), looked up again whenever the installed apps may have changed.
@@ -88,8 +103,13 @@ private fun installedFor(row: AppRow, saved: SavedApk?): InstalledVersion? {
     val context = LocalContext.current.applicationContext
     val changed by InstallManager.installedChanged.collectAsStateWithLifecycle()
     val known = withPackageOf(row.app, saved)
-    val found by produceState<InstalledVersion?>(null, known?.fullName, known?.packageName, changed) {
-        value = known?.let { withContext(Dispatchers.Default) { InstalledApps.find(context, it) } }
+    // Begun anew for another package: what was found of the one before says nothing of it.
+    val found by key(known?.fullName, known?.packageName) {
+        produceState<InstalledVersion?>(null, known, changed) {
+            val app = known ?: return@produceState
+            val before = value
+            value = withContext(Dispatchers.Default) { foundOr(before) { InstalledApps.find(context, app) } }
+        }
     }
     return row.installed ?: found
 }
