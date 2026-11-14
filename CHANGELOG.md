@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.13.0
+
+- Share in an app's details gives out a link to the app. On a phone with ARK-Store the link
+  opens the app's page in the store; anywhere else it opens a page of the store's new site,
+  arkstore.jrs8205.com, that tells where the app and the store are found
+- A link to an app the lists do not have says so, on whichever page is open
+- Earlier versions in an app's details: up to three versions before the newest one, for apps
+  from GitHub, Codeberg and GitLab. With root on, the version you choose is installed in
+  place of the one installed. Without root its file is saved in Download/ARK-Store; when the
+  installed version is newer, the app has to be uninstalled first, as Android does not
+  install an older version over a newer one
+- After going back to an earlier version with root, the update to the newest version stays
+  on offer, but the background check no longer installs it by itself: it is installed when
+  you ask for it
+- The button that opens an app's page names the place the page is on, GitHub, Codeberg or
+  GitLab, or says that it opens the project's page. It said GitHub for every app
+
 ## 1.12.0
 
 - The page of an app tells the permissions it asks for, in the device's own words: how many,
