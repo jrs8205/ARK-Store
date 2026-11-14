@@ -14,6 +14,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -26,10 +27,15 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jarsi.arkstore.R
+import org.jarsi.arkstore.data.InstalledApps
 import org.jarsi.arkstore.data.InstalledVersion
 import org.jarsi.arkstore.data.OlderVersion
 import org.jarsi.arkstore.data.StoreApp
+import org.jarsi.arkstore.install.InstallManager
 import org.jarsi.arkstore.install.InstallState
 import org.jarsi.arkstore.install.SavedApk
 import org.jarsi.arkstore.install.isOnItsWay
@@ -62,6 +68,31 @@ internal fun olderSaved(app: StoreApp, installed: InstalledVersion?, saved: Save
         it.repo == app.fullName && (app.packageName == null || it.packageName == app.packageName) && earlier &&
             (installed == null || installed.otherApp || installed.versionCode != it.versionCode)
     }
+
+/**
+ * [app] with the package of the file [saved] for it, when the lists do not know the app's
+ * package; null when they do, or when the file is not this app's. A row of such an app tells
+ * nothing of what is installed, as there is no package to look up; the saved file was read
+ * when it was checked, and its package tells whether a newer version stands in its way.
+ */
+internal fun withPackageOf(app: StoreApp, saved: SavedApk?): StoreApp? =
+    saved?.takeIf { app.packageName == null && it.repo == app.fullName }?.let { app.copy(packageName = it.packageName) }
+
+/**
+ * What is installed of the app of [row], for the file [saved] for it: what the row tells, or,
+ * for an app whose package the lists do not know, what is installed of the file's package
+ * (see [withPackageOf]), looked up again whenever the installed apps may have changed.
+ */
+@Composable
+private fun installedFor(row: AppRow, saved: SavedApk?): InstalledVersion? {
+    val context = LocalContext.current.applicationContext
+    val changed by InstallManager.installedChanged.collectAsStateWithLifecycle()
+    val known = withPackageOf(row.app, saved)
+    val found by produceState<InstalledVersion?>(null, known?.fullName, known?.packageName, changed) {
+        value = known?.let { withContext(Dispatchers.Default) { InstalledApps.find(context, it) } }
+    }
+    return row.installed ?: found
+}
 
 /**
  * Whether [version] is the one [installed], as far as their names tell: an earlier version's
@@ -213,10 +244,11 @@ internal fun OlderVersionsSection(
             }
         }
 
-        olderSaved(app, row.installed, saved)?.let { file ->
+        val installed = installedFor(row, saved)
+        olderSaved(app, installed, saved)?.let { file ->
             Text(
                 text = stringResource(
-                    if (needsUninstall(row.installed, file)) R.string.older_saved_uninstall else R.string.older_saved,
+                    if (needsUninstall(installed, file)) R.string.older_saved_uninstall else R.string.older_saved,
                     file.versionName ?: file.versionCode.toString()
                 ),
                 style = MaterialTheme.typography.bodyMedium,

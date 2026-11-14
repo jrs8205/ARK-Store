@@ -316,6 +316,8 @@ object InstallManager {
      * earlier, the answer could be out of date by the time of the reservation: another install
      * of the same app may end in between, and what it leaves behind may be the very reason not
      * to begin this one. With the reservation held, no other install of the app begins or ends.
+     * The reservation is let go of whenever no attempt comes of it, also when the question
+     * itself fails: there is no attempt yet whose end would do that, and nothing to cancel.
      */
     private fun begin(
         context: Context,
@@ -328,10 +330,13 @@ object InstallManager {
     ): InstallJob? {
         val appContext = context.applicationContext
         if (!reserve(key)) return null
-        if (!wanted()) {
-            setState(key, null)
-            return null
+        var go = false
+        try {
+            go = wanted()
+        } finally {
+            if (!go) setState(key, null)
         }
+        if (!go) return null
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 

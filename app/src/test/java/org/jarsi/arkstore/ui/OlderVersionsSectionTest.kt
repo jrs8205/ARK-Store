@@ -55,6 +55,25 @@ class OlderVersionsSectionTest {
     }
 
     @Test
+    fun whatIsInstalledIsLookedUpByTheSavedFilesPackageWhenTheListsKnowNone() {
+        val unread = app.copy(versionCode = 0, packageName = null)
+        val older = file(40).copy(tag = "v40")
+        // The row of such an app tells of nothing installed; the file's own package does.
+        assertEquals("org.alice", withPackageOf(unread, older)?.packageName)
+        assertEquals(unread.fullName, withPackageOf(unread, older)?.fullName)
+        // A newer version found under that package has to go first, and the file is told
+        // with that; the same version found means there is nothing left to tell.
+        assertEquals(older, olderSaved(unread, InstalledVersion(50, null), older))
+        assertTrue(needsUninstall(InstalledVersion(50, null), older))
+        assertNull(olderSaved(unread, InstalledVersion(40, null), older))
+        // The lists know the package: the row has looked it up already.
+        assertNull(withPackageOf(app, older))
+        // Another project's file, or none.
+        assertNull(withPackageOf(unread, older.copy(repo = "bob/app")))
+        assertNull(withPackageOf(unread, null))
+    }
+
+    @Test
     fun onlyANewerVersionOfTheSameAppHasToGoFirst() {
         val older = file(40)
         assertTrue(needsUninstall(InstalledVersion(50, null), older))

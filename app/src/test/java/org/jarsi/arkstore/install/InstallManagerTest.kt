@@ -250,6 +250,36 @@ class InstallManagerTest {
     }
 
     @Test
+    fun aQuestionThatFailsLetsGoOfTheAppAsWell() = runBlocking {
+        // What the background check asks reads the installed apps, which can fail; and its run
+        // can be stopped in the middle of the asking.
+        val app = testApp("owner/thrown", packageName = "org.example.thrown", versionCode = 5)
+        for (failure in listOf(IllegalStateException("no answer"), kotlinx.coroutines.CancellationException("stopped"))) {
+            val thrown = try {
+                InstallManager.installAndAwait(context, app, 10_000, wanted = { throw failure })
+                null
+            } catch (e: Exception) {
+                e
+            }
+            assertEquals(failure.javaClass, thrown?.javaClass)
+            assertFalse(InstallManager.isBusy(app.fullName))
+            assertTrue(app.fullName !in InstallManager.states.value)
+        }
+        // The next install of the app is asked for like the first, with the app reserved for it.
+        var reservedWhenAsked = false
+        val settled = InstallManager.installAndAwait(
+            context, app, 10_000,
+            wanted = {
+                reservedWhenAsked = InstallManager.isBusy(app.fullName)
+                false
+            }
+        )
+        assertNull(settled)
+        assertTrue(reservedWhenAsked)
+        assertFalse(InstallManager.isBusy(app.fullName))
+    }
+
+    @Test
     fun theReleaseAFileIsOfIsWrittenDownWithIt() = runBlocking {
         saving("content://downloads/51")
         val result = InstallManager.handOver(
