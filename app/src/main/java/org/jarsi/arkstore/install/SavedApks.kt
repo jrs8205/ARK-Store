@@ -7,14 +7,16 @@ import org.json.JSONObject
 /**
  * A checked file the store saved to the device's folder for the user to install, as the store
  * cannot install it itself: of [packageName] at [versionCode], found at [uri], downloaded for
- * the catalogue's [repo].
+ * the catalogue's [repo] as the file of its release [tag], which is "" in a record written
+ * before the release was noted.
  */
 data class SavedApk(
     val packageName: String,
     val versionCode: Long,
     val versionName: String?,
     val uri: String,
-    val repo: String
+    val repo: String,
+    val tag: String = ""
 )
 
 /** The rules of the files the store saves for the user to install; see [ApkFolder]. */
@@ -75,7 +77,8 @@ object SavedApks {
                     versionCode = record.getLong("versionCode"),
                     versionName = if (record.isNull("versionName")) null else record.getString("versionName"),
                     uri = record.getString("uri"),
-                    repo = record.getString("repo")
+                    repo = record.getString("repo"),
+                    tag = if (record.isNull("tag")) "" else record.getString("tag")
                 )
             }.associateBy { it.repo }
         } catch (e: JSONException) {
@@ -94,6 +97,7 @@ object SavedApks {
                     .put("versionName", record.versionName ?: JSONObject.NULL)
                     .put("uri", record.uri)
                     .put("repo", record.repo)
+                    .put("tag", record.tag)
             )
         }
         return root.toString()

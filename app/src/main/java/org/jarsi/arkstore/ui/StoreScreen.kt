@@ -181,6 +181,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
     val installs by InstallManager.states.collectAsStateWithLifecycle()
     val saved by viewModel.saved.collectAsStateWithLifecycle()
     val olderVersions by viewModel.older.collectAsStateWithLifecycle()
+    val includeBeta by viewModel.includeBeta.collectAsStateWithLifecycle()
     val root by viewModel.root.collectAsStateWithLifecycle()
     val rootLost by viewModel.rootLost.collectAsStateWithLifecycle()
     val direct = installsDirectly(root, rootLost)
@@ -643,7 +644,7 @@ fun StoreScreen(viewModel: StoreViewModel) {
                     onHoldUpdates = { selected.app.packageName?.let(viewModel::holdUpdates) },
                     onOfferUpdates = { selected.app.packageName?.let(viewModel::offerUpdates) },
                     held = selected.app.packageName?.let { it in updatePolicy.held } == true,
-                    older = olderVersions[olderKey(selected.app)],
+                    older = olderVersions[olderKey(selected.app, includeBeta)],
                     install = installs[selected.app.fullName],
                     saved = saved[selected.app.fullName],
                     onLoadOlder = { viewModel.loadOlder(selected.app) },

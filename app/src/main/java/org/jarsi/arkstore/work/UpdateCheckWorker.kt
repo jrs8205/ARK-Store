@@ -240,7 +240,11 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             // Or skipped this very update, or held its app back, since the list was made.
             if (UpdatePolicy.read(context).skips(app)) continue
             // Or gone back to an earlier version of the app: the list knows the one before that.
-            if (app.packageName in KeptVersions.read(context) && !stillOwned(context, app)) continue
+            // Asked here, to leave the app alone, and by the install itself once the app is
+            // reserved for it and again before the file goes to root: the user's own install
+            // may end, and note the version, at any moment before the reservation.
+            fun notKept() = app.packageName !in KeptVersions.read(context) || stillOwned(context, app)
+            if (!notKept()) continue
             // And they may do any of these during this one: a download that goes on regardless
             // is what the settings were there to prevent. An install already with the system
             // goes on. A download not done within its time is given up too, as nothing would
@@ -252,7 +256,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
             fun giveUp() = attempt?.let { InstallManager.cancel(app.fullName, it) }
             val done = try {
                 watching(::stillWanted, CONDITIONS_INTERVAL_MS, { giveUp() }) {
-                    InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS)) { attempt = it }
+                    InstallManager.installAndAwait(context, app, minOf(left, INSTALL_TIMEOUT_MS), ::notKept) { attempt = it }
                 }
             } catch (e: CancellationException) {
                 giveUp()
@@ -267,7 +271,8 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) :
                     if (endsRun(done.reason)) break
                     if (failureLasts(done.reason)) failed += announcement(app)
                 }
-                Outcome.CANCELLED -> break
+                // Given up at the last moment for a version gone back to: the others go on.
+                Outcome.CANCELLED -> if (notKept()) break
                 null -> giveUp()
             }
         }

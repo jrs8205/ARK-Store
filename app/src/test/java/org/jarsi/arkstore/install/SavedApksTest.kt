@@ -82,6 +82,9 @@ class SavedApksTest {
         assertEquals(record, SavedApks.shownFor(record, null, 5))
         assertNull(SavedApks.shownFor(record, 5, 5))
         assertNull(SavedApks.shownFor(null, 4, 5))
+        // The release a file is of is written down with it.
+        val tagged = mapOf("owner/a" to saved("a", 3, "content://x/1").copy(tag = "v1.3"))
+        assertEquals(tagged, SavedApks.parse(SavedApks.toJson(tagged)))
     }
 
     @Test
@@ -92,6 +95,8 @@ class SavedApksTest {
             mapOf("owner/example" to SavedApk("org.example", 5, "1.5", "content://x/1", "owner/example")),
             SavedApks.parse(json)
         )
+        // Nor does a record from before the releases were written down tell which its file is of.
+        assertEquals("", SavedApks.parse(json).getValue("owner/example").tag)
     }
 
     @Test

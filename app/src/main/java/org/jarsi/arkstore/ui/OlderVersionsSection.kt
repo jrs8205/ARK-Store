@@ -46,11 +46,20 @@ sealed interface OlderUiState {
  * as [saved] records it: one of this app's own repository, older than the version the lists
  * offer, and not the version [installed]. The rows do not show such a file, see
  * [AppRow.downloaded]; the details do.
+ *
+ * The lists do not always know the version, or even the package, of the newest file: its
+ * manifest could not be read, and saving an earlier version does not teach them. The file is
+ * then told by its release, which the record carries: one of another release than the one
+ * offered. What the record says of the file itself was read from the file once it was checked.
  */
 internal fun olderSaved(app: StoreApp, installed: InstalledVersion?, saved: SavedApk?): SavedApk? =
     saved?.takeIf {
-        it.repo == app.fullName && it.packageName == app.packageName &&
-            app.versionCode > 0 && it.versionCode < app.versionCode &&
+        val earlier = if (app.versionCode > 0) {
+            it.versionCode < app.versionCode
+        } else {
+            it.tag.isNotEmpty() && it.tag != app.tag
+        }
+        it.repo == app.fullName && (app.packageName == null || it.packageName == app.packageName) && earlier &&
             (installed == null || installed.otherApp || installed.versionCode != it.versionCode)
     }
 

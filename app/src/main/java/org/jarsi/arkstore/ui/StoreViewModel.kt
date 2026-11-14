@@ -106,8 +106,13 @@ enum class TokenError { REJECTED, NETWORK, RATE_LIMIT }
 
 enum class TransferError { NOT_A_BACKUP, FAILED }
 
-/** What the earlier versions read for [app] are kept under: the app at the version offered. */
-internal fun olderKey(app: StoreApp): String = "${app.fullName}@${app.tag}"
+/**
+ * What the earlier versions read for [app] are kept under: the app at the version offered,
+ * read with prereleases among them or without ([withPrereleases]). Turning prereleases on or
+ * off need not change the version offered, but it changes what comes before it.
+ */
+internal fun olderKey(app: StoreApp, withPrereleases: Boolean): String =
+    "${app.fullName}@${app.tag}@${if (withPrereleases) "all" else "full"}"
 
 /**
  * The file saved for this row's app for the user to install, when the row shows it: an update or
@@ -559,18 +564,24 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * The earlier versions asked for, by [olderKey]: of an app as it is offered now. Once the
-     * lists offer a newer version, what was read no longer is what comes before it.
+     * lists offer a newer version, or prereleases are turned on or off, what was read no
+     * longer is what comes before it.
      */
     val older: StateFlow<Map<String, OlderUiState>> = _older.asStateFlow()
 
-    /** Reads the earlier versions of [app] from the place it comes from, unless that is under way. */
+    /**
+     * Reads the earlier versions of [app] from the place it comes from, unless that is under
+     * way. Whether prereleases are among them is settled here, once, for the reading and for
+     * the key alike: a list read while the switch was turned is kept as what it was read as.
+     */
     fun loadOlder(app: StoreApp) {
-        val key = olderKey(app)
+        val withPrereleases = repository.includeBeta.value
+        val key = olderKey(app, withPrereleases)
         if (_older.value[key] is OlderUiState.Loading) return
         _older.update { it + (key to OlderUiState.Loading) }
         viewModelScope.launch {
             val read = try {
-                OlderUiState.Loaded(repository.olderVersions(app))
+                OlderUiState.Loaded(repository.olderVersions(app, withPrereleases))
             } catch (_: RateLimitedException) {
                 OlderUiState.Failed(LoadError.RATE_LIMIT)
             } catch (_: IOException) {

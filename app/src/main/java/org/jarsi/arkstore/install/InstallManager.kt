@@ -283,6 +283,7 @@ object InstallManager {
      * number before it runs: what the caller is told is this attempt's, whatever becomes
      * of it, and not read afterwards from a map that may by then hold a later attempt.
      * [saveWithoutRoot] says whether a file that root cannot install is saved for the user.
+     * [wanted] is for an install nobody asked for by hand, see [installAndAwait].
      */
     private fun begin(
         context: Context,
@@ -290,6 +291,7 @@ object InstallManager {
         foreground: Boolean,
         saveWithoutRoot: Boolean,
         older: Boolean = false,
+        wanted: () -> Boolean = { true },
         onBegun: (attempt: Int) -> Unit = {}
     ): InstallJob? {
         // A file of this attempt's own: the cleanup of an earlier attempt of the same app,
@@ -298,8 +300,8 @@ object InstallManager {
             File(context.applicationContext.cacheDir, "apk"),
             "${attempts.incrementAndGet()}-${CatalogRules.downloadName(app.fullName)}"
         )
-        return begin(context, app.fullName, foreground, target, onBegun) { appContext, install ->
-            downloadAndInstall(appContext, app, target, install, saveWithoutRoot, older)
+        return begin(context, app.fullName, foreground, target, wanted, onBegun) { appContext, install ->
+            downloadAndInstall(appContext, app, target, install, saveWithoutRoot, older, wanted)
         }
     }
 
@@ -309,17 +311,27 @@ object InstallManager {
      * of files, the attempt works on, deleted when the attempt settles. [onBegun] is told the
      * attempt's number before it runs: what the caller is told is this attempt's, whatever
      * becomes of it, and not read afterwards from a map that may by then hold a later attempt.
+     *
+     * [wanted] is asked once [key] is reserved, and none is begun when it says no. Asked any
+     * earlier, the answer could be out of date by the time of the reservation: another install
+     * of the same app may end in between, and what it leaves behind may be the very reason not
+     * to begin this one. With the reservation held, no other install of the app begins or ends.
      */
     private fun begin(
         context: Context,
         key: String,
         foreground: Boolean,
         target: File,
+        wanted: () -> Boolean,
         onBegun: (attempt: Int) -> Unit,
         body: suspend (appContext: Context, install: InstallJob) -> Unit
     ): InstallJob? {
         val appContext = context.applicationContext
         if (!reserve(key)) return null
+        if (!wanted()) {
+            setState(key, null)
+            return null
+        }
         _activeJobs.update { it + 1 }
         if (foreground) InstallService.start(appContext)
 
@@ -394,14 +406,21 @@ object InstallManager {
      * number of the attempt this call began, before the wait: a caller that wants to give it up
      * may then cancel that attempt and no other, as one already on its way, which this call
      * does not begin, is somebody else's.
+     *
+     * [wanted] says whether the install is still to be done, as things stand when it is asked:
+     * once the app is reserved for this attempt, when a no begins nothing and gives null, and
+     * once more as the checked file is about to go to root, when a no gives the attempt up as
+     * a cancelled one. The user may have gone back to an earlier version of the app since the
+     * caller looked, see [KeptVersions], and nobody asked for this install by hand.
      */
     internal suspend fun installAndAwait(
         context: Context,
         app: StoreApp,
         timeoutMillis: Long,
+        wanted: () -> Boolean = { true },
         onBegun: (attempt: Int) -> Unit = {}
     ): Settled? = await(app.fullName, timeoutMillis, onBegun) { begun ->
-        begin(context, app, foreground = false, saveWithoutRoot = false, onBegun = begun)
+        begin(context, app, foreground = false, saveWithoutRoot = false, wanted = wanted, onBegun = begun)
     }
 
     /**
@@ -428,7 +447,7 @@ object InstallManager {
             begun = true
             onBegun(attempt)
         }) { onBegunHere ->
-            begin(context, key, foreground = false, target = dir, onBegun = onBegunHere) { appContext, install ->
+            begin(context, key, foreground = false, target = dir, wanted = { true }, onBegun = onBegunHere) { appContext, install ->
                 installLocal(appContext, key, packageName, files, install)
             }
         }
@@ -509,7 +528,8 @@ object InstallManager {
         target: File,
         install: InstallJob,
         saveWithoutRoot: Boolean,
-        older: Boolean
+        older: Boolean,
+        wanted: () -> Boolean
     ) {
         val job = coroutineContext[Job]
         try {
@@ -587,6 +607,10 @@ object InstallManager {
             setState(app.fullName, InstallState.Queued)
             _states.combine(otherWork) { states, working -> othersSettled(states, app.fullName, working) }.first { it }
         }
+        // Asked a last time, as the wait above can be a long one and another row can offer
+        // the same package: an install nobody wants any more is given up like a cancelled
+        // download, which the hand-over below then refuses.
+        if (!wanted()) install.cancel()
         // From here on the attempt is root's or the folder's: a cancel is refused, and one
         // that came first refuses this.
         install.handOver()
@@ -597,7 +621,8 @@ object InstallManager {
                 SavedApks.fileName(app.title, archive.versionName, versionCode, archive.packageName),
                 versionCode,
                 archive.versionName,
-                app.fullName
+                app.fullName,
+                app.tag
             )
         } else {
             null
@@ -609,8 +634,14 @@ object InstallManager {
         settle(appContext, install, app.fullName, app.takeIf { !older }, archive.packageName, result, versionCode.takeIf { older })
     }
 
-    /** What a file saved for the user is saved as: its name, and what it is of. */
-    internal data class SaveAs(val displayName: String, val versionCode: Long, val versionName: String?, val repo: String)
+    /** What a file saved for the user is saved as: its name, and what it is of, the release by its [tag]. */
+    internal data class SaveAs(
+        val displayName: String,
+        val versionCode: Long,
+        val versionName: String?,
+        val repo: String,
+        val tag: String = ""
+    )
 
     /** What [handOver] came to. */
     internal sealed interface HandOver {
@@ -645,7 +676,7 @@ object InstallManager {
             Log.w(TAG, "Could not save the file of $key", e)
             return HandOver.Failed(InstallState.Failed(FailReason.SAVE, e.message))
         }
-        val record = SavedApk(packageName, saveAs.versionCode, saveAs.versionName, uri, saveAs.repo)
+        val record = SavedApk(packageName, saveAs.versionCode, saveAs.versionName, uri, saveAs.repo, saveAs.tag)
         // From what is written down, not from what the rows show: a file whose version is
         // installed by now, or one from before this run, goes all the same.
         val update = synchronized(savedLock) {

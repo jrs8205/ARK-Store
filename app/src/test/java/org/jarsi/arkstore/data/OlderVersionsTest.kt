@@ -69,6 +69,48 @@ class OlderVersionsTest {
     }
 
     @Test
+    fun whatCameBeforeIsToldByTheTimeOfPublishingNotByThePlaceInTheList() {
+        // A list is ordered by the dates of the commits: a release published later can lie
+        // below the one offered, and one published earlier above it.
+        val later = JSONArray(
+            listOf(
+                release("v3", "2026-06-01T10:00:00Z", asset(3, "app.apk")),
+                release("v4", "2026-07-01T10:00:00Z", asset(4, "app.apk")),
+                release("v2", "2026-05-01T10:00:00Z", asset(2, "app.apk"))
+            )
+        )
+        assertEquals(listOf("v2"), OlderVersions.ofReleases(later, current("v3"), abis, false).map { it.tag })
+        val mixed = JSONArray(
+            listOf(
+                release("v2", "2026-05-01T10:00:00Z", asset(2, "app.apk")),
+                release("v3", "2026-06-01T10:00:00Z", asset(3, "app.apk")),
+                release("v1", "2026-04-01T10:00:00Z", asset(1, "app.apk")),
+                release("v2.5", "2026-05-15T10:00:00Z", asset(25, "app.apk")),
+                release("v0.9", "2026-03-01T10:00:00Z", asset(9, "app.apk"))
+            )
+        )
+        // The newest of them first, and the three nearest the one offered.
+        assertEquals(listOf("v2.5", "v2", "v1"), OlderVersions.ofReleases(mixed, current("v3"), abis, false).map { it.tag })
+        // The list's own time of the release offered counts, not the one the lists carried.
+        assertEquals(
+            listOf("v2.5", "v2", "v1"),
+            OlderVersions.ofReleases(mixed, current("v3", "2026-01-01T00:00:00Z"), abis, false).map { it.tag }
+        )
+    }
+
+    @Test
+    fun withoutATimeOfTheReleaseOfferedItsPlaceInTheListIsAllThereIs() {
+        val releases = JSONArray(
+            listOf(
+                release("v3", "", asset(3, "app.apk")),
+                release("v2", "2026-05-01T10:00:00Z", asset(2, "app.apk")),
+                release("v1", "", asset(1, "app.apk"))
+            )
+        )
+        assertEquals(listOf("v2", "v1"), OlderVersions.ofReleases(releases, current("v3"), abis, false).map { it.tag })
+    }
+
+    @Test
     fun draftsAndReleasesWithoutAFileForTheDeviceAreLeftOut() {
         val releases = JSONArray(
             listOf(

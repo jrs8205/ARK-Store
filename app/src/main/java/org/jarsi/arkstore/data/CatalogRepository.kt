@@ -1201,19 +1201,21 @@ class CatalogRepository private constructor(context: Context) {
      * The versions of [app] before the one offered, at most [OlderVersions.MAX], read from the
      * place its repository is on: one request, made when the user asks for them. GitHub's is
      * counted against the hourly quota like any other. Empty for an app of a catalogue.
+     * Prereleases are among them when [withPrereleases]: the caller says so, rather than the
+     * switch being read here, so that what it is given is what it asked for.
      */
     @Throws(IOException::class)
-    suspend fun olderVersions(app: StoreApp): List<OlderVersion> = withContext(Dispatchers.IO) {
+    suspend fun olderVersions(app: StoreApp, withPrereleases: Boolean): List<OlderVersion> = withContext(Dispatchers.IO) {
         val address = OlderVersions.address(app) ?: return@withContext emptyList()
         try {
             when (app.source) {
                 StoreApp.SOURCE_GITHUB ->
-                    OlderVersions.ofReleases(JSONArray(api(address)), app, deviceAbis, _includeBeta.value)
+                    OlderVersions.ofReleases(JSONArray(api(address)), app, deviceAbis, withPrereleases)
                 StoreApp.SOURCE_GITLAB ->
                     OlderVersions.ofGitLab(JSONArray(Http.getTextIfChanged(address, null).first.orEmpty()), app, deviceAbis)
                 else ->
                     OlderVersions.ofReleases(
-                        JSONArray(Http.getTextIfChanged(address, null).first.orEmpty()), app, deviceAbis, _includeBeta.value
+                        JSONArray(Http.getTextIfChanged(address, null).first.orEmpty()), app, deviceAbis, withPrereleases
                     )
             }
         } catch (e: JSONException) {

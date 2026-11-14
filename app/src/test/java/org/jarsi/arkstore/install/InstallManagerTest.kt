@@ -6,9 +6,12 @@ import android.content.SharedPreferences
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.jarsi.arkstore.FakePreferences
+import org.jarsi.arkstore.data.KeptVersions
+import org.jarsi.arkstore.data.testApp
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,6 +29,7 @@ class InstallManagerTest {
         override fun getPackageName(): String = "org.jarsi.arkstore"
         override fun getSharedPreferences(name: String?, mode: Int): SharedPreferences =
             prefs.getOrPut(name!!) { FakePreferences() }
+        override fun getCacheDir(): File = java.nio.file.Files.createTempDirectory("cache").toFile().apply { deleteOnExit() }
     }
 
     private val context = PrefsContext()
@@ -219,6 +223,42 @@ class InstallManagerTest {
         assertEquals(InstallManager.HandOver.Failed(InstallState.Failed(FailReason.DOWNGRADE, message)), result)
         // Nor is the file saved instead: the system has said why it would not take it.
         assertEquals(emptyList<String>(), saves)
+    }
+
+    @Test
+    fun anUnaskedInstallIsAskedForAgainOnceTheAppIsReservedAndNotBegunWhenUnwanted() = runBlocking {
+        // The background check found nothing against the update; the user's install of an
+        // earlier version then ended, noting that version, before the check came to reserve
+        // the app. What the check asks is answered as things stand with the app reserved.
+        val app = testApp("owner/kept", packageName = "org.example.kept", versionCode = 5)
+        assertFalse(KeptVersions.keeps(KeptVersions.read(context), app.packageName, 4))
+        KeptVersions.keep(context, "org.example.kept", 4)
+        var reservedWhenAsked = false
+        val settled = InstallManager.installAndAwait(
+            context, app, 10_000,
+            wanted = {
+                reservedWhenAsked = InstallManager.isBusy(app.fullName)
+                !KeptVersions.keeps(KeptVersions.read(context), app.packageName, 4)
+            }
+        ) { throw AssertionError("begun") }
+        assertNull(settled)
+        // Asked with the app reserved: no other install of it could begin or end in between.
+        assertTrue(reservedWhenAsked)
+        // And the app is let go of again, with nothing to show for it.
+        assertFalse(InstallManager.isBusy(app.fullName))
+        assertTrue(app.fullName !in InstallManager.states.value)
+    }
+
+    @Test
+    fun theReleaseAFileIsOfIsWrittenDownWithIt() = runBlocking {
+        saving("content://downloads/51")
+        val result = InstallManager.handOver(
+            context, "owner/tagged", null, "org.example.tagged", listOf("base.apk" to aFile()), false,
+            saveAs(4, "owner/tagged").copy(tag = "v1.4")
+        )
+        val record = SavedApk("org.example.tagged", 4, "1.4", "content://downloads/51", "owner/tagged", "v1.4")
+        assertEquals(InstallManager.HandOver.Saved(record), result)
+        assertEquals(record, SavedApks.parse(context.prefs.getValue("saved_apks").getString("records", null))["owner/tagged"])
     }
 
     @Test

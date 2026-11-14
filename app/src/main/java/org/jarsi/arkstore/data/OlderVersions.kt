@@ -190,8 +190,13 @@ object OlderVersions {
     )
 
     /**
-     * The releases after [current]'s own in [releases], which are newest first; when its own
-     * is not among them, as after a tag was renamed, the ones published before it.
+     * The releases of [releases] published before [current]'s own, the latest of them first.
+     * The time of publishing decides, not the place in the list: a list is ordered by the
+     * dates of the commits, so a release published later can lie below the one offered, and
+     * one published earlier above it. The time of [current]'s release is the list's own; when
+     * the release is not in the list, as after a tag was renamed, the one the lists carried.
+     * Only when its release is in the list with no time to read are the ones after it taken
+     * as they lie; with neither a place nor a time, nothing tells what came before.
      */
     private fun earlier(
         releases: List<Release>,
@@ -200,11 +205,15 @@ object OlderVersions {
         withPrereleases: Boolean
     ): List<OlderVersion> {
         val at = releases.indexOfFirst { it.tag == current.tag }
-        val before = if (at >= 0) {
-            releases.drop(at + 1)
-        } else {
-            val offered = moment(current.publishedAt) ?: return emptyList()
-            releases.filter { release -> moment(release.publishedAt)?.let { it < offered } == true }
+        val offered = releases.getOrNull(at)?.let { moment(it.publishedAt) } ?: moment(current.publishedAt)
+        val before = when {
+            offered != null -> releases
+                .filter { it.tag != current.tag }
+                .mapNotNull { release -> moment(release.publishedAt)?.takeIf { it < offered }?.let { release to it } }
+                .sortedByDescending { it.second }
+                .map { it.first }
+            at >= 0 -> releases.drop(at + 1)
+            else -> return emptyList()
         }
         return before.asSequence()
             .filter { withPrereleases || !it.prerelease }
